@@ -1580,7 +1580,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD)
                  return squareKaratsuba();
             else
-                 return squareToomCook3();
+                if (shouldUseSchönhageStrassen(len*32))
+                    return squareSchönhageStrassen();
+                else
+                    return squareToomCook3();
     }
 
     /**
@@ -3697,6 +3700,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
+     * Squares this number using the
+     * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
+     * Schönhage-Strassen algorithm</a> algorithm.
+     * @return a <code>BigInteger</code> equal to <code>this.multiply(this)</code>
+     */
+    private BigInteger squareSchönhageStrassen() {
+        int[] aIntArr;
+
+        // remove any minus sign and make a reverse-order copy of a.mag
+        if (signum() >= 0)
+            aIntArr = reverse(mag);
+        else
+            aIntArr = reverse(negate().mag);
+
+        int[] cIntArr = squareSchönhageStrassen(aIntArr, bitLength());
+        BigInteger c = new BigInteger(1, reverse(cIntArr));
+
+        return c;
+    }
+
+    /**
      * This is the core method. It multiplies two <b>positive</b> numbers of length <code>aBitLen</code>
      * and </code>bBitLen</code> that are represented as int arrays, i.e. in base 2^32.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
@@ -3818,6 +3842,80 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
+     * Squares a <b>positive</b> number of length <code>aBitLen</code> that is represented as an int
+     * array, i.e. in base 2^32.
+     * @param a
+     * @param aBitLen
+     * @return a<sup>2</sup>
+     * @see #multiplySchönhageStrassen(int[], int, int[], int)
+     */
+    private int[] squareSchönhageStrassen(int[] a, int aBitLen) {
+        // set M to the number of binary digits in a
+        int M = aBitLen;
+
+        // find the lowest m such that m>=log2(2M)
+        int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
+
+        int n = m/2 + 1;
+
+        // split a and b into pieces 1<<(n-1) bits long; assume n>=6 so pieces start and end at int boundaries
+        boolean even = m%2 == 0;
+        int numPieces = even ? 1<<n : 1<<(n+1);
+        int pieceSize = 1 << (n-1-5);   // in ints
+
+        // build u from a, allocating 3n+5 bits in u per n+2 bits from a
+        int numPiecesA = (a.length+pieceSize) / pieceSize;
+        int[] u = new int[(numPiecesA*(3*n+5)+31)/32];
+        int uBitLength = 0;
+        for (int i=0; i<numPiecesA && i*pieceSize<a.length; i++) {
+            appendBits(u, uBitLength, a, i*pieceSize, n+2);
+            uBitLength += 3*n+5;
+        }
+
+        int[] gamma = squareReverse(u);
+        int[][] gammai = splitBits(gamma, 3*n+5);
+        int halfNumPcs = numPieces / 2;
+
+        int[][] zi = new int[gammai.length][];
+        for (int i=0; i<gammai.length; i++)
+            zi[i] = gammai[i];
+        for (int i=0; i<gammai.length-halfNumPcs; i++)
+            subModPow2(zi[i], gammai[i+halfNumPcs], n+2);
+        for (int i=0; i<gammai.length-2*halfNumPcs; i++)
+            addModPow2(zi[i], gammai[i+2*halfNumPcs], n+2);
+        for (int i=0; i<gammai.length-3*halfNumPcs; i++)
+            subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
+
+        // zr mod Fn
+        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
+        dft(ai, m, n);
+        modFn(ai);
+        int[][] c = new int[halfNumPcs][];
+        for (int i=0; i<c.length; i++)
+            c[i] = squareModFn(ai[i]);
+        idft(c, m, n);
+        modFn(c);
+
+        int[] z = new int[1<<(m+1-5)];
+        // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
+        for (int i=0; i<halfNumPcs; i++) {
+            int[] eta = i>=zi.length ? new int[(n+2+31)/32] : zi[i];
+
+            // zi = delta = (zi-c[i]) % 2^(n+2)
+            subModPow2(eta, c[i], n+2);
+
+            // z += zr<<shift = [ci + delta*(2^2^n+1)] << [i*2^(n-1)]
+            int shift = i*(1<<(n-1-5));   // assume n>=6
+            addShifted(z, c[i], shift);
+            addShifted(z, eta, shift);
+            addShifted(z, eta, shift+(1<<(n-5)));
+        }
+
+        modFn(z);   // assume m>=5
+        return z;
+    }
+
+    /**
      * Multiplies two <b>positive</b> numbers represented as int arrays, i.e. in base <code>2^32</code>.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
      * The arrays must be ordered least significant to most significant, so the least significant digit
@@ -3830,6 +3928,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         BigInteger aBigInt = new BigInteger(1, reverse(a));
         BigInteger bBigInt = new BigInteger(1, reverse(b));
         return reverse(aBigInt.multiply(bBigInt).mag);
+    }
+
+    /**
+     * Squares a <b>positive</b> number represented as int arrays, i.e. in base <code>2^32</code>.
+     * @param a
+     * @return
+     * @see #multReverse(int[], int[])
+     */
+    private int[] squareReverse(int[] a) {
+        BigInteger aBigInt = new BigInteger(1, reverse(a));
+        return reverse(aBigInt.square().mag);
     }
 
     /**
@@ -4039,6 +4148,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModFn(c, Arrays.copyOf(b0, c.length), n*32);
         if (b[n] == 1)
             subModFn(c, Arrays.copyOf(a0, c.length), n*32);
+        return c;
+    }
+
+    /**
+     * Squares a <b>positive</b> number modulo Fn where Fn=2^2^n+1, and returns the result in a
+     * new array.<br/>
+     * <code>a</code> is assumed to be reduced mod Fn, i.e. 0<=a<Fn.
+     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
+     * <code>a</code>.<br/>
+     * The input value are given as an <code>int</code> array.
+     * @param a a number in base 2^32 starting with the lowest digit; the length must be a power of 2
+     */
+    private int[] squareModFn(int[] a) {
+        int[] a0 = Arrays.copyOf(a, a.length/2);
+        int[] c = squareReverse(a0);
+        c = Arrays.copyOf(c, a.length);   // make sure c is the same length as a so subModFn uses the right n
+        int n = a.length/2;
+        // special case: if a=Fn-1, c=1
+        if (a[n] == 1)
+            c[0] = 1;
         return c;
     }
 
