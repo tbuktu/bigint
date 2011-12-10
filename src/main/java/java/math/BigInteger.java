@@ -1219,10 +1219,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
                return multiplyKaratsuba(this, val);
            else
-               if (shouldUseSchönhageStrassen(xlen*32) && shouldUseSchönhageStrassen(ylen*32))
-                   return multiplySchönhageStrassen(this, val);
-               else
+               if (!shouldUseSchönhageStrassen(xlen*32) || !shouldUseSchönhageStrassen(ylen*32))
                    return multiplyToomCook3(this, val);
+               else
+                   return multiplySchönhageStrassen(this, val);
     }
 
     /**
@@ -1580,10 +1580,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD)
                  return squareKaratsuba();
             else
-                if (shouldUseSchönhageStrassen(len*32))
-                    return squareSchönhageStrassen();
-                else
+                if (!shouldUseSchönhageStrassen(len*32))
                     return squareToomCook3();
+                else
+                    return squareSchönhageStrassen();
     }
 
     /**
