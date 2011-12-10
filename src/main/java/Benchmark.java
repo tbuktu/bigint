@@ -24,8 +24,8 @@ public class Benchmark {
     }
     
     /**
-     * Multiplies numbers of length <code>mag/10 * 10^pow10</code>.
-     * @param mag 25 for <code>2.5*10^pow10</code>, 50 for <code>5*10^pow10</code>, etc.
+     * Multiplies numbers of length <code>mag/10 * 10<sup>pow10</sup></code>.
+     * @param mag 25 for <code>2.5*10<sup>pow10</sup></code>, 50 for <code>5*10<sup>pow10</sup></code>, etc.
      * @param pow10
      */
     private static void doBench(int mag, int pow10) {
