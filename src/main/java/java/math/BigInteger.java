@@ -321,11 +321,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Translates the String representation of a BigInteger in the
      * specified radix into a BigInteger.  The String representation
-     * consists of an optional minus followed by a sequence of one or
-     * more digits in the specified radix.  The character-to-digit
-     * mapping is provided by {@code Character.digit}.  The String may
-     * not contain any extraneous characters (whitespace, for
-     * example).
+     * consists of an optional minus or plus sign followed by a
+     * sequence of one or more digits in the specified radix.  The
+     * character-to-digit mapping is provided by {@code
+     * Character.digit}.  The String may not contain any extraneous
+     * characters (whitespace, for example).
      *
      * @param val String representation of BigInteger.
      * @param radix radix to be used in interpreting {@code val}.
@@ -337,26 +337,28 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     public BigInteger(String val, int radix) {
         int cursor = 0, numDigits;
-        int len = val.length();
+        final int len = val.length();
 
         if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX)
             throw new NumberFormatException("Radix out of range");
-        if (val.length() == 0)
+        if (len == 0)
             throw new NumberFormatException("Zero length BigInteger");
 
         // Check for at most one leading sign
         int sign = 1;
-        int index = val.lastIndexOf('-');
-        if (index != -1) {
-            if (index == 0 ) {
-                if (val.length() == 1)
-                    throw new NumberFormatException("Zero length BigInteger");
-                sign = -1;
+        int index1 = val.lastIndexOf('-');
+        int index2 = val.lastIndexOf('+');
+        if ((index1 + index2) <= -1) {
+            // No leading sign character or at most one leading sign character
+            if (index1 == 0 || index2 == 0) {
                 cursor = 1;
-            } else {
-                throw new NumberFormatException("Illegal embedded sign character");
+                if (len == 1)
+                    throw new NumberFormatException("Zero length BigInteger");
             }
-        }
+            if (index1 == 0)
+                sign = -1;
+        } else
+            throw new NumberFormatException("Illegal embedded sign character");
 
         // Skip leading zeros and compute number of digits in magnitude
         while (cursor < len &&
@@ -389,7 +391,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // Process remaining digit groups
         int superRadix = intRadix[radix];
         int groupVal = 0;
-        while (cursor < val.length()) {
+        while (cursor < len) {
             group = val.substring(cursor, cursor += digitsPerInt[radix]);
             groupVal = Integer.parseInt(group, radix);
             if (groupVal < 0)
@@ -525,7 +527,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Constructs a randomly generated BigInteger, uniformly distributed over
-     * the range {@code 0} to (2<sup>{@code numBits}</sup> - 1), inclusive.
+     * the range 0 to (2<sup>{@code numBits}</sup> - 1), inclusive.
      * The uniformity of the distribution assumes that a fair source of random
      * bits is provided in {@code rnd}.  Note that this constructor always
      * constructs a non-negative BigInteger.
@@ -1747,7 +1749,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @param  val value by which this BigInteger is to be divided.
      * @return {@code this / val}
-     * @throws ArithmeticException {@code val==0}
+     * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger divide(BigInteger val) {
         if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
@@ -1780,7 +1782,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return an array of two BigIntegers: the quotient {@code (this / val)}
      *         is the initial element, and the remainder {@code (this % val)}
      *         is the final element.
-     * @throws ArithmeticException {@code val==0}
+     * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
         if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
@@ -1807,7 +1809,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param  val value by which this BigInteger is to be divided, and the
      *         remainder computed.
      * @return {@code this % val}
-     * @throws ArithmeticException {@code val==0}
+     * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger remainder(BigInteger val) {
         if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
@@ -2212,7 +2214,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @param  m the modulus.
      * @return {@code this mod m}
-     * @throws ArithmeticException {@code m <= 0}
+     * @throws ArithmeticException {@code m} &le; 0
      * @see    #remainder
      */
     public BigInteger mod(BigInteger m) {
@@ -2231,7 +2233,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param  exponent the exponent.
      * @param  m the modulus.
      * @return <tt>this<sup>exponent</sup> mod m</tt>
-     * @throws ArithmeticException {@code m <= 0} or the exponent is
+     * @throws ArithmeticException {@code m} &le; 0 or the exponent is
      *         negative and this BigInteger is not <i>relatively
      *         prime</i> to {@code m}.
      * @see    #modInverse
@@ -2682,7 +2684,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @param  m the modulus.
      * @return {@code this}<sup>-1</sup> {@code mod m}.
-     * @throws ArithmeticException {@code  m <= 0}, or this BigInteger
+     * @throws ArithmeticException {@code  m} &le; 0, or this BigInteger
      *         has no multiplicative inverse mod m (that is, this BigInteger
      *         is not <i>relatively prime</i> to m).
      */
@@ -3116,7 +3118,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns {@code true} if this BigInteger is probably prime,
      * {@code false} if it's definitely composite.  If
-     * {@code certainty} is {@code  <= 0}, {@code true} is
+     * {@code certainty} is &le; 0, {@code true} is
      * returned.
      *
      * @param  certainty a measure of the uncertainty that the caller is
@@ -3384,12 +3386,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Converts this BigInteger to an {@code int}.  This
-     * conversion is analogous to a <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/conversions.doc.html#25363"><i>narrowing
-     * primitive conversion</i></a> from {@code long} to
-     * {@code int} as defined in the <a
-     * href="http://java.sun.com/docs/books/jls/html/">Java Language
-     * Specification</a>: if this BigInteger is too big to fit in an
+     * conversion is analogous to a
+     * <i>narrowing primitive conversion</i> from {@code long} to
+     * {@code int} as defined in section 5.1.3 of
+     * <cite>The Java&trade; Language Specification</cite>:
+     * if this BigInteger is too big to fit in an
      * {@code int}, only the low-order 32 bits are returned.
      * Note that this conversion can lose information about the
      * overall magnitude of the BigInteger value as well as return a
@@ -3405,12 +3406,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Converts this BigInteger to a {@code long}.  This
-     * conversion is analogous to a <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/conversions.doc.html#25363"><i>narrowing
-     * primitive conversion</i></a> from {@code long} to
-     * {@code int} as defined in the <a
-     * href="http://java.sun.com/docs/books/jls/html/">Java Language
-     * Specification</a>: if this BigInteger is too big to fit in a
+     * conversion is analogous to a
+     * <i>narrowing primitive conversion</i> from {@code long} to
+     * {@code int} as defined in section 5.1.3 of
+     * <cite>The Java&trade; Language Specification</cite>:
+     * if this BigInteger is too big to fit in a
      * {@code long}, only the low-order 64 bits are returned.
      * Note that this conversion can lose information about the
      * overall magnitude of the BigInteger value as well as return a
@@ -3428,12 +3428,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Converts this BigInteger to a {@code float}.  This
-     * conversion is similar to the <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/conversions.doc.html#25363"><i>narrowing
-     * primitive conversion</i></a> from {@code double} to
-     * {@code float} defined in the <a
-     * href="http://java.sun.com/docs/books/jls/html/">Java Language
-     * Specification</a>: if this BigInteger has too great a magnitude
+     * conversion is similar to the
+     * <i>narrowing primitive conversion</i> from {@code double} to
+     * {@code float} as defined in section 5.1.3 of
+     * <cite>The Java&trade; Language Specification</cite>:
+     * if this BigInteger has too great a magnitude
      * to represent as a {@code float}, it will be converted to
      * {@link Float#NEGATIVE_INFINITY} or {@link
      * Float#POSITIVE_INFINITY} as appropriate.  Note that even when
@@ -3449,12 +3448,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Converts this BigInteger to a {@code double}.  This
-     * conversion is similar to the <a
-     * href="http://java.sun.com/docs/books/jls/second_edition/html/conversions.doc.html#25363"><i>narrowing
-     * primitive conversion</i></a> from {@code double} to
-     * {@code float} defined in the <a
-     * href="http://java.sun.com/docs/books/jls/html/">Java Language
-     * Specification</a>: if this BigInteger has too great a magnitude
+     * conversion is similar to the
+     * <i>narrowing primitive conversion</i> from {@code double} to
+     * {@code float} as defined in section 5.1.3 of
+     * <cite>The Java&trade; Language Specification</cite>:
+     * if this BigInteger has too great a magnitude
      * to represent as a {@code double}, it will be converted to
      * {@link Double#NEGATIVE_INFINITY} or {@link
      * Double#POSITIVE_INFINITY} as appropriate.  Note that even when
