@@ -208,6 +208,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static final int TOOM_COOK_SQUARE_THRESHOLD = 140;
 
+    /**
+     * The threshold value, in bits, for using Newton iteration when
+     * computing the reciprocal of a number.
+     */
+    private static final int NEWTON_THRESHOLD = 100;
+
+    /**
+     * The threshold value for using Barrett division.  If the number
+     * of ints in the number are larger than this value,
+     * Barrett division will be used.   This value is found
+     * experimentally to work well.
+     */
+    private static final int BARRETT_THRESHOLD = 310;
+
     //Constructors
 
     /**
@@ -1736,12 +1750,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException {@code val==0}
      */
     public BigInteger divide(BigInteger val) {
+        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+            return divideLong(val);
+        else
+            return divideBarrett(val);
+    }
+
+    /** Long division */
+    private BigInteger divideLong(BigInteger val) {
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
                           b = new MutableBigInteger(val.mag);
 
         a.divide(b, q);
         return q.toBigInteger(this.signum == val.signum ? 1 : -1);
+    }
+
+    /** Barrett division */
+    private BigInteger divideBarrett(BigInteger val) {
+        return divideAndRemainderBarrett(val)[0];
     }
 
     /**
@@ -1756,6 +1783,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException {@code val==0}
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
+        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+            return divideAndRemainderLong(val);
+        else
+            return divideAndRemainderBarrett(val);
+    }
+
+    /** Long division */
+    private BigInteger[] divideAndRemainderLong(BigInteger val) {
         BigInteger[] result = new BigInteger[2];
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
@@ -1775,11 +1810,163 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException {@code val==0}
      */
     public BigInteger remainder(BigInteger val) {
+        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+            return remainderLong(val);
+        else
+            return remainderBarrett(val);
+    }
+
+    /** Long division */
+    private BigInteger remainderLong(BigInteger val) {
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
                           b = new MutableBigInteger(val.mag);
 
         return a.divide(b, q).toBigInteger(this.signum);
+    }
+
+    /** Barrett division */
+    private BigInteger remainderBarrett(BigInteger val) {
+        return divideAndRemainderBarrett(val)[1];
+    }
+
+    /**
+     * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
+     * @param val
+     * @return an array containing the quotient and remainder
+     */
+    private BigInteger[] divideAndRemainderBarrett(BigInteger val) {
+        BigInteger[] c = abs().divideAndRemainderBarrettPositive(val.abs());
+        if (signum*val.signum < 0)
+            c[0] = c[0].negate();
+        if (signum < 0)
+            c[1] = c[1].negate();
+        return c;
+    }
+
+    /**
+     * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
+     * <code>val</code> must be positive.
+     * @param val
+     * @return an array containing the quotient and remainder
+     */
+    private BigInteger[] divideAndRemainderBarrettPositive(BigInteger val) {
+        int m = bitLength();
+        int n = val.bitLength();
+
+        if (m < n)
+            return new BigInteger[] {ZERO, this};
+        else if (m <= 2*n) {
+            // this case is handled by Barrett directly
+            BigInteger mu = val.inverse(m-n);
+            return barrettBase(val, mu);
+        }
+        else {
+            // treat each n-bit piece of a as a digit and do long division by val
+            // (which is also n bits), reusing the inverse
+            BigInteger mu2n = val.inverse(n);
+            int startBit = m / n * n;   // the bit at which the current n-bit piece starts
+            BigInteger quotient = ZERO;
+            BigInteger remainder = shiftRight(startBit);
+            BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
+            while (startBit > 0) {
+                startBit -= n;
+                BigInteger ai = shiftRight(startBit).and(mask);
+                remainder = remainder.shiftLeft(n).add(ai);
+                BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
+                BigInteger[] c = remainder.barrettBase(val, mu);
+                quotient = quotient.shiftLeft(n).add(c[0]);
+                remainder = c[1];
+            }
+            return new BigInteger[] {quotient, remainder};
+        }
+    }
+
+    /**
+     * Computes <code>this/b</code> and <code>this%b</code>.
+     * The binary representation of <code>b</code> must be at least half as
+     * long, and no longer than, the binary representation of <code>a</code>.<br/>
+     * This method uses the Barrett algorithm as described in
+     * <a href="http://treskal.com/kalle/exjobb/original-report.pdf">
+     * Fast Division of Large Integers</a>, pg 17.
+     * @param b
+     * @param mu 2<sup>n</sup>/b where <code>n</code> is the number of binary digits of <code>this</code>
+     * @return an array containing the quotient and remainder
+     */
+    private BigInteger[] barrettBase(BigInteger b, BigInteger mu) {
+        int m = bitLength();
+        int n = b.bitLength();
+
+        BigInteger a1 = shiftRight(n-1);
+        BigInteger q = a1.multiply(mu).shiftRight(m-n+1);
+        BigInteger r = subtract(b.multiply(q));
+        while (r.signum()<0 || r.compareTo(b)>=0)
+            if (r.signum() < 0) {
+                r = r.add(b);
+                q = q.subtract(ONE);
+            }
+            else {
+                r = r.subtract(b);
+                q = q.add(ONE);
+            }
+        return new BigInteger[] {q, r};
+    }
+
+    /**
+     * Computes 2<sup>bitLength()+n</sup>/this.<br/>
+     * Uses the
+     * <a href="http://en.wikipedia.org/wiki/Division_%28digital%29#Newton.E2.80.93Raphson_division">
+     * Newton algorithm</a> as described in
+     * <a href="http://treskal.com/kalle/exjobb/original-report.pdf">
+     * Fast Division of Large Integers</a>, pg 23.
+     * @param n precision in bits
+     * @return <code>1/this</code>, shifted to the left by <code>bitLength()+n</code> bits
+     */
+    private BigInteger inverse(int n) {
+        int m = bitLength();
+        if (n <= NEWTON_THRESHOLD)
+            return ONE.shiftLeft(n*2).divideLong(shiftRightRounded(m-n));
+
+        // let numSteps = ceil(log2(n/NEWTON_THRESHOLD)) and initialize k
+        int numSteps = bitLengthForInt((n+NEWTON_THRESHOLD-1)/NEWTON_THRESHOLD);
+        int[] k = new int[numSteps];
+        int ki = n;
+        for (int i=numSteps-1; i>=0; i--) {
+            ki = (ki+1) / 2;
+            k[i] = ki<NEWTON_THRESHOLD ? NEWTON_THRESHOLD : ki;
+        }
+
+        // calculate 1/this truncated to k0 fraction digits
+        BigInteger z = ONE.shiftLeft(k[0]*2).divideLong(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
+
+        for (int i=0; i<numSteps; i++) {
+            ki = k[i];
+            // the following BigIntegers represent numbers of the form a*2^(-exponent)
+            BigInteger s = z.square();   // exponent = 2ki
+            BigInteger t = shiftRightRounded(m-2*ki-3);   // exponent = 2ki+3
+            BigInteger u = t.multiply(s);   // exponent = 4ki+3 > 2ki+1
+            BigInteger w = z.add(z);   // exponent = ki
+            w = w.shiftLeft(3*ki+3);   // increase #fraction digits to 4ki+3 to match u
+            z = w.subtract(u);   // exponent = 4ki+3
+            if (i < numSteps-1)
+                z = z.shiftRightRounded(4*ki+3-k[i+1]);   // reduce #fraction digits to k[i+1]
+            else
+                z = z.shiftRightRounded(4*ki+3-n);   // final step: reduce #fraction digits to n
+        }
+        return z;
+    }
+
+    /**
+     * Same as {@link BigInteger#shiftRight(int)} but rounds to the
+     * nearest integer.
+     * @param n shift distance, in bits.
+     * @return ⌊this*2<sup>-n</sup>⌉
+     */
+    private BigInteger shiftRightRounded(int n) {
+        BigInteger b = shiftRight(n);
+        if (n>0 && testBit(n-1))
+            b = b.add(ONE);
+        return b;
     }
 
     /**
