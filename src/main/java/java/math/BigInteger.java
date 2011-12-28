@@ -203,7 +203,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * The threshold value for using Toom-Cook squaring.  If the number
      * of ints in the number are larger than this value,
-     * Karatsuba squaring will be used.   This value is found
+     * Toom-Cook squaring will be used.   This value is found
      * experimentally to work well.
      */
     private static final int TOOM_COOK_SQUARE_THRESHOLD = 140;
@@ -3853,9 +3853,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return result;
     }
 
-    //////////////////////////////////////////////////////////////////////////
-    //////////////////////      SCHÖNHAGE-STRASSEN      //////////////////////
-    //////////////////////////////////////////////////////////////////////////
+    // Schönhage-Strassen
 
     /**
      * Multiplies two {@link BigInteger}s using the
@@ -3908,8 +3906,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * This is the core method. It multiplies two <b>positive</b> numbers of length <code>aBitLen</code>
-     * and </code>bBitLen</code> that are represented as int arrays, i.e. in base 2^32.
+     * This is the core Schönhage-Strassen method. It multiplies two <b>positive</b> numbers of length
+     * <code>aBitLen</code> and </code>bBitLen</code> that are represented as int arrays, i.e. in base 2^32.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
      * The arrays must be ordered least significant to most significant, so the least significant digit
      * must be at index 0.
