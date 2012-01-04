@@ -1,13 +1,14 @@
 # Efficient BigInteger Implementation
 
-This is an improved version of `java.math.BigInteger` that uses fast algorithms for multiplying large numbers. It is based on [Alan Eliasen's BigInteger patch](http://futureboy.us/temp/BigInteger.java).
+This is an improved version of `java.math.BigInteger` that uses fast algorithms for multiplying and dividing large numbers. It is based on [Alan Eliasen's BigInteger patch](http://futureboy.us/temp/BigInteger.java) which provides the Karatsuba and Toom-Cook implementations.
 
 Depending on the input size, numbers are multiplied using [Long Multiplication](http://en.wikipedia.org/wiki/Multiplication_algorithm#Long_multiplication), [Karatsuba](http://en.wikipedia.org/wiki/Karatsuba_algorithm), [Toom-Cook](http://en.wikipedia.org/wiki/Toom%E2%80%93Cook_multiplication), or [Schönhage-Strassen](http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm).
+For division, [Long Division](http://en.wikipedia.org/wiki/Long_division), [Burnikel-Ziegler Division](http://cr.yp.to/bib/1998/burnikel.ps), or [Barrett Division](http://en.wikipedia.org/wiki/Barrett_reduction) is used.
 
-Sample benchmark results:
+Benchmark results for multiplication of two n-digit numbers (Intel E2160 @1.8 GHz, 32-bit mode):
 <table>
   <tr>
-    <th>#Digits</th><th>OpenJDK 6 BigInteger</th><th>Improved BigInteger</th><th>Speedup factor</th><th>Algorithm</th>
+    <th>n</th><th>OpenJDK 6 BigInteger</th><th>Improved BigInteger</th><th>Speedup factor</th><th>Algorithm</th>
   </tr>
   <tr>
     <td align="right" align="right">10</td><td align="right" align="right">0.00005ms</td><td align="right">0.00006ms</td><td align="right">.8</td><td align="right">Long</td>
@@ -83,5 +84,87 @@ Sample benchmark results:
   </tr>
   <tr>
     <td align="right">10000000</td><td align="right">8584.36s</td><td align="right">13.49s</td><td align="right">636.3</td><td align="right">SS</td>
+  </tr>
+</table>
+
+Benchmark results for division of a 2n-digit number by a n-digit number (Intel E2160 @1.8 GHz, 32-bit mode):
+<table>
+  <tr>
+    <th>n</th><th>OpenJDK 6 BigInteger</th><th>Improved BigInteger</th><th>Speedup factor</th><th>Algorithm</th>
+  </tr>
+  <tr>
+    <td align="right" align="right">10</td><td align="right" align="right">0.0002ms</td><td align="right">0.0002ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right" align="right">25</td><td align="right" align="right">0.0008ms</td><td align="right">0.0008ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right" align="right">50</td><td align="right" align="right">0.0015ms</td><td align="right">0.0015ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right" align="right">75</td><td align="right" align="right">0.0021ms</td><td align="right">0.0021ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right">100</td><td align="right">0.0032ms</td><td align="right">0.0032ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right">250</td><td align="right">0.0125ms</td><td align="right">0.0125ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right">500</td><td align="right">0.0426ms</td><td align="right">0.0426ms</td><td align="right">1.0</td><td align="right">Long</td>
+  </tr>
+  <tr>
+    <td align="right">750</td><td align="right">0.0922ms</td><td align="right">0.0865ms</td><td align="right">1.07</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">1000</td><td align="right">0.1600ms</td><td align="right">0.1292ms</td><td align="right">1.24</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">2500</td><td align="right">0.9587ms</td><td align="right">0.5757ms</td><td align="right">1.67</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">5000</td><td align="right">3.7766ms</td><td align="right">1.7067ms</td><td align="right">2.21</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">7500</td><td align="right">8.4126ms</td><td align="right">3.1889ms</td><td align="right">2.64</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">10000</td><td align="right">14.9409ms</td><td align="right">4.8979ms</td><td align="right">3.05</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">25000</td><td align="right">92.7651ms</td><td align="right">19.8670ms</td><td align="right">4.67</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">50000</td><td align="right">372.3610ms</td><td align="right">56.6618ms</td><td align="right">6.57</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">75000</td><td align="right">836.4312ms</td><td align="right">102.0544ms</td><td align="right">8.20</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">100000</td><td align="right">1.51s</td><td align="right">0.16s</td><td align="right">9.44</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">250000</td><td align="right">9.29s</td><td align="right">0.62s</td><td align="right">14.98</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">500000</td><td align="right">37.27s</td><td align="right">1.81s</td><td align="right">20.59</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">750000</td><td align="right">84.29s</td><td align="right">3.25s</td><td align="right">25.94</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">1000000</td><td align="right">150.46s</td><td align="right">4.68s</td><td align="right">32.15</td><td align="right">Barr</td>
+  </tr>
+  <tr>
+    <td align="right">2500000</td><td align="right">950.75s</td><td align="right">13.38s</td><td align="right">71.06</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">5000000</td><td align="right">3797.64s</td><td align="right">30.31s</td><td align="right">125.29</td><td align="right">BZ</td>
+  </tr>
+  <tr>
+    <td align="right">7500000</td><td align="right">8546.75s</td><td align="right">53.71s</td><td align="right">159.12</td><td align="right">Barr</td>
+  </tr>
+  <tr>
+    <td align="right">10000000</td><td align="right">15227.41s</td><td align="right">54.22s</td><td align="right">280.84</td><td align="right">Barr</td>
   </tr>
 </table>
