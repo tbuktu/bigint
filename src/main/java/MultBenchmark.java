@@ -6,11 +6,11 @@ import java.math.BigInteger;
 /**
  * Benchmark for {@link BigInteger#multiply(BigInteger)} using different input sizes.
  */
-public class Benchmark {
+public class MultBenchmark {
     private static int POW10_MIN = 1;   // start with 10^1-digit numbers
     private static int POW10_MAX = 7;   // go up to 10^7 digits
     private static long MIN_BENCH_DURATION = 2000000000;   // in nanoseconds
-    
+
     /**
      * @param args ignored
      */
@@ -22,7 +22,7 @@ public class Benchmark {
             doBench(75, i);
         }
     }
-    
+
     /**
      * Multiplies numbers of length <code>mag/10 * 10<sup>pow10</sup></code>.
      * @param mag 25 for <code>2.5*10<sup>pow10</sup></code>, 50 for <code>5*10<sup>pow10</sup></code>, etc.
@@ -32,7 +32,7 @@ public class Benchmark {
         int numDecimalDigits = TEN.pow(pow10).intValue() * mag / 10;
         BigInteger a = BigInteger.valueOf(5).pow(numDecimalDigits-1).shiftLeft(numDecimalDigits-1);   // 10^(numDecimalDigits-1)
         BigInteger b = a.add(ONE);
-        
+
         System.out.print("Warming up... ");
         int numIterations = 0;
         long tStart = System.nanoTime();
@@ -40,7 +40,7 @@ public class Benchmark {
             a.multiply(b);
             numIterations++;
         } while (System.nanoTime()-tStart < MIN_BENCH_DURATION);
-        
+
         System.out.print("Benchmarking " + mag/10.0 + "E" + pow10 + " digits... ");
         a = new BigInteger(a.toByteArray());
         b = new BigInteger(b.toByteArray());

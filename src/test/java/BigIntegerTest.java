@@ -1,4 +1,5 @@
 import static java.math.BigInteger.ONE;
+import static java.math.BigInteger.TEN;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -50,7 +51,7 @@ public class BigIntegerTest {
 
         // test different size numbers to cover all algorithms used by BigInteger
         Random rng = new Random();
-        for (int i=2; i<1048576; i*=2) {
+        for (int i=2; i<1000000; i=i*3/2) {
             BigInteger a = randomBigInteger(rng, i, true);
             // make sure a >= NEWTON_THRESHOLD
             if (a.compareTo(newt0) < 0)
@@ -59,9 +60,8 @@ public class BigIntegerTest {
             int m = a.bitLength();
             int n = rng.nextInt(2*m) + 1;
             BigInteger inv = (BigInteger)inverseMethod.invoke(a, n);
-            BigInteger b = (BigInteger)inverseMethod.invoke(inv, n);
-            BigInteger error = b.shiftLeft(m-inv.bitLength()).subtract(a).abs();
-            BigInteger maxError = BigInteger.valueOf(1).shiftLeft(Math.max(0, m-n));
+            BigInteger error = inv.multiply(a).subtract(ONE.shiftLeft(m+n)).abs();
+            BigInteger maxError = ONE.shiftLeft(m).multiply(a);
             assertTrue(error.compareTo(maxError) <= 0);
         }
     }
@@ -71,30 +71,37 @@ public class BigIntegerTest {
         Random rng = new Random();
 
         // test different size numbers to cover all algorithms used by BigInteger
-        for (int i=2; i<1000000; i*=2) {
-            BigInteger a;
-            do {
-                a = randomBigInteger(rng, i, false);
-            } while (a.abs().compareTo(ONE) < 0);
+        for (int i=2; i<1000000; i=i*3/2) {
+            BigInteger a = randomBigInteger(rng, i, false);
             BigInteger b;
             do {
-                b = randomBigInteger(rng, i/2, false);
-            } while (b.abs().compareTo(ONE) < 0);
+                b = randomBigInteger(rng, i, false);
+            } while (b.signum() == 0);
             BigInteger[] c = a.divideAndRemainder(b);
 
             assertEquals(a, b.multiply(c[0]).add(c[1]));
             assertTrue(c[1].compareTo(b.abs()) < 0);
         }
+
+        // test the "else" branch in burnikel32()
+        int numDecimalDigits = 10000;
+        BigInteger a = BigInteger.valueOf(5).pow(numDecimalDigits-1).shiftLeft(numDecimalDigits-1).add(ONE);   // 10^(numDecimalDigits-1)
+        numDecimalDigits /= 2;
+        BigInteger b = BigInteger.valueOf(5).pow(numDecimalDigits-1).shiftLeft(numDecimalDigits-1).add(ONE);
+        BigInteger[] c = a.divideAndRemainder(b);
+        assertEquals(a, b.multiply(c[0]).add(c[1]));
+        assertTrue(c[1].compareTo(b.abs()) < 0);
     }
 
     /**
      * Generates a random number of length <code>bitLength</code> bits or less
      * @param rng
-     * @param bitLength
+     * @param maxBitLength
      * @param positive whether to generate only positive numbers
      * @return
      */
-    private BigInteger randomBigInteger(Random rng, int bitLength, boolean positive) {
+    private BigInteger randomBigInteger(Random rng, int maxBitLength, boolean positive) {
+        int bitLength = rng.nextInt(maxBitLength) + 1;
         byte[] arr = new byte[(bitLength+7)/8];
         rng.nextBytes(arr);
         if (bitLength%8 != 0)

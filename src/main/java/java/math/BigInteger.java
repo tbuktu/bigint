@@ -209,18 +209,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final int TOOM_COOK_SQUARE_THRESHOLD = 140;
 
     /**
+     * The threshold value for using Burnikel-Ziegler division.  If the number
+     * of ints in the number are larger than this value,
+     * Burnikel-Ziegler division will be used.   This value is found
+     * experimentally to work well.
+     */
+    private static final int BURNIKEL_ZIEGLER_THRESHOLD = 64;
+
+    /**
      * The threshold value, in bits, for using Newton iteration when
      * computing the reciprocal of a number.
      */
     private static final int NEWTON_THRESHOLD = 100;
-
-    /**
-     * The threshold value for using Barrett division.  If the number
-     * of ints in the number are larger than this value,
-     * Barrett division will be used.   This value is found
-     * experimentally to work well.
-     */
-    private static final int BARRETT_THRESHOLD = 310;
 
     //Constructors
 
@@ -1752,8 +1752,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger divide(BigInteger val) {
-        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return divideLong(val);
+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+            return divideBurnikelZiegler(val);
         else
             return divideBarrett(val);
     }
@@ -1785,10 +1787,36 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
-        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return divideAndRemainderLong(val);
+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+            return divideAndRemainderBurnikelZiegler(val);
         else
             return divideAndRemainderBarrett(val);
+    }
+
+    /**
+     * Estimates whether Barrett Division will be more efficient than Burnikel-Ziegler when
+     * dividing two numbers of a given length in bits.
+     * @param bitLength the number of bits in each of the two inputs
+     * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
+     */
+    private boolean shouldDivideBarrett(int bitLength) {
+        if (bitLength < 3300000)
+            return false;
+        if (bitLength < 4100000)
+            return true;
+        if (bitLength < 5900000)
+            return false;
+        if (bitLength < 8300000)
+            return true;
+        if (bitLength < 9700000)
+            return false;
+        if (bitLength < 16000000)
+            return true;
+        if (bitLength < 19000000)
+            return false;
+        return true;
     }
 
     /** Long division */
@@ -1812,8 +1840,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger remainder(BigInteger val) {
-        if (mag.length<BARRETT_THRESHOLD || val.mag.length<BARRETT_THRESHOLD)
+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return remainderLong(val);
+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+            return remainderBurnikelZiegler(val);
         else
             return remainderBarrett(val);
     }
@@ -1834,7 +1864,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
-     * @param val
+     * @param val the divisor
      * @return an array containing the quotient and remainder
      */
     private BigInteger[] divideAndRemainderBarrett(BigInteger val) {
@@ -1849,7 +1879,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
      * <code>val</code> must be positive.
-     * @param val
+     * @param val the divisor
      * @return an array containing the quotient and remainder
      */
     private BigInteger[] divideAndRemainderBarrettPositive(BigInteger val) {
@@ -4666,5 +4696,226 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i<a.length; i++)
             b[i] = a[a.length-1-i];
         return b;
+    }
+
+    // Burnikel-Ziegler
+
+    /**
+     * Divides this <code>BigInteger</code> by another using the
+     * Burnikel-Ziegler algorithm.
+     * @param  val the divisor
+     * @return this / val
+     */
+    private BigInteger divideBurnikelZiegler(BigInteger val) {
+        return divideAndRemainderBurnikelZiegler(val)[0];
+    }
+
+    /**
+     * Calculates <code>this % val</code> using the Burnikel-Ziegler algorithm.
+     * @param val the divisor
+     * @return this % val
+     */
+    private BigInteger remainderBurnikelZiegler(BigInteger val) {
+        return divideAndRemainderBurnikelZiegler(val)[1];
+    }
+
+    /**
+     * Computes <code>this/val</code> and <code>this%val</code> using the
+     * Burnikel-Ziegler algorithm.
+     * @param val the divisor
+     * @return an array containing the quotient and remainder
+     */
+    private BigInteger[] divideAndRemainderBurnikelZiegler(BigInteger val) {
+        BigInteger[] c = divideAndRemainderBurnikelZieglerPositive(abs(), val.abs());
+        if (signum*val.signum < 0)
+            c[0] = c[0].negate();
+        if (signum < 0)
+            c[1] = c[1].negate();
+        return c;
+    }
+
+    /**
+     * Computes <code>a/b</code> and <code>a%b</code> using
+     * the <a href="http://cr.yp.to/bib/1998/burnikel.ps">
+     * Burnikel-Ziegler algorithm</a>. This method implements
+     * algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
+     * β is chosen to be 2^64.<br/>
+     * <code>a</code> and <code>b</code> must be positive.
+     * @param a the dividend
+     * @param b the divisor
+     * @return an array containing the quotient and remainder
+     */
+    private BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
+        int r = (a.bitLength()+63) / 64;
+        int s = (b.bitLength()+63) / 64;
+
+        if (r < s)
+            return new BigInteger[] {ZERO, a};
+        else {
+            int m = 1;
+            while (m*BURNIKEL_ZIEGLER_THRESHOLD <= s)
+                m *= 2;
+            int j = (s+m-1) / m;
+            int n = j * m;   // length of A[i] for 0<=i<=t-2 but not generally t-1 b/c it is shorter
+            int n64 = 64 * n;
+            int sigma = Math.max(0, n64 - b.bitLength());
+            b = b.shiftLeft(sigma);
+            a = a.shiftLeft(sigma);
+
+            int t = (a.bitLength()+1+n64-1) / n64;
+            if (t < 2)
+                t = 2;
+            BigInteger a1 = getBlock(a, t-1, t, n);   // A[t-1]
+            BigInteger a2 = getBlock(a, t-2, t, n);   // A[t-2]
+            BigInteger z = a1.shiftLeftInts(2*n).add(a2);   // Z[t-2]
+            BigInteger quotient = ZERO;
+            BigInteger[] c;
+            for (int i=t-2; i>=1; i--) {
+                c = burnikel21(z, b);
+                z = getBlock(a, i-1, t, n);
+                z = z.add(c[1].shiftLeftInts(2*n));
+                quotient = quotient.add(c[0]).shiftLeftInts(2*n);
+            }
+            c = burnikel21(z, b);
+            BigInteger remainder = c[1].shiftRight(sigma);
+            quotient = quotient.add(c[0]);
+            return new BigInteger[] {quotient, remainder};
+        }
+    }
+
+    /**
+     * Returns <code>blockLength*64</code> bits from <code>a</code>,
+     * starting at bit <code>index*64</code>.
+     * @param a a number
+     * @param index the block index
+     * @param numBlocks the number of blocks in <code>a</code>
+     * @param blockLength length of one block in units of 64 bits
+     * @return
+     */
+    private BigInteger getBlock(BigInteger a, int index, int numBlocks, int blockLength) {
+        int blockStart = index * blockLength;
+        int blockEnd;
+        if (index == numBlocks-1)
+            blockEnd = (a.bitLength()+63) / 64;
+        else
+            blockEnd = (index+1) * blockLength;
+        return a.shiftRightInts(2*blockStart).truncate(2*(blockEnd-blockStart));
+    }
+
+    /**
+     * Implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
+     * @param a a number such that <code>a.bitLength() <= 2*b.bitLength()</code>
+     * @param b a number such that <code>b.bitLength()</code> is even
+     * @return <code>a/b</code> and <code>a%b</code>
+     */
+    private BigInteger[] burnikel21(BigInteger a, BigInteger b) {
+        int n = b.bitLength() / 64;
+        if (n < BURNIKEL_ZIEGLER_THRESHOLD/2)
+            return a.divideAndRemainderLong(b);
+
+        BigInteger a4 = a.truncate(n);
+
+        BigInteger[] c1 = burnikel32(a.shiftRightInts(n), b);   // Q1 and R1
+        BigInteger[] c2 = burnikel32(c1[1].shiftLeftInts(n).add(a4), b);   // Q2 and R
+
+        return new BigInteger[] {c1[0].shiftLeftInts(n).add(c2[0]), c2[1]};
+    }
+
+    /**
+     * Implements algorithm 2 from pg. 5 the Burnikel-Ziegler paper.
+     * @param a a number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
+     * @param b a number such that <code>b.bitLength()</code> is even
+     * @return <code>a/b</code> and <code>a%b</code>
+     */
+    private BigInteger[] burnikel32(BigInteger a, BigInteger b) {
+        int n = b.bitLength() / 64;
+
+        BigInteger a1 = a.shiftRightInts(2*n);
+        BigInteger a2 = a.shiftAndTruncate(n);
+        BigInteger a3 = a.truncate(n);
+
+        BigInteger b1 = b.shiftRightInts(n);
+        BigInteger b2 = b.truncate(n);
+
+        BigInteger q, r1;
+        BigInteger a12 = a1.shiftLeftInts(n).add(a2);
+        if (a1.compareTo(b1) < 0) {
+            BigInteger[] c = burnikel21(a12, b1);
+            q = c[0];
+            r1 = c[1];
+        }
+        else {
+            q = ones(32*n);
+            r1 = a12.subtract(b1.shiftLeftInts(n)).add(b1);
+        }
+
+        BigInteger d = q.multiply(b2);
+        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);
+        while (r.signum() < 0) {
+            r = r.add(b);
+            q = q.subtract(ONE);
+        }
+
+        return new BigInteger[] {q, r};
+    }
+
+    /**
+     * Shifts a number to the left by a multiple of 32.
+     * @param n a non-negative number
+     * @return <code>this.shiftLeft(32*n)</code>
+     */
+    private BigInteger shiftLeftInts(int n) {
+        return new BigInteger(Arrays.copyOf(mag, mag.length+n), signum);
+    }
+
+    /**
+     * Shifts a number to the right by a multiple of 32.
+     * @param n a non-negative number
+     * @return <code>this.shiftRight(32*n)</code>
+     */
+    private BigInteger shiftRightInts(int n) {
+        if (n >= mag.length)
+            return ZERO;
+        else
+            return new BigInteger(Arrays.copyOf(mag, mag.length-n), signum);
+    }
+
+    /**
+     * Truncates <code>mag</code> to the lower <code>n</code> elements.
+     * @param n the number of ints to retain; must be non-negative
+     * @return <code>this.and(ONE.shiftLeft(32*n).subtract(ONE))</code>.
+     */
+    private BigInteger truncate(int n) {
+        if (mag.length >= n)
+            return new BigInteger(Arrays.copyOfRange(mag, mag.length-n, mag.length), signum);
+        else
+            return this;
+    }
+
+    /**
+     * Returns a number equal to <code>this.shiftRightInts(n).truncate(n)</code>.
+     * @param n a non-negative number
+     * @return <code>n</code> bits of <code>this</code> starting at bit <code>n</code>
+     */
+    private BigInteger shiftAndTruncate(int n) {
+        if (mag.length <= n)
+            return ZERO;
+        if (mag.length <= 2*n)
+            return new BigInteger(Arrays.copyOfRange(mag, 0, mag.length-n), signum);
+        else
+            return new BigInteger(Arrays.copyOfRange(mag, mag.length-2*n, mag.length-n), signum);
+    }
+
+    /**
+     * Returns a number consisting of <code>n</code> 1-bits
+     * @param n a non-negative number
+     * @return <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
+     */
+    private BigInteger ones(int n) {
+        int[] mag = new int[(n+31)/32];
+        Arrays.fill(mag, -1);
+        if (n%32 != 0)
+            mag[0] >>>= 32 - (n%32);
+        return new BigInteger(mag, 1);
     }
 }
