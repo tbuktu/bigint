@@ -4865,7 +4865,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>this.shiftLeft(32*n)</code>
      */
     private BigInteger shiftLeftInts(int n) {
-        return new BigInteger(Arrays.copyOf(mag, mag.length+n), signum);
+        int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOf(mag, mag.length+n));
+        return new BigInteger(newMag, signum);
     }
 
     /**
@@ -4886,8 +4887,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>this.and(ONE.shiftLeft(32*n).subtract(ONE))</code>.
      */
     private BigInteger truncate(int n) {
-        if (mag.length >= n)
-            return new BigInteger(Arrays.copyOfRange(mag, mag.length-n, mag.length), signum);
+        if (mag.length >= n) {
+            int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, mag.length-n, mag.length));
+            return new BigInteger(newMag, signum);
+        }
         else
             return this;
     }
@@ -4900,10 +4903,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private BigInteger shiftAndTruncate(int n) {
         if (mag.length <= n)
             return ZERO;
-        if (mag.length <= 2*n)
-            return new BigInteger(Arrays.copyOfRange(mag, 0, mag.length-n), signum);
-        else
-            return new BigInteger(Arrays.copyOfRange(mag, mag.length-2*n, mag.length-n), signum);
+        if (mag.length <= 2*n) {
+            int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, 0, mag.length-n));
+            return new BigInteger(newMag, signum);
+        }
+        else {
+            int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, mag.length-2*n, mag.length-n));
+            return new BigInteger(newMag, signum);
+        }
     }
 
     /**
