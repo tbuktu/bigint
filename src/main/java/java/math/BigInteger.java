@@ -4701,10 +4701,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     // Burnikel-Ziegler
 
     /**
-     * Divides this <code>BigInteger</code> by another using the
-     * Burnikel-Ziegler algorithm.
+     * Calculates <code>this / val</code> using the Burnikel-Ziegler algorithm.
      * @param  val the divisor
-     * @return this / val
+     * @return <code>this / val</code>
      */
     private BigInteger divideBurnikelZiegler(BigInteger val) {
         return divideAndRemainderBurnikelZiegler(val)[0];
@@ -4713,20 +4712,22 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Calculates <code>this % val</code> using the Burnikel-Ziegler algorithm.
      * @param val the divisor
-     * @return this % val
+     * @return <code>this % val</code>
      */
     private BigInteger remainderBurnikelZiegler(BigInteger val) {
         return divideAndRemainderBurnikelZiegler(val)[1];
     }
 
     /**
-     * Computes <code>this/val</code> and <code>this%val</code> using the
+     * Computes <code>this / val</code> and <code>this % val</code> using the
      * Burnikel-Ziegler algorithm.
      * @param val the divisor
      * @return an array containing the quotient and remainder
      */
     private BigInteger[] divideAndRemainderBurnikelZiegler(BigInteger val) {
         BigInteger[] c = divideAndRemainderBurnikelZieglerPositive(abs(), val.abs());
+
+        // fix signs
         if (signum*val.signum < 0)
             c[0] = c[0].negate();
         if (signum < 0)
@@ -4740,7 +4741,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Burnikel-Ziegler algorithm</a>. This method implements
      * algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
      * β is chosen to be 2^64.<br/>
-     * <code>a</code> and <code>b</code> must be positive.
+     * <code>a</code> and <code>b</code> must be nonnegative.
      * @param a the dividend
      * @param b the divisor
      * @return an array containing the quotient and remainder
@@ -4752,33 +4753,38 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (r < s)
             return new BigInteger[] {ZERO, a};
         else {
-            int m = 1;
-            while (m*BURNIKEL_ZIEGLER_THRESHOLD <= s)
-                m *= 2;
-            int j = (s+m-1) / m;
-            int n = j * m;   // length of A[i] for 0<=i<=t-2 but not generally t-1 b/c it is shorter
-            int n64 = 64 * n;
-            int sigma = Math.max(0, n64 - b.bitLength());
-            b = b.shiftLeft(sigma);
-            a = a.shiftLeft(sigma);
+            // m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
+            int m = 1 << (32-Integer.numberOfLeadingZeros(s/BURNIKEL_ZIEGLER_THRESHOLD));
 
-            int t = (a.bitLength()+1+n64-1) / n64;
+            int j = (s+m-1) / m;   // j = ceil(s/m)
+            int n = j * m;   // block length in 64-bit units
+            int n64 = 64 * n;   // block length in bits
+            int sigma = Math.max(0, n64 - b.bitLength());
+            b = b.shiftLeft(sigma);   // shift b so its length is a multiple of n
+            a = a.shiftLeft(sigma);   // shift a by the same amount
+
+            // t is the number of blocks needed to accommodate 'a' plus one additional bit
+            int t = (a.bitLength()+n64) / n64;
             if (t < 2)
                 t = 2;
-            BigInteger a1 = getBlock(a, t-1, t, n);   // A[t-1]
-            BigInteger a2 = getBlock(a, t-2, t, n);   // A[t-2]
+            BigInteger a1 = getBlock(a, t-1, t, n);   // the most significant block of a
+            BigInteger a2 = getBlock(a, t-2, t, n);   // the second to most significant block
+
+            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
             BigInteger z = a1.shiftLeftInts(2*n).add(a2);   // Z[t-2]
             BigInteger quotient = ZERO;
             BigInteger[] c;
-            for (int i=t-2; i>=1; i--) {
+            for (int i=t-2; i>0; i--) {
                 c = burnikel21(z, b);
                 z = getBlock(a, i-1, t, n);
                 z = z.add(c[1].shiftLeftInts(2*n));
                 quotient = quotient.add(c[0]).shiftLeftInts(2*n);
             }
+            // do the loop one more time for i=0 but leave z unchanged
             c = burnikel21(z, b);
-            BigInteger remainder = c[1].shiftRight(sigma);
             quotient = quotient.add(c[0]);
+
+            BigInteger remainder = c[1].shiftRight(sigma);   // a and b were shifted, so shift back
             return new BigInteger[] {quotient, remainder};
         }
     }
@@ -4804,8 +4810,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
-     * @param a a number such that <code>a.bitLength() <= 2*b.bitLength()</code>
-     * @param b a number such that <code>b.bitLength()</code> is even
+     * β is chosen to be 2^64.
+     * @param a a nonnegative number such that <code>a.bitLength() <= 2*b.bitLength()</code>
+     * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
     private BigInteger[] burnikel21(BigInteger a, BigInteger b) {
@@ -4813,44 +4820,54 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (n < BURNIKEL_ZIEGLER_THRESHOLD/2)
             return a.divideAndRemainderLong(b);
 
+        // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
+        BigInteger[] c1 = burnikel32(a.shiftRightInts(n), b);
+
+        // divide the concatenation of c1[1] and a4 by b
         BigInteger a4 = a.truncate(n);
+        BigInteger[] c2 = burnikel32(c1[1].shiftLeftInts(n).add(a4), b);
 
-        BigInteger[] c1 = burnikel32(a.shiftRightInts(n), b);   // Q1 and R1
-        BigInteger[] c2 = burnikel32(c1[1].shiftLeftInts(n).add(a4), b);   // Q2 and R
-
+        // quotient = the concatentation of the two above quotients
         return new BigInteger[] {c1[0].shiftLeftInts(n).add(c2[0]), c2[1]};
     }
 
     /**
-     * Implements algorithm 2 from pg. 5 the Burnikel-Ziegler paper.
-     * @param a a number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
-     * @param b a number such that <code>b.bitLength()</code> is even
+     * Implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
+     * β is chosen to be 2^64.
+     * @param a a nonnegative number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
+     * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
     private BigInteger[] burnikel32(BigInteger a, BigInteger b) {
         int n = b.bitLength() / 64;
 
+        // split a in 3 parts of length n or less
         BigInteger a1 = a.shiftRightInts(2*n);
         BigInteger a2 = a.shiftAndTruncate(n);
         BigInteger a3 = a.truncate(n);
 
+        // split a in 2 parts of length n or less
         BigInteger b1 = b.shiftRightInts(n);
         BigInteger b2 = b.truncate(n);
 
         BigInteger q, r1;
-        BigInteger a12 = a1.shiftLeftInts(n).add(a2);
+        BigInteger a12 = a1.shiftLeftInts(n).add(a2);   // concatenation of a1 and a2
         if (a1.compareTo(b1) < 0) {
+            // q=a12/b1, r=a12%b1
             BigInteger[] c = burnikel21(a12, b1);
             q = c[0];
             r1 = c[1];
         }
         else {
+            // q=β^n-1, r=a12-b1*2^n+b1
             q = ones(32*n);
             r1 = a12.subtract(b1.shiftLeftInts(n)).add(b1);
         }
 
         BigInteger d = q.multiply(b2);
-        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);
+        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);   // r = r1*β^n + a3 - d (paper says a4)
+
+        // add b until r>=0
         while (r.signum() < 0) {
             r = r.add(b);
             q = q.subtract(ONE);
