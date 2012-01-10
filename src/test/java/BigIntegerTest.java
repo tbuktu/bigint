@@ -52,17 +52,12 @@ public class BigIntegerTest {
     static int size = 1000; // numbers per batch
     static boolean failure = false;
 
-    // Some variables for sizing test numbers in bits
-    private static int order1 = 100;
-    private static int order2 = 60;
-    private static int order3 = 30;
-
-    public static void pow() {
+    public static void pow(int order) {
         int failCount1 = 0;
 
         for (int i=0; i<size; i++) {
             int power = rnd.nextInt(6) +2;
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             BigInteger y = x.pow(power);
             BigInteger z = x;
 
@@ -75,16 +70,16 @@ public class BigIntegerTest {
         report("pow", failCount1);
     }
 
-    public static void arithmetic() {
+    public static void arithmetic(int order) {
         int failCount = 0;
 
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             while(x.compareTo(BigInteger.ZERO) != 1)
-                x = fetchNumber(order1);
-            BigInteger y = fetchNumber(order1/2);
+                x = fetchNumber(order);
+            BigInteger y = fetchNumber(order/2);
             while(x.compareTo(y) == -1)
-                y = fetchNumber(order1/2);
+                y = fetchNumber(order/2);
             if (y.equals(BigInteger.ZERO))
                 y = y.add(BigInteger.ONE);
 
@@ -95,16 +90,16 @@ public class BigIntegerTest {
             if (!baz.equals(BigInteger.ZERO))
                 failCount++;
         }
-        report("Arithmetic I", failCount);
+        report("Arithmetic I for " + order + " bits", failCount);
 
         failCount = 0;
         for (int i=0; i<100; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             while(x.compareTo(BigInteger.ZERO) != 1)
-                x = fetchNumber(order1);
-            BigInteger y = fetchNumber(order1/2);
+                x = fetchNumber(order);
+            BigInteger y = fetchNumber(order/2);
             while(x.compareTo(y) == -1)
-                y = fetchNumber(order1/2);
+                y = fetchNumber(order/2);
             if (y.equals(BigInteger.ZERO))
                 y = y.add(BigInteger.ONE);
 
@@ -115,7 +110,7 @@ public class BigIntegerTest {
             if (!baz[0].equals(BigInteger.ZERO))
                 failCount++;
         }
-        report("Arithmetic II", failCount);
+        report("Arithmetic II for " + order + " bits", failCount);
     }
 
     public static void bitCount() {
@@ -160,11 +155,11 @@ public class BigIntegerTest {
         report("BitLength", failCount);
     }
 
-    public static void bitOps() {
+    public static void bitOps(int order) {
         int failCount1 = 0, failCount2 = 0, failCount3 = 0;
 
         for (int i=0; i<size*5; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             BigInteger y;
 
             /* Test setBit and clearBit (and testBit) */
@@ -194,7 +189,7 @@ public class BigIntegerTest {
         report("flipBit/testBit", failCount2);
 
         for (int i=0; i<size*5; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
 
             /* Test getLowestSetBit() */
             int k = x.getLowestSetBit();
@@ -213,13 +208,13 @@ public class BigIntegerTest {
         report("getLowestSetBit", failCount3);
     }
 
-    public static void bitwise() {
+    public static void bitwise(int order) {
 
         /* Test identity x^y == x|y &~ x&y */
         int failCount = 0;
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1);
-            BigInteger y = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
+            BigInteger y = fetchNumber(order);
             BigInteger z = x.xor(y);
             BigInteger w = x.or(y).andNot(x.and(y));
             if (!z.equals(w))
@@ -230,8 +225,8 @@ public class BigIntegerTest {
         /* Test identity x &~ y == ~(~x | y) */
         failCount = 0;
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1);
-            BigInteger y = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
+            BigInteger y = fetchNumber(order);
             BigInteger z = x.andNot(y);
             BigInteger w = x.not().or(y).not();
             if (!z.equals(w))
@@ -240,13 +235,13 @@ public class BigIntegerTest {
         report("Logic (&~ | ~)", failCount);
     }
 
-    public static void shift() {
+    public static void shift(int order) {
         int failCount1 = 0;
         int failCount2 = 0;
         int failCount3 = 0;
 
         for (int i=0; i<100; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             int n = Math.abs(rnd.nextInt()%200);
 
             if (!x.shiftLeft(n).equals
@@ -279,13 +274,13 @@ public class BigIntegerTest {
         report("baz shiftLeft/Right", failCount3);
     }
 
-    public static void divideAndRemainder() {
+    public static void divideAndRemainder(int order) {
         int failCount1 = 0;
 
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1).abs();
+            BigInteger x = fetchNumber(order).abs();
             while(x.compareTo(BigInteger.valueOf(3L)) != 1)
-                x = fetchNumber(order1).abs();
+                x = fetchNumber(order).abs();
             BigInteger z = x.divide(BigInteger.valueOf(2L));
             BigInteger y[] = x.divideAndRemainder(x);
             if (!y[0].equals(BigInteger.ONE)) {
@@ -306,7 +301,7 @@ public class BigIntegerTest {
                 System.err.println("      y :"+y);
             }
         }
-        report("divideAndRemainder I", failCount1);
+        report("divideAndRemainder for " + order + " bits", failCount1);
     }
 
     public static void stringConv() {
@@ -331,13 +326,13 @@ public class BigIntegerTest {
         report("String Conversion", failCount);
     }
 
-    public static void byteArrayConv() {
+    public static void byteArrayConv(int order) {
         int failCount = 0;
 
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             while (x.equals(BigInteger.ZERO))
-                x = fetchNumber(order1);
+                x = fetchNumber(order);
             BigInteger y = new BigInteger(x.toByteArray());
             if (!x.equals(y)) {
                 failCount++;
@@ -348,16 +343,16 @@ public class BigIntegerTest {
         report("Array Conversion", failCount);
     }
 
-    public static void modInv() {
+    public static void modInv(int order) {
         int failCount = 0, successCount = 0, nonInvCount = 0;
 
         for (int i=0; i<size; i++) {
-            BigInteger x = fetchNumber(order1);
+            BigInteger x = fetchNumber(order);
             while(x.equals(BigInteger.ZERO))
-                x = fetchNumber(order1);
-            BigInteger m = fetchNumber(order1).abs();
+                x = fetchNumber(order);
+            BigInteger m = fetchNumber(order).abs();
             while(m.compareTo(BigInteger.ONE) != 1)
-                m = fetchNumber(order1).abs();
+                m = fetchNumber(order).abs();
 
             try {
                 BigInteger inv = x.modInverse(m);
@@ -374,10 +369,10 @@ public class BigIntegerTest {
                 nonInvCount++;
             }
         }
-        report("Modular Inverse", failCount);
+        report("Modular Inverse for " + order + " bits", failCount);
     }
 
-    public static void modExp() {
+    public static void modExp(int order1, int order2) {
         int failCount = 0;
 
         for (int i=0; i<size/10; i++) {
@@ -404,7 +399,7 @@ public class BigIntegerTest {
     // This test is based on Fermat's theorem
     // which is not ideal because base must not be multiple of modulus
     // and modulus must be a prime or pseudoprime (Carmichael number)
-    public static void modExp2() {
+    public static void modExp2(int order) {
         int failCount = 0;
 
         for (int i=0; i<10; i++) {
@@ -412,11 +407,11 @@ public class BigIntegerTest {
             while(m.compareTo(BigInteger.ONE) != 1)
                 m = new BigInteger(100, 5, rnd);
             BigInteger exp = m.subtract(BigInteger.ONE);
-            BigInteger base = fetchNumber(order1).abs();
+            BigInteger base = fetchNumber(order).abs();
             while(base.compareTo(m) != -1)
-                base = fetchNumber(order1).abs();
+                base = fetchNumber(order).abs();
             while(base.equals(BigInteger.ZERO))
-                base = fetchNumber(order1).abs();
+                base = fetchNumber(order).abs();
 
             BigInteger one = base.modPow(exp, m);
             if (!one.equals(BigInteger.ONE)) {
@@ -704,32 +699,49 @@ public class BigIntegerTest {
      */
     public static void main(String[] args) throws Exception {
 
+        // Some variables for sizing test numbers in bits
+        int order1 = 100;
+        int order2 = 60;
+        int order3 = 1800;   // #bits for testing Karatsuba and Burnikel-Ziegler
+        int order4 = 3000;   // #bits for testing Toom-Cook
+
         if (args.length >0)
             order1 = (int)((Integer.parseInt(args[0]))* 3.333);
         if (args.length >1)
             order2 = (int)((Integer.parseInt(args[1]))* 3.333);
         if (args.length >2)
             order3 = (int)((Integer.parseInt(args[2]))* 3.333);
+        if (args.length >3)
+            order4 = (int)((Integer.parseInt(args[3]))* 3.333);
 
         prime();
         nextProbablePrime();
 
-        arithmetic();
-        divideAndRemainder();
-        pow();
+        arithmetic(order1);   // small numbers
+        arithmetic(order3);   // Karatsuba / Burnikel-Ziegler range
+        arithmetic(order4);   // Toom-Cook range
+
+        divideAndRemainder(order1);   // small numbers
+        divideAndRemainder(order3);   // Karatsuba / Burnikel-Ziegler range
+        divideAndRemainder(order4);   // Toom-Cook range
+
+        pow(order1);
 
         bitCount();
         bitLength();
-        bitOps();
-        bitwise();
+        bitOps(order1);
+        bitwise(order1);
 
-        shift();
+        shift(order1);
 
-        byteArrayConv();
+        byteArrayConv(order1);
 
-        modInv();
-        modExp();
-        modExp2();
+        modInv(order1);   // small numbers
+        modInv(order3);   // Karatsuba / Burnikel-Ziegler range
+        modInv(order4);   // Toom-Cook range
+
+        modExp(order1, order2);
+        modExp2(order1);
 
         stringConv();
         serialize();
@@ -747,7 +759,7 @@ public class BigIntegerTest {
      */
     private static BigInteger fetchNumber(int order) {
         boolean negative = rnd.nextBoolean();
-        int numType = rnd.nextInt(6);
+        int numType = rnd.nextInt(7);
         BigInteger result = null;
         if (order < 2) order = 2;
 
@@ -781,6 +793,19 @@ public class BigIntegerTest {
                     BigInteger temp = BigInteger.ONE.shiftLeft(
                                                 rnd.nextInt(order));
                     result = result.or(temp);
+                }
+                break;
+            case 5: // Runs of consecutive ones and zeros
+                result = ZERO;
+                int remaining = order;
+                int bit = rnd.nextInt(2);
+                while (remaining > 0) {
+                    int runLength = Math.min(remaining, rnd.nextInt(order));
+                    result = result.shiftLeft(runLength);
+                    if (bit > 0)
+                        result = result.add(ONE.shiftLeft(runLength).subtract(ONE));
+                    remaining -= runLength;
+                    bit = 1 - bit;
                 }
                 break;
 
