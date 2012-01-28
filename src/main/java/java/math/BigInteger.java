@@ -2892,9 +2892,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
             int m = 1 << (32-Integer.numberOfLeadingZeros(s/BURNIKEL_ZIEGLER_THRESHOLD));
 
-            int j = (s+m-1) / m;   // j = ceil(s/m)
-            int n = j * m;   // block length in 32-bit units
-            int n32 = 32 * n;   // block length in bits
+            int j = (s+m-1) / m;      // j = ceil(s/m)
+            int n = j * m;            // block length in 32-bit units
+            int n32 = 32 * n;         // block length in bits
             int sigma = Math.max(0, n32 - b.bitLength());
             b = b.shiftLeft(sigma);   // shift b so its length is a multiple of n
             a = a.shiftLeft(sigma);   // shift a by the same amount
@@ -2952,7 +2952,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
+     * This method implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
+     * It divides a 2n-digit number by a n-digit number.<br/>
      * The parameter β is 2^32 so all shifts are multiples of 32 bits.
      * @param a a nonnegative number such that <code>a.bitLength() <= 2*b.bitLength()</code>
      * @param b a positive number such that <code>b.bitLength()</code> is even
@@ -2975,7 +2976,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
+     * This method implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
+     * It divides a 3n-digit number by a 2n-digit number.<br/>
      * The parameter β is 2^32 so all shifts are multiples of 32 bits.<br/>
      * @param a a nonnegative number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
      * @param b a positive number such that <code>b.bitLength()</code> is even
