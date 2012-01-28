@@ -2883,8 +2883,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return an array containing the quotient and remainder
      */
     private BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
-        int r = (a.bitLength()+31) / 32;
-        int s = (b.bitLength()+31) / 32;
+        int r = a.mag.length;
+        int s = b.mag.length;
 
         if (r < s)
             return new BigInteger[] {ZERO, a};
@@ -2959,7 +2959,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>a/b</code> and <code>a%b</code>
      */
     private BigInteger[] burnikel21(BigInteger a, BigInteger b) {
-        int n = (b.bitLength()+31) / 32;
+        int n = b.mag.length;
         if (n%2!=0 || n<BURNIKEL_ZIEGLER_THRESHOLD)
             return a.divideAndRemainderLong(b);
 
@@ -2982,7 +2982,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>a/b</code> and <code>a%b</code>
      */
     private BigInteger[] burnikel32(BigInteger a, BigInteger b) {
-        int n = (b.bitLength()+63) / 64;   // half the length of b in ints
+        int n = b.mag.length / 2;   // half the length of b in ints
 
         // split a in 3 parts of length n or less
         BigInteger a1 = a.shiftRightInts(2*n);
