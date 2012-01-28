@@ -1027,15 +1027,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Returns an <code>n</code>-bit number all of whose bits are ones
-     * @param n a non-negative number
-     * @return <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
+     * Returns an <code>n</code>-int number all of whose bits are ones
+     * @param n number of ints in the <code>mag</code> array
+     * @return a number equal to <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
      */
     private static BigInteger ones(int n) {
-        int[] mag = new int[(n+31)/32];
+        int[] mag = new int[n];
         Arrays.fill(mag, -1);
-        if (n%32 != 0)
-            mag[0] >>>= 32 - (n%32);
         return new BigInteger(mag, 1);
     }
 
@@ -3005,7 +3003,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         else {
             // q=β^n-1, r=a12-b1*2^n+b1
-            q = ones(32*n);
+            q = ones(n);
             r1 = a12.subtract(b1.shiftLeftInts(n)).add(b1);
         }
 
