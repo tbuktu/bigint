@@ -2911,13 +2911,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             BigInteger quotient = ZERO;
             BigInteger[] c;
             for (int i=t-2; i>0; i--) {
-                c = burnikel21(z, b);
+                c = divide2n1n(z, b);
                 z = a.getBlock(i-1, t, n);
                 z = z.add(c[1].shiftLeftInts(n));
                 quotient = quotient.add(c[0]).shiftLeftInts(n);
             }
             // do the loop one more time for i=0 but leave z unchanged
-            c = burnikel21(z, b);
+            c = divide2n1n(z, b);
             quotient = quotient.add(c[0]);
 
             BigInteger remainder = c[1].shiftRight(sigma);   // a and b were shifted, so shift back
@@ -2958,17 +2958,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
-    private BigInteger[] burnikel21(BigInteger a, BigInteger b) {
+    private BigInteger[] divide2n1n(BigInteger a, BigInteger b) {
         int n = b.mag.length;
         if (n%2!=0 || n<BURNIKEL_ZIEGLER_THRESHOLD)
             return a.divideAndRemainderLong(b);
 
         // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
-        BigInteger[] c1 = burnikel32(a.shiftRightInts(n/2), b);
+        BigInteger[] c1 = divide3n2n(a.shiftRightInts(n/2), b);
 
         // divide the concatenation of c1[1] and a4 by b
         BigInteger a4 = a.getLower(n/2);
-        BigInteger[] c2 = burnikel32(c1[1].shiftLeftInts(n/2).add(a4), b);
+        BigInteger[] c2 = divide3n2n(c1[1].shiftLeftInts(n/2).add(a4), b);
 
         // quotient = the concatentation of the two above quotients
         return new BigInteger[] {c1[0].shiftLeftInts(n/2).add(c2[0]), c2[1]};
@@ -2981,7 +2981,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
-    private BigInteger[] burnikel32(BigInteger a, BigInteger b) {
+    private BigInteger[] divide3n2n(BigInteger a, BigInteger b) {
         int n = b.mag.length / 2;   // half the length of b in ints
 
         // split a in 3 parts of length n or less
@@ -2997,7 +2997,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         BigInteger a12 = a1.shiftLeftInts(n).add(a2);   // concatenation of a1 and a2
         if (a1.compareTo(b1) < 0) {
             // q=a12/b1, r=a12%b1
-            BigInteger[] c = burnikel21(a12, b1);
+            BigInteger[] c = divide2n1n(a12, b1);
             q = c[0];
             r1 = c[1];
         }
