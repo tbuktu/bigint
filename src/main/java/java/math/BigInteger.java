@@ -1775,7 +1775,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Squares this number using the
      * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     * Schönhage-Strassen algorithm</a> algorithm.
+     * Schönhage-Strassen algorithm</a>.
      * @return a <code>BigInteger</code> equal to <code>this.multiply(this)</code>
      */
     private BigInteger squareSchönhageStrassen() {
@@ -1931,7 +1931,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         int n = m/2 + 1;
 
-        // split a and b into pieces 1<<(n-1) bits long; assume n>=6 so pieces start and end at int boundaries
+        // split a into pieces 1<<(n-1) bits long; assume n>=6 so pieces start and end at int boundaries
         boolean even = m%2 == 0;
         int numPieces = even ? 1<<n : 1<<(n+1);
         int pieceSize = 1 << (n-1-5);   // in ints
@@ -2185,8 +2185,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2^2^n+1.
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
+     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2^2^n+1,
+     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
@@ -2217,8 +2217,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2^2^n+1.
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
+     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2^2^n+1,
+     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
@@ -2232,8 +2232,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo Fn
      * where Fn=2^2^n+1, and returns the result in a new array.<br/>
-     * <code>a</code> and <code>b</code> are assumed to be reduced mod Fn, i.e. 0<=a<Fn and 0<=b<Fn.
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
+     * <code>a</code> and <code>b</code> are assumed to be reduced mod Fn, i.e. 0<=a<Fn and 0<=b<Fn,
+     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * @param a a number in base 2^32 starting with the lowest digit; the length must be a power of 2
@@ -2256,8 +2256,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Squares a <b>positive</b> number modulo Fn where Fn=2^2^n+1, and returns the result in a
      * new array.<br/>
-     * <code>a</code> is assumed to be reduced mod Fn, i.e. 0<=a<Fn.
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
+     * <code>a</code> is assumed to be reduced mod Fn, i.e. 0<=a<Fn,
+     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * The input value are given as an <code>int</code> array.
      * @param a a number in base 2^32 starting with the lowest digit; the length must be a power of 2
