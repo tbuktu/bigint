@@ -1376,10 +1376,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
                return multiplyKaratsuba(this, val);
            else
-               if (!shouldMultiplySchönhageStrassen(xlen*32) || !shouldMultiplySchönhageStrassen(ylen*32))
+               if (!shouldMultiplySchoenhageStrassen(xlen*32) || !shouldMultiplySchoenhageStrassen(ylen*32))
                    return multiplyToomCook3(this, val);
                else
-                   return multiplySchönhageStrassen(this, val);
+                   return multiplySchoenhageStrassen(this, val);
     }
 
     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
@@ -1741,17 +1741,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(trustedStripLeadingZeroInts(upperInts), 1);
     }
 
-    // Schönhage-Strassen
+    // Schoenhage-Strassen
 
     /**
      * Multiplies two {@link BigInteger}s using the
      * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     * Schönhage-Strassen algorithm</a> algorithm.
+     * Schoenhage-Strassen algorithm</a> algorithm.
      * @param a
      * @param b
      * @return a <code>BigInteger</code> equal to <code>a.multiply(b)</code>
      */
-    public BigInteger multiplySchönhageStrassen(BigInteger a, BigInteger b) {
+    public BigInteger multiplySchoenhageStrassen(BigInteger a, BigInteger b) {
         // remove any minus signs, multiply, then fix sign
         int signum = a.signum() * b.signum();
         if (a.signum() < 0)
@@ -1763,7 +1763,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int[] aIntArr = reverse(a.mag);
         int[] bIntArr = reverse(b.mag);
 
-        int[] cIntArr = multiplySchönhageStrassen(aIntArr, a.bitLength(), bIntArr, b.bitLength());
+        int[] cIntArr = multiplySchoenhageStrassen(aIntArr, a.bitLength(), bIntArr, b.bitLength());
 
         BigInteger c = new BigInteger(1, reverse(cIntArr));
         if (signum < 0)
@@ -1775,10 +1775,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Squares this number using the
      * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     * Schönhage-Strassen algorithm</a>.
+     * Schoenhage-Strassen algorithm</a>.
      * @return a <code>BigInteger</code> equal to <code>this.multiply(this)</code>
      */
-    private BigInteger squareSchönhageStrassen() {
+    private BigInteger squareSchoenhageStrassen() {
         int[] aIntArr;
 
         // remove any minus sign and make a reverse-order copy of a.mag
@@ -1787,26 +1787,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         else
             aIntArr = reverse(negate().mag);
 
-        int[] cIntArr = squareSchönhageStrassen(aIntArr, bitLength());
+        int[] cIntArr = squareSchoenhageStrassen(aIntArr, bitLength());
         BigInteger c = new BigInteger(1, reverse(cIntArr));
 
         return c;
     }
 
     /**
-     * This is the core Schönhage-Strassen method. It multiplies two <b>positive</b> numbers of length
+     * This is the core Schoenhage-Strassen method. It multiplies two <b>positive</b> numbers of length
      * <code>aBitLen</code> and </code>bBitLen</code> that are represented as int arrays, i.e. in base 2^32.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
      * The arrays must be ordered least significant to most significant, so the least significant digit
      * must be at index 0.
      * <p/>
-     * The Schönhage-Strassen algorithm algorithm works as follows:
+     * The Schoenhage-Strassen algorithm algorithm works as follows:
      * <ol>
      *   <li>Given numbers a and b, split both numbers into pieces of length 2^(n-1) bits.</li>
      *   <li>Take the low n+2 bits of each piece of a, zero-pad them to 3n+5 bits,
      *       and concatenate them to a new number u.</li>
      *   <li>Do the same for b to obtain v.</li>
-     *   <li>Calculate all pieces of z' by multiplying u and v (using Schönhage-Strassen or another
+     *   <li>Calculate all pieces of z' by multiplying u and v (using Schoenhage-Strassen or another
      *       algorithm). The product will contain all pieces of a*b mod n+2.</li>
      *   <li>Pad the pieces of a and b from step 1 to 2^(n+1) bits.</li>
      *   <li>Perform a
@@ -1827,10 +1827,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *   <li><a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
      *       Wikipedia articla</a>
      *   <li><a href="http://www.scribd.com/doc/68857222/Schnelle-Multiplikation-gro%C3%9Fer-Zahlen">
-     *       Arnold Schönhage und Volker Strassen: Schnelle Multiplikation großer Zahlen, Computing 7, 1971,
-     *       Springer-Verlag, S. 281–292</a></li>
-     *   <li><a href="http://malte-leip.net/beschreibung_ssa.pdf">Eine verständliche Beschreibung des
-     *       Schönhage-Strassen-Algorithmus</a></li>
+     *       Arnold Schoenhage und Volker Strassen: Schnelle Multiplikation grosser Zahlen, Computing 7, 1971,
+     *       Springer-Verlag, S. 281-292</a></li>
+     *   <li><a href="http://malte-leip.net/beschreibung_ssa.pdf">Eine verstaendliche Beschreibung des
+     *       Schoenhage-Strassen-Algorithmus</a></li>
      * </ol>
      * @param a
      * @param aBitLen
@@ -1838,7 +1838,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param bBitLen
      * @return a*b
      */
-    private int[] multiplySchönhageStrassen(int[] a, int aBitLen, int[] b, int bBitLen) {
+    private int[] multiplySchoenhageStrassen(int[] a, int aBitLen, int[] b, int bBitLen) {
         // set M to the number of binary digits in a or b, whichever is greater
         int M = Math.max(aBitLen, bBitLen);
 
@@ -1920,9 +1920,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param a
      * @param aBitLen
      * @return a<sup>2</sup>
-     * @see #multiplySchönhageStrassen(int[], int, int[], int)
+     * @see #multiplySchoenhageStrassen(int[], int, int[], int)
      */
-    private int[] squareSchönhageStrassen(int[] a, int aBitLen) {
+    private int[] squareSchoenhageStrassen(int[] a, int aBitLen) {
         // set M to the number of binary digits in a
         int M = aBitLen;
 
@@ -2020,7 +2020,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param bitLength the number of bits in each of the two factors
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      */
-    private boolean shouldMultiplySchönhageStrassen(int bitLength) {
+    private boolean shouldMultiplySchoenhageStrassen(int bitLength) {
         // The following values were determined experimentally on a 32-bit JVM.
         // SS is slower than Toom-Cook below ~247,000 bits (~74000 decimal digits)
         // and faster above ~1249000 bits (~376000 decimal digits).
@@ -2047,9 +2047,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * of a given length in bits.
      * @param bitLength the number of bits in the number to be squared
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
-     * @see #shouldMultiplySchönhageStrassen(int)
+     * @see #shouldMultiplySchoenhageStrassen(int)
      */
-    private boolean shouldSquareSchönhageStrassen(int bitLength) {
+    private boolean shouldSquareSchoenhageStrassen(int bitLength) {
         if (bitLength < 128000)
             return false;
         if (bitLength < 131072)   // 2^17
@@ -2205,7 +2205,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
 
         // take a mod Fn by adding any remaining carry bit to the lowest bit;
-        // since Fn ≡ 1 (mod 2^n), it suffices to add 1
+        // since Fn is congruent to 1 (mod 2^n), it suffices to add 1
         int i = 0;
         while (carry) {
             int sum = a[i] + 1;
@@ -2287,7 +2287,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         for (int i=len/2; i<len; i++)
             a[i] = 0;
-        // if result is negative, add Fn; since Fn ≡ 1 (mod 2^n), it suffices to add 1
+        // if result is negative, add Fn; since Fn is congruent to 1 (mod 2^n), it suffices to add 1
         if (carry) {
             int j = 0;
             do {
@@ -2580,10 +2580,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD)
                  return squareKaratsuba();
             else
-                if (!shouldSquareSchönhageStrassen(len*32))
+                if (!shouldSquareSchoenhageStrassen(len*32))
                     return squareToomCook3();
                 else
-                    return squareSchönhageStrassen();
+                    return squareSchoenhageStrassen();
     }
 
     /**
@@ -2875,7 +2875,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Computes <code>a/b</code> and <code>a%b</code> using the
      * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
      * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
-     * The parameter β is 2^32 so all shifts are multiples of 32 bits.<br/>
+     * The parameter beta is 2^32 so all shifts are multiples of 32 bits.<br/>
      * <code>a</code> and <code>b</code> must be nonnegative.
      * @param a the dividend
      * @param b the divisor
@@ -2953,7 +2953,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * This method implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
      * It divides a 2n-digit number by a n-digit number.<br/>
-     * The parameter β is 2^32 so all shifts are multiples of 32 bits.
+     * The parameter beta is 2^32 so all shifts are multiples of 32 bits.
      * @param a a nonnegative number such that <code>a.bitLength() <= 2*b.bitLength()</code>
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
@@ -2977,7 +2977,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * This method implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
      * It divides a 3n-digit number by a 2n-digit number.<br/>
-     * The parameter β is 2^32 so all shifts are multiples of 32 bits.<br/>
+     * The parameter beta is 2^32 so all shifts are multiples of 32 bits.<br/>
      * @param a a nonnegative number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
@@ -3003,13 +3003,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             r1 = c[1];
         }
         else {
-            // q=β^n-1, r=a12-b1*2^n+b1
+            // q=beta^n-1, r=a12-b1*2^n+b1
             q = ones(n);
             r1 = a12.subtract(b1.shiftLeftInts(n)).add(b1);
         }
 
         BigInteger d = q.multiply(b2);
-        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);   // r = r1*β^n + a3 - d (paper says a4)
+        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);   // r = r1*beta^n + a3 - d (paper says a4)
 
         // add b until r>=0
         while (r.signum() < 0) {
@@ -3179,7 +3179,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Same as {@link BigInteger#shiftRight(int)} but rounds to the
      * nearest integer.
      * @param n shift distance, in bits.
-     * @return ⌊this*2<sup>-n</sup>⌉
+     * @return round(this*2<sup>-n</sup>)
      */
     private BigInteger shiftRightRounded(int n) {
         BigInteger b = shiftRight(n);
