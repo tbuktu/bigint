@@ -2737,20 +2737,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     public BigInteger divide(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-            return divideLong(val);
+            return divideKnuth(val);
         else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
             return divideBurnikelZiegler(val);
         else
             return divideBarrett(val);
     }
 
-    /** Long division */
-    private BigInteger divideLong(BigInteger val) {
+    /**
+     * Returns a BigInteger whose value is {@code (this / val)} using an O(n^2) algorithm from Knuth.
+     *
+     * @param  val value by which this BigInteger is to be divided.
+     * @return {@code this / val}
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see MutableBigInteger#divideKnuth(MutableBigInteger, MutableBigInteger, boolean)
+     */
+    private BigInteger divideKnuth(BigInteger val) {
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
                           b = new MutableBigInteger(val.mag);
 
-        a.divide(b, q, false);
+        a.divideKnuth(b, q, false);
         return q.toBigInteger(this.signum * val.signum);
     }
 
@@ -3144,7 +3151,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private BigInteger inverse(int n) {
         int m = bitLength();
         if (n <= NEWTON_THRESHOLD)
-            return ONE.shiftLeft(n*2).divideLong(shiftRightRounded(m-n));
+            return ONE.shiftLeft(n*2).divideKnuth(shiftRightRounded(m-n));
 
         // let numSteps = ceil(log2(n/NEWTON_THRESHOLD)) and initialize k
         int numSteps = bitLengthForInt((n+NEWTON_THRESHOLD-1)/NEWTON_THRESHOLD);
@@ -3156,7 +3163,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
 
         // calculate 1/this truncated to k0 fraction digits
-        BigInteger z = ONE.shiftLeft(k[0]*2).divideLong(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
+        BigInteger z = ONE.shiftLeft(k[0]*2).divideKnuth(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
 
         for (int i=0; i<numSteps; i++) {
             ki = k[i];
