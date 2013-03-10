@@ -927,6 +927,10 @@ class MutableBigInteger {
         }
     }
 
+    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient) {
+        return divideKnuth(b,quotient,true);
+    }
+
     /**
      * Calculates the quotient of this div b and places the quotient in the
      * provided MutableBigInteger objects and the remainder object is returned.
