@@ -910,6 +910,27 @@ class MutableBigInteger {
      * Calculates the quotient of this div b and places the quotient in the
      * provided MutableBigInteger objects and the remainder object is returned.
      *
+     */
+    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient) {
+        return divide(b,quotient,true);
+    }
+
+    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
+        if (intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD || b.intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
+            return divideKnuth(b, quotient, needReminder);
+        else {
+            // For numbers above the BURNIKEL_ZIEGLER_THRESHOLD, use the algorithms in BigInteger
+            BigInteger[] quotRem = toBigInteger(1).divideAndRemainder(b.toBigInteger(1));
+            MutableBigInteger quotTemp = new MutableBigInteger(quotRem[0]);
+            quotient.setValue(quotTemp.value, quotTemp.intLen);
+            return new MutableBigInteger(quotRem[1]);
+        }
+    }
+
+    /**
+     * Calculates the quotient of this div b and places the quotient in the
+     * provided MutableBigInteger objects and the remainder object is returned.
+     *
      * Uses Algorithm D in Knuth section 4.3.1.
      * Many optimizations to that algorithm have been adapted from the Colin
      * Plumb C library.
@@ -917,11 +938,7 @@ class MutableBigInteger {
      * changed.
      *
      */
-    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient) {
-        return divide(b,quotient,true);
-    }
-
-    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
+    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
         if (b.intLen == 0)
             throw new ArithmeticException("BigInteger divide by zero");
 

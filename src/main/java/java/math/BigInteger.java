@@ -214,7 +214,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Burnikel-Ziegler division will be used.   This value is found
      * experimentally to work well.
      */
-    private static final int BURNIKEL_ZIEGLER_THRESHOLD = 50;
+    static final int BURNIKEL_ZIEGLER_THRESHOLD = 50;
 
     /**
      * The threshold value, in bits, for using Newton iteration when
