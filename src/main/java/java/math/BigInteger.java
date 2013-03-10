@@ -2774,7 +2774,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-            return divideAndRemainderLong(val);
+            return divideAndRemainderKnuth(val);
         else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
             return divideAndRemainderBurnikelZiegler(val);
         else
@@ -2806,7 +2806,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /** Long division */
-    private BigInteger[] divideAndRemainderLong(BigInteger val) {
+    private BigInteger[] divideAndRemainderKnuth(BigInteger val) {
         BigInteger[] result = new BigInteger[2];
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
@@ -2827,7 +2827,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     public BigInteger remainder(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-            return remainderLong(val);
+            return remainderKnuth(val);
         else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
             return remainderBurnikelZiegler(val);
         else
@@ -2835,7 +2835,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /** Long division */
-    private BigInteger remainderLong(BigInteger val) {
+    private BigInteger remainderKnuth(BigInteger val) {
         MutableBigInteger q = new MutableBigInteger(),
                           a = new MutableBigInteger(this.mag),
                           b = new MutableBigInteger(val.mag);
@@ -2968,7 +2968,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private BigInteger[] divide2n1n(BigInteger a, BigInteger b) {
         int n = b.mag.length;
         if (n%2!=0 || n<BURNIKEL_ZIEGLER_THRESHOLD)
-            return a.divideAndRemainderLong(b);
+            return a.divideAndRemainderKnuth(b);
 
         // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
         BigInteger[] c1 = divide3n2n(a.shiftRightInts(n/2), b);
