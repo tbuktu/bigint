@@ -95,7 +95,7 @@ import java.util.Arrays;
  * @author  Josh Bloch
  * @author  Michael McCloskey
  * @author  Alan Eliasen
- * @author  Tim Buktu
+ * @author  Timothy Buktu
  * @since JDK1.1
  */
 
@@ -2728,6 +2728,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return vinf.shiftLeft(ss).add(t2).shiftLeft(ss).add(t1).shiftLeft(ss).add(tm1).shiftLeft(ss).add(v0);
     }
 
+    // Division
+
     /**
      * Returns a BigInteger whose value is {@code (this / val)}.
      *
@@ -4062,7 +4064,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Shifts a number to the left by a multiple of 32.
+     * Shifts a number to the left by a multiple of 32. Used by Burnikel-Ziegler division.
      * @param n a non-negative number
      * @return <code>this.shiftLeft(32*n)</code>
      */
@@ -4072,7 +4074,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Shifts a number to the right by a multiple of 32.
+     * Shifts a number to the right by a multiple of 32. Used by Burnikel-Ziegler division.
      * @param n a non-negative number
      * @return <code>this.shiftRight(32*n)</code>
      */
