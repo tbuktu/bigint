@@ -1759,13 +1759,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (b.signum() < 0)
             b = b.negate();
 
-        // make reverse-order copies of a.mag and b.mag
-        int[] aIntArr = reverse(a.mag);
-        int[] bIntArr = reverse(b.mag);
+        int[] cArr = multiplySchoenhageStrassen(a.mag, a.bitLength(), b.mag, b.bitLength());
 
-        int[] cIntArr = multiplySchoenhageStrassen(aIntArr, a.bitLength(), bIntArr, b.bitLength());
-
-        BigInteger c = new BigInteger(1, reverse(cIntArr));
+        BigInteger c = new BigInteger(1, cArr);
         if (signum < 0)
             c = c.negate();
 
@@ -1779,16 +1775,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return a <code>BigInteger</code> equal to <code>this.multiply(this)</code>
      */
     private BigInteger squareSchoenhageStrassen() {
-        int[] aIntArr;
+        // remove any minus sign
+        int[] aArr = signum()>=0 ? mag : negate().mag;
 
-        // remove any minus sign and make a reverse-order copy of a.mag
-        if (signum() >= 0)
-            aIntArr = reverse(mag);
-        else
-            aIntArr = reverse(negate().mag);
-
-        int[] cIntArr = squareSchoenhageStrassen(aIntArr, bitLength());
-        BigInteger c = new BigInteger(1, reverse(cIntArr));
+        int[] cArr = squareSchoenhageStrassen(aArr, bitLength());
+        BigInteger c = new BigInteger(1, cArr);
 
         return c;
     }
@@ -1868,7 +1859,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             vBitLength += 3*n+5;
         }
 
-        int[] gamma = multReverse(u, v);
+        int[] gamma = new BigInteger(1, u).multiply(new BigInteger(1, v)).mag;   // gamma = u * v
         int[][] gammai = splitBits(gamma, 3*n+5);
         int halfNumPcs = numPieces / 2;
 
@@ -1883,8 +1874,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
-        int[][] bi = splitInts(b, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] ai = splitIntsNew(a, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] bi = splitIntsNew(b, halfNumPcs, pieceSize, 1<<(n+1-5));
         dft(ai, m, n);
         dft(bi, m, n);
         modFn(ai);
@@ -1945,7 +1936,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             uBitLength += 3*n+5;
         }
 
-        int[] gamma = squareReverse(u);
+        int[] gamma = new BigInteger(1, u).square().mag;   // gamma = u * u
+
         int[][] gammai = splitBits(gamma, 3*n+5);
         int halfNumPcs = numPieces / 2;
 
@@ -1960,12 +1952,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] ai = splitIntsNew(a, halfNumPcs, pieceSize, 1<<(n+1-5));
         dft(ai, m, n);
         modFn(ai);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
-            c[i] = squareModFn(ai[i]);
+            c[i] = multModFn(ai[i], ai[i]);
         idft(c, m, n);
         modFn(c);
 
@@ -1986,32 +1978,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         modFn(z);   // assume m>=5
         return z;
-    }
-
-    /**
-     * Multiplies two <b>positive</b> numbers represented as int arrays, i.e. in base <code>2^32</code>.
-     * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
-     * The arrays must be ordered least significant to most significant, so the least significant digit
-     * must be at index 0.
-     * @param a
-     * @param b
-     * @return
-     */
-    private int[] multReverse(int[] a, int[] b) {
-        BigInteger aBigInt = new BigInteger(1, reverse(a));
-        BigInteger bBigInt = new BigInteger(1, reverse(b));
-        return reverse(aBigInt.multiply(bBigInt).mag);
-    }
-
-    /**
-     * Squares a <b>positive</b> number represented as int arrays, i.e. in base <code>2^32</code>.
-     * @param a
-     * @return
-     * @see #multReverse(int[], int[])
-     */
-    private int[] squareReverse(int[] a) {
-        BigInteger aBigInt = new BigInteger(1, reverse(a));
-        return reverse(aBigInt.square().mag);
     }
 
     /**
@@ -2179,7 +2145,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param even
      * @return
      */
-    private static int getIdftExponent(int n, int v, int idx, boolean even) {
+    private int getIdftExponent(int n, int v, int idx, boolean even) {
         int x = Integer.reverse(idx) << (n-v) >>> (32-n);
         x += even ? 1<<(n-v) : 1<<(n-1-v);
         return x + 1;
@@ -2194,9 +2160,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param a a number in base 2^32 starting with the lowest digit; the length must be a power of 2
      * @param b a number in base 2^32 starting with the lowest digit; the length must be a power of 2
      */
-    private static void addModFn(int[] a, int[] b) {
+    private void addModFn(int[] a, int[] b) {
         boolean carry = false;
-        for (int i=0; i<a.length; i++) {
+        for (int i=a.length-1; i>=0; i--) {
             int sum = a[i] + b[i];
             if (carry)
                 sum++;
@@ -2206,14 +2172,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // take a mod Fn by adding any remaining carry bit to the lowest bit;
         // since Fn is congruent to 1 (mod 2^n), it suffices to add 1
-        int i = 0;
+        int i = a.length - 1;
         while (carry) {
             int sum = a[i] + 1;
             a[i] = sum;
             carry = sum == 0;
-            i++;
-            if (i >= a.length)
-                i = 0;
+            i--;
+            if (i < 0)
+                i = a.length;
         }
     }
 
@@ -2241,62 +2207,49 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a number in base 2^32 starting with the lowest digit; the length must be a power of 2
      */
     private int[] multModFn(int[] a, int[] b) {
-        int[] a0 = Arrays.copyOf(a, a.length/2);
-        int[] b0 = Arrays.copyOf(b, b.length/2);
-        int[] c = multReverse(a0, b0);
-        c = Arrays.copyOf(c, a.length);   // make sure c is the same length as a and b so subModFn uses the right n
-        int n = a.length/2;
-        // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
-        if (a[n] == 1)
-            subModFn(c, Arrays.copyOf(b0, c.length), n*32);
-        if (b[n] == 1)
-            subModFn(c, Arrays.copyOf(a0, c.length), n*32);
-        return c;
-    }
+        int[] a0 = Arrays.copyOfRange(a, a.length/2, a.length);
+        int[] b0 = Arrays.copyOfRange(b, b.length/2, b.length);
 
-    /**
-     * Squares a <b>positive</b> number modulo Fn where Fn=2^2^n+1, and returns the result in a
-     * new array.<br/>
-     * <code>a</code> is assumed to be reduced mod Fn, i.e. 0<=a<Fn,
-     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
-     * The input value are given as an <code>int</code> array.
-     * @param a a number in base 2^32 starting with the lowest digit; the length must be a power of 2
-     */
-    private int[] squareModFn(int[] a) {
-        int[] a0 = Arrays.copyOf(a, a.length/2);
-        int[] c = squareReverse(a0);
-        c = Arrays.copyOf(c, a.length);   // make sure c is the same length as a so subModFn uses the right n
-        int n = a.length/2;
-        // special case: if a=Fn-1, c=1
-        if (a[n] == 1)
-            c[0] = 1;
-        return c;
+        BigInteger aBigInt = new BigInteger(1, a0);
+        BigInteger bBigInt = new BigInteger(1, b0);
+        int[] c = aBigInt.multiply(bBigInt).mag;
+
+        // make sure c is the same length as a and b
+        int[] cpad = new int[a.length];
+        System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
+
+        int n = a.length / 2;
+        // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
+        if (a[n-1] == 1)
+            subModFn(cpad, reverse(Arrays.copyOf(b0, cpad.length)), n*32);
+        if (b[n-1] == 1)
+            subModFn(cpad, reverse(Arrays.copyOf(a0, cpad.length)), n*32);
+        return cpad;
     }
 
     private void modFn(int[] a) {
         int len = a.length;
         boolean carry = false;
-        for (int i=0; i<len/2; i++) {
-            int bi = a[len/2+i];
+        for (int i=len-1; i>=len/2; i--) {
+            int bi = a[i-len/2];
             int diff = a[i] - bi;
             if (carry)
                 diff--;
             carry = ((diff>>>31) > (a[i]>>>31)-(bi>>>31));   // carry if signBit(diff) > signBit(a)-signBit(b)
             a[i] = diff;
         }
-        for (int i=len/2; i<len; i++)
+        for (int i=len/2-1; i>=0; i--)
             a[i] = 0;
         // if result is negative, add Fn; since Fn is congruent to 1 (mod 2^n), it suffices to add 1
         if (carry) {
-            int j = 0;
+            int j = len - 1;
             do {
                 int sum = a[j] + 1;
                 a[j] = sum;
                 carry = sum == 0;
-                j++;
-                if (j >= a.length)
-                    j = 0;
+                j--;
+                if (j <= 0)
+                    j = len;
             } while (carry);
         }
     }
@@ -2326,18 +2279,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private int[] cyclicShiftRight(int[] a, int numBits) {
         int[] b = new int[a.length];
         int numElements = numBits / 32;
-        System.arraycopy(a, numElements, b, 0, a.length-numElements);
-        System.arraycopy(a, 0, b, a.length-numElements, numElements);
+        System.arraycopy(a, 0, b, numElements, a.length-numElements);
+        System.arraycopy(a, a.length-numElements, b, 0, numElements);
 
         numBits = numBits % 32;
         if (numBits != 0) {
-            int b0 = b[0];
-            b[0] = b[0] >>> numBits;
-            for (int i=1; i<b.length; i++) {
-                b[i-1] |= b[i] << (32-numBits);
-                b[i] = b[i] >>> numBits;
+            int bhi = b[b.length-1];
+            b[b.length-1] = b[b.length-1] >>> numBits;
+            for (int i=b.length-1; i>0; i--) {
+                b[i] |= b[i-1] << (32-numBits);
+                b[i-1] = b[i-1] >>> numBits;
             }
-            b[b.length-1] |= b0 << (32-numBits);
+            b[0] |= bhi << (32-numBits);
         }
         return b;
     }
@@ -2355,17 +2308,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return the shifted number
      */
     private int[] cyclicShiftLeftBits(int[] a, int numBits) {
-        int[] b = cyclicShiftLeftElements(a, numBits/32);
+        int[] b = new int[a.length];
+        int numElements = numBits / 32;
+        System.arraycopy(a, numElements, b, 0, a.length-numElements);
+        System.arraycopy(a, 0, b, a.length-numElements, numElements);
 
         numBits = numBits % 32;
         if (numBits != 0) {
-            int bhi = b[b.length-1];
-            b[b.length-1] <<= numBits;
-            for (int i=b.length-1; i>0; i--) {
-                b[i] |= b[i-1] >>> (32-numBits);
-                b[i-1] <<= numBits;
+            int b0 = b[0];
+            b[0] = b[0] <<= numBits;
+            for (int i=1; i<b.length; i++) {
+                b[i-1] |= b[i] >>> (32-numBits);
+                b[i] <<= numBits;
             }
-            b[0] |= bhi >>> (32-numBits);
+            b[b.length-1] |= b0 >>> (32-numBits);
         }
         return b;
     }
@@ -2397,20 +2353,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private void addShifted(int[] a, int[] b, int numElements) {
         boolean carry = false;
-        int i = 0;
-        while (i < Math.min(b.length, a.length-numElements)) {
-            int ai = a[i+numElements];
-            int sum = ai + b[i];
+        int aIdx = a.length - 1 - numElements;
+        int bIdx = b.length - 1;
+        int i = Math.min(aIdx, bIdx);
+        while (i >= 0) {
+            int ai = a[aIdx];
+            int sum = ai + b[bIdx];
             if (carry)
                 sum++;
-            carry = ((sum>>>31) < (ai>>>31)+(b[i]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
-            a[i+numElements] = sum;
-            i++;
+            carry = ((sum>>>31) < (ai>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
+            a[aIdx] = sum;
+            i--;
+            aIdx--;
+            bIdx--;
         }
+        aIdx--;
         while (carry) {
-            a[i+numElements]++;
-            carry = a[i+numElements] == 0;
-            i++;
+            a[aIdx]++;
+            carry = a[aIdx] == 0;
+            aIdx--;
         }
     }
 
@@ -2425,15 +2386,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int numElements = (numBits+31) / 32;
         boolean carry = false;
         int i;
-        for (i=0; i<numElements; i++) {
-            int sum = a[i] + b[i];
+        int aIdx = a.length - 1;
+        int bIdx = b.length - 1;
+        for (i=numElements-1; i>=0; i--) {
+            int sum = a[aIdx] + b[bIdx];
             if (carry)
                 sum++;
-            carry = ((sum>>>31) < (a[i]>>>31)+(b[i]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
-            a[i] = sum;
+            carry = ((sum>>>31) < (a[aIdx]>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
+            a[aIdx] = sum;
+            aIdx--;
+            bIdx--;
         }
-        a[i-1] &= -1 >>> (32-(numBits%32));
-        for (; i<a.length; i++)
+        a[0] &= -1 >>> (32-(numBits%32));
+        for (i=a.length-1-numElements; i>=0; i--)
             a[i] = 0;
     }
 
@@ -2448,16 +2413,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int numElements = (numBits+31) / 32;
         boolean carry = false;
         int i;
-        for (i=0; i<numElements; i++) {
-            int diff = a[i] - b[i];
+        int aIdx = a.length - 1;
+        int bIdx = b.length - 1;
+        for (i=numElements-1; i>=0; i--) {
+            int diff = a[aIdx] - b[bIdx];
             if (carry)
                 diff--;
-            carry = ((diff>>>31) > (a[i]>>>31)-(b[i]>>>31));   // carry if signBit(diff) > signBit(a)-signBit(b)
-            a[i] = diff;
+            carry = ((diff>>>31) > (a[aIdx]>>>31)-(b[bIdx]>>>31));   // carry if signBit(diff) > signBit(a)-signBit(b)
+            a[aIdx] = diff;
+            aIdx--;
+            bIdx--;
         }
-        a[i-1] &= -1 >>> (32-(numBits%32));
-        for (; i<a.length; i++)
-            a[i] = 0;
+        a[aIdx+1] &= -1 >>> (32-(numBits%32));
+        for (; aIdx>=0; aIdx--)
+            a[aIdx] = 0;
     }
 
     /**
@@ -2471,28 +2440,28 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param bBitLength
      */
     private void appendBits(int[] a, int aBitLength, int[] b, int bStart, int bBitLength) {
-        int aIdx = aBitLength / 32;
+        int aIdx = a.length - 1 - aBitLength/32;
         int bit32 = aBitLength % 32;
 
-        for (int i=bStart; i<bStart+bBitLength/32; i++) {
+        for (int i=bStart+bBitLength/32-1; i>=bStart; i--)
             if (bit32 > 0) {
                 a[aIdx] |= b[i] << bit32;
-                aIdx++;
+                aIdx--;
                 a[aIdx] = b[i] >>> (32-bit32);
             }
             else {
                 a[aIdx] = b[i];
-                aIdx++;
+                aIdx--;
             }
-        }
 
         if (bBitLength%32 > 0) {
+            aIdx = a.length - 1 - (aBitLength/32 + bBitLength/32);
             int bIdx = bBitLength / 32;
-            int bi = b[bStart+bIdx];
+            int bi = b[b.length-1-bStart+bIdx];
             bi &= -1 >>> (32-bBitLength);
             a[aIdx] |= bi << bit32;
             if (bit32+(bBitLength%32) > 32)
-                a[aIdx+1] = bi >>> (32-bit32);
+                a[aIdx-1] = bi >>> (32-bit32);
         }
     }
 
@@ -2503,14 +2472,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return a new array containing <code>bitLength</code> bits from <code>a</code> in each subarray
      */
     private int[][] splitBits(int[] a, int bitLength) {
-        int aIntIdx = 0;
+        int aIntIdx = a.length - 1;
         int aBitIdx = 0;
         int numPieces = (a.length*32+bitLength-1) / bitLength;
         int pieceLength = (bitLength+31) / 32;   // in ints
         int[][] b = new int[numPieces][pieceLength];
         for (int i=0; i<b.length; i++) {
             int bitsRemaining = Math.min(bitLength, a.length*32-i*bitLength);
-            int bIntIdx = 0;
+            int bIntIdx = bitLength / 32;
             int bBitIdx = 0;
             while (bitsRemaining > 0) {
                 int bitsToCopy = Math.min(32-aBitIdx, 32-bBitIdx);
@@ -2523,12 +2492,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 aBitIdx += bitsToCopy;
                 if (aBitIdx >= 32) {
                     aBitIdx -= 32;
-                    aIntIdx++;
+                    aIntIdx--;
                 }
                 bBitIdx += bitsToCopy;
                 if (bBitIdx >= 32) {
                     bBitIdx -= 32;
-                    bIntIdx++;
+                    bIntIdx--;
                 }
             }
         }
@@ -2544,11 +2513,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param targetPieceSize the size of each piece in the output array in <code>ints</code>
      * @return an array of length <code>numPieces</code> containing subarrays of length <code>targetPieceSize</code>
      */
-    private int[][] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
+    private int[][] splitIntsNew(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
         int[][] ai = new int[numPieces][targetPieceSize];
         for (int i=0; i<a.length/pieceSize; i++)
-            System.arraycopy(a, i*pieceSize, ai[i], 0, pieceSize);
-        System.arraycopy(a, a.length/pieceSize*pieceSize, ai[a.length/pieceSize], 0, a.length%pieceSize);
+            System.arraycopy(a, a.length-i*pieceSize-pieceSize, ai[i], targetPieceSize-pieceSize, pieceSize);
+        System.arraycopy(a, a.length-a.length/pieceSize*pieceSize-(a.length%pieceSize), ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
         return ai;
     }
 
