@@ -15,7 +15,7 @@ public class BigIntegerTestOld {
     private static BigInteger THREE = BigInteger.valueOf(3);
 
     @Test
-    public void testMultiply() {
+    public void testMultiply() throws NoSuchMethodException, SecurityException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         // test different size numbers to cover all algorithms used by BigInteger
         for (int i=2; i<1000000; i=i*3/2) {
             BigInteger a = THREE.pow(i);
@@ -24,6 +24,12 @@ public class BigIntegerTestOld {
             BigInteger c2 = THREE.pow(2*i).add(a);
             assertEquals(c2, c1);
         }
+
+        // test the if... path in multModFn()
+        BigInteger pow19_1 = BigInteger.valueOf(1).shiftLeft((1<<19)-1);   // 2^(2^19-1)
+        BigInteger pow20_2 = BigInteger.valueOf(1).shiftLeft((1<<20)-2);   // 2^(2^20-2)
+        Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class);
+        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(pow19_1, pow19_1, pow19_1.add(BigInteger.ONE)));
     }
 
     @Test
