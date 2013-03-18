@@ -2055,6 +2055,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         boolean even = m%2 == 0;
         int len = A.length;
         int v = 1;
+        int[] d = new int[A[0].length];
 
         for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
             for (int j=0; j<len; j+=2*slen) {
@@ -2062,7 +2063,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 int x = getDftExponent(n, v, idx+len, even);
 
                 for (int k=slen-1; k>=0; k--) {
-                    int[] d = cyclicShiftLeftBits(A[idx+slen], x);
+                    cyclicShiftLeftBits(A[idx+slen], x, d);
                     System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);   // copy A[idx] into A[idx+slen]
                     addModFn(A[idx], d);
                     subModFn(A[idx+slen], d, 1<<n);
@@ -2124,10 +2125,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 for (int k=slen-1; k>=0; k--) {
                     System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
                     addModFn(A[idx], A[idx2]);
-                    A[idx] = cyclicShiftRight(A[idx], 1);
+                    cyclicShiftRight(A[idx], 1, A[idx]);
 
                     subModFn(c, A[idx2], 1<<n);
-                    A[idx2] = cyclicShiftRight(c, x);
+                    cyclicShiftRight(c, x, A[idx2]);
                     idx++;
                     idx2++;
                 }
@@ -2267,19 +2268,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n+1</sup></sup> and returns the result in a new array.
+     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n+1</sup></sup>, where n is
+     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
      * "Right" means towards the lower array indices and the lower bits; this is equivalent to
      * a multiplication by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
-     * Both input values are given as <code>int</code> arrays; they must be the same length.
-     * The result is returned in the first argument.
+     * The result is returned in the third argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      * @param numBits the shift amount in bits
-     * @return the shifted number
+     * @param b the return value; must be at least as long as <code>a</code>
      */
-    private static int[] cyclicShiftRight(int[] a, int numBits) {
-        int[] b = new int[a.length];
+    private static void cyclicShiftRight(int[] a, int numBits, int[] b) {
         int numElements = numBits / 32;
         System.arraycopy(a, 0, b, numElements, a.length-numElements);
         System.arraycopy(a, a.length-numElements, b, 0, numElements);
@@ -2294,23 +2292,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
             b[0] |= bhi << (32-numBits);
         }
-        return b;
     }
 
     /**
-     * Shifts a number to the left modulo 2<sup>2<sup>n+1</sup></sup> and returns the result in a new array.
+     * Cyclicly shifts a number to the left modulo 2<sup>2<sup>n+1</sup></sup>, where n is
+     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
      * "Left" means towards the lower array indices and the lower bits; this is equivalent to
      * a multiplication by 2<sup>numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
-     * The number n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
-     * Both input values are given as <code>int</code> arrays; they must be the same length.
-     * The result is returned in the first argument.
+     * The result is returned in the third argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      * @param numBits the shift amount in bits
-     * @return the shifted number
+     * @param b the return value; must be at least as long as <code>a</code>
      */
-    private static int[] cyclicShiftLeftBits(int[] a, int numBits) {
-        int[] b = new int[a.length];
+    private static void cyclicShiftLeftBits(int[] a, int numBits, int[] b) {
         int numElements = numBits / 32;
         System.arraycopy(a, numElements, b, 0, a.length-numElements);
         System.arraycopy(a, 0, b, a.length-numElements, numElements);
@@ -2325,7 +2319,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
             b[b.length-1] |= b0 >>> (32-numBits);
         }
-        return b;
     }
 
     /**
