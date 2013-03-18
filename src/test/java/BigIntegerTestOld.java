@@ -29,7 +29,8 @@ public class BigIntegerTestOld {
         BigInteger pow19_1 = BigInteger.valueOf(1).shiftLeft((1<<19)-1);   // 2^(2^19-1)
         BigInteger pow20_2 = BigInteger.valueOf(1).shiftLeft((1<<20)-2);   // 2^(2^20-2)
         Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class);
-        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(pow19_1, pow19_1, pow19_1.add(BigInteger.ONE)));
+        ssMult.setAccessible(true);
+        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE)));
     }
 
     @Test
