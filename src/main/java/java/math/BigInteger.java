@@ -2066,7 +2066,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     cyclicShiftLeftBits(A[idx+slen], x, d);
                     System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);   // copy A[idx] into A[idx+slen]
                     addModFn(A[idx], d);
-                    subModFn(A[idx+slen], d, 1<<n);
+                    subModFn(A[idx+slen], d);
                     idx++;
                 }
             }
@@ -2127,7 +2127,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     addModFn(A[idx], A[idx2]);
                     cyclicShiftRight(A[idx], 1, A[idx]);
 
-                    subModFn(c, A[idx2], 1<<n);
+                    subModFn(c, A[idx2]);
                     cyclicShiftRight(c, x, A[idx2]);
                     idx++;
                     idx2++;
@@ -2195,8 +2195,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      */
-    private static void subModFn(int[] a, int[] b, int pow2n) {
-        addModFn(a, cyclicShiftLeftElements(b, pow2n/32));
+    private static void subModFn(int[] a, int[] b) {
+        addModFn(a, cyclicShiftLeftElements(b, b.length/2));
     }
 
     /**
@@ -2224,9 +2224,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int n = a.length / 2;
         // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
         if (a[n-1] == 1)
-            subModFn(cpad, reverse(Arrays.copyOf(b0, cpad.length)), n*32);
+            subModFn(cpad, reverse(Arrays.copyOf(b0, cpad.length)));
         if (b[n-1] == 1)
-            subModFn(cpad, reverse(Arrays.copyOf(a0, cpad.length)), n*32);
+            subModFn(cpad, reverse(Arrays.copyOf(a0, cpad.length)));
         return cpad;
     }
 
