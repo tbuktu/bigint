@@ -2196,7 +2196,38 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      */
     private static void subModFn(int[] a, int[] b) {
-        addModFn(a, cyclicShiftLeftElements(b, b.length/2));
+        // subtraction works by shifting b by b.length/2, then adding a and b
+        boolean carry = false;
+        int bIdx = b.length/2 - 1;
+        for (int i=a.length-1; i>=a.length/2; i--) {
+            int sum = a[i] + b[bIdx];
+            if (carry)
+                sum++;
+            carry = ((sum>>>31) < (a[i]>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
+            a[i] = sum;
+            bIdx--;
+        }
+        bIdx = b.length - 1;
+        for (int i=a.length/2-1; i>=0; i--) {
+            int sum = a[i] + b[bIdx];
+            if (carry)
+                sum++;
+            carry = ((sum>>>31) < (a[i]>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
+            a[i] = sum;
+            bIdx--;
+        }
+
+        // take a mod Fn by adding any remaining carry bit to the lowest bit;
+        // since Fn is congruent to 1 (mod 2^n), it suffices to add 1
+        int i = a.length - 1;
+        while (carry) {
+            int sum = a[i] + 1;
+            a[i] = sum;
+            carry = sum == 0;
+            i--;
+            if (i < 0)
+                i = a.length;
+        }
     }
 
     /**
@@ -2319,20 +2350,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
             b[b.length-1] |= b0 >>> (32-numBits);
         }
-    }
-
-    /**
-     * Cyclicly shifts an array towards the higher indices by <code>numElements</code>
-     * elements and returns the result in a new array.
-     * @param a
-     * @param numElements
-     * @return
-     */
-    private static int[] cyclicShiftLeftElements(int[] a, int numElements) {
-        int[] b = new int[a.length];
-        System.arraycopy(a, 0, b, numElements, a.length-numElements);
-        System.arraycopy(a, a.length-numElements, b, 0, numElements);
-        return b;
     }
 
     /**
