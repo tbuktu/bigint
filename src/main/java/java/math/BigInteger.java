@@ -1876,8 +1876,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        int[][] ai = splitIntsNew(a, halfNumPcs, pieceSize, 1<<(n+1-5));
-        int[][] bi = splitIntsNew(b, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] bi = splitInts(b, halfNumPcs, pieceSize, 1<<(n+1-5));
         dft(ai, m, n);
         dft(bi, m, n);
         modFn(ai);
@@ -1954,7 +1954,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        int[][] ai = splitIntsNew(a, halfNumPcs, pieceSize, 1<<(n+1-5));
+        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
         dft(ai, m, n);
         modFn(ai);
         int[][] c = new int[halfNumPcs][];
@@ -2508,7 +2508,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param targetPieceSize the size of each piece in the output array in <code>ints</code>
      * @return an array of length <code>numPieces</code> containing subarrays of length <code>targetPieceSize</code>
      */
-    private static int[][] splitIntsNew(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
+    private static int[][] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
         int[][] ai = new int[numPieces][targetPieceSize];
         for (int i=0; i<a.length/pieceSize; i++)
             System.arraycopy(a, a.length-i*pieceSize-pieceSize, ai[i], targetPieceSize-pieceSize, pieceSize);
