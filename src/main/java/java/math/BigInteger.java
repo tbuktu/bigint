@@ -2536,6 +2536,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i<b.length; i++) {
             int bitsRemaining = Math.min(bitLength, a.length*32-i*bitLength);
             int bIntIdx = bitLength / 32;
+            if (bitLength%32 == 0)
+                bIntIdx--;
             int bBitIdx = 0;
             while (bitsRemaining > 0) {
                 int bitsToCopy = Math.min(32-aBitIdx, 32-bBitIdx);
