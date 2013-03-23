@@ -2379,7 +2379,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             aIdx--;
             bIdx--;
         }
-        aIdx--;
         while (carry) {
             a[aIdx]++;
             carry = a[aIdx] == 0;
