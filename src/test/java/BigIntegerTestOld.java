@@ -24,6 +24,17 @@ public class BigIntegerTestOld {
             BigInteger c2 = THREE.pow(2*i).add(a);
             assertEquals(c2, c1);
         }
+        Random random = new Random();
+        for (int i=0; i<100; i++) {
+            int numBits = 100 + random.nextInt(1000000);
+            BigInteger a = new BigInteger(numBits, random);
+            numBits = 100 + random.nextInt(10000);
+            BigInteger b = new BigInteger(numBits, random);
+            BigInteger c = a.multiply(b);
+            BigInteger[] d = c.divideAndRemainder(a);
+            assertEquals(b, d[0]);
+            assertEquals(ZERO, d[1]);
+        }
 
         // test the if... path in multModFn()
         BigInteger pow19_1 = BigInteger.valueOf(1).shiftLeft((1<<19)-1);   // 2^(2^19-1)
@@ -112,6 +123,14 @@ public class BigIntegerTestOld {
         c = a.divideAndRemainder(a);
         assertEquals(c[0], ONE);
         assertEquals(c[1], ZERO);
+
+        c = a.divideAndRemainder(a.add(ONE));
+        assertEquals(c[0], ZERO);
+        assertEquals(c[1], a);
+
+        c = a.divideAndRemainder(a.subtract(ONE));
+        assertEquals(c[0], ONE);
+        assertEquals(c[1], ONE);
     }
 
     /**
