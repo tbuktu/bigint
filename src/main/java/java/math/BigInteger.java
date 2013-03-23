@@ -222,6 +222,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static final int NEWTON_THRESHOLD = 100;
 
+    /**
+     * Whether we're running on a 64-bit JVM.
+     */
+    private static final boolean IS64BIT = "64".equals(System.getProperty("sun.arch.data.model"));
+
     //Constructors
 
     /**
@@ -1376,7 +1381,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
                return multiplyKaratsuba(this, val);
            else
-               if (!shouldMultiplySchoenhageStrassen(xlen*32) || !shouldMultiplySchoenhageStrassen(ylen*32))
+               if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
                    return multiplyToomCook3(this, val);
                else
                    return multiplySchoenhageStrassen(this, val);
@@ -1985,58 +1990,98 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Estimates whether SS will be more efficient than the other methods when multiplying two numbers
      * of a given length in bits.
-     * @param bitLength the number of bits in each of the two factors
+     * @param length the number of ints in each of the two factors
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      */
-    private boolean shouldMultiplySchoenhageStrassen(int bitLength) {
-        // The following values were determined experimentally on a 32-bit JVM.
-        // SS is slower than Toom-Cook below ~247,000 bits (~74000 decimal digits)
-        // and faster above ~1249000 bits (~376000 decimal digits).
-        // Between those values, it changes several times.
-        if (bitLength < 247000)
-            return false;
-        if (bitLength < 262144)   // 2^18
+    private boolean shouldMultiplySchoenhageStrassen(int length) {
+        if (IS64BIT) {
+            // The following values were determined experimentally on a 64-bit JVM.
+            // SS is slower than Toom-Cook below ~15,500 ints (~149,000 decimal digits)
+            // and faster above ~73,200 ints (~705,000 decimal digits).
+            // Between those values, it changes several times.
+            if (length < 15500)
+                return false;
+            if (length < 16384)   // 2^14
+                return true;
+            if (length < 26300)
+                return false;
+            if (length < 32768)   // 2^15
+                return true;
+            if (length < 44000)
+                return false;
+            if (length < 65536)   // 2^16
+                return true;
+            if (length < 73200)
+                return false;
             return true;
-        if (bitLength < 422000)
-            return false;
-        if (bitLength < 524288)   // 2^19
+        } else {
+            // The following values were determined experimentally on a 32-bit JVM.
+            // SS is slower than Toom-Cook below ~6,300 ints (~60,700 decimal digits)
+            // and faster above ~34,000 ints (~327,500 decimal digits).
+            // Between those values, it changes several times.
+            if (length < 6300)
+                return false;
+            if (length < 16384)   // 2^14
+                return true;
+            if (length < 19300)
+                return false;
+            if (length < 32768)   // 2^15
+                return true;
+            if (length < 34000)
+                return false;
             return true;
-        if (bitLength < 701000)
-            return false;
-        if (bitLength < 1048576)   // 2^20
-            return true;
-        if (bitLength < 1249000)
-            return false;
-        return true;
+        }
     }
 
     /**
      * Estimates whether SS will be more efficient than the other methods when squaring a number
      * of a given length in bits.
-     * @param bitLength the number of bits in the number to be squared
+     * @param bitLength the number of ints in the number to be squared
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      * @see #shouldMultiplySchoenhageStrassen(int)
      */
-    private boolean shouldSquareSchoenhageStrassen(int bitLength) {
-        if (bitLength < 128000)
-            return false;
-        if (bitLength < 131072)   // 2^17
+    private boolean shouldSquareSchoenhageStrassen(int length) {
+        if (IS64BIT) {
+            if (length < 15000)
+                return false;
+            if (length < 16384)   // 2^14
+                return true;
+            if (length < 27100)
+                return false;
+            if (length < 32768)   // 2^15
+                return true;
+            if (length < 43600)
+                return false;
+            if (length < 65536)   // 2^16
+                return true;
+            if (length < 76300)
+                return false;
+            if (length < 131072)   // 2^17
+                return true;
+            if (length < 133800)
+                return false;
             return true;
-        if (bitLength < 223000)
-            return false;
-        if (bitLength < 262144)   // 2^18
+        } else {
+            if (length < 7100)
+                return false;
+            if (length < 8192)   // 2^13
+                return true;
+            if (length < 14200)
+                return false;
+            if (length < 16384)   // 2^14
+                return true;
+            if (length < 24100)
+                return false;
+            if (length < 32768)   // 2^15
+                return true;
+            if (length < 42800)
+                return false;
+            if (length < 65536)   // 2^16
+                return true;
+            if (length < 73000)
+                return false;
             return true;
-        if (bitLength < 379000)
-            return false;
-        if (bitLength < 524288)   // 2^19
-            return true;
-        if (bitLength < 631000)
-            return false;
-        if (bitLength < 1048576)   // 2^20
-            return true;
-        if (bitLength < 1120000)
-            return false;
-        return true;
+        }
     }
 
     /**
@@ -2560,7 +2605,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD)
                  return squareKaratsuba();
             else
-                if (!shouldSquareSchoenhageStrassen(len*32))
+                if (!shouldSquareSchoenhageStrassen(len))
                     return squareToomCook3();
                 else
                     return squareSchoenhageStrassen();
