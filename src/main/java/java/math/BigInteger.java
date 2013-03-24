@@ -2917,7 +2917,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b the divisor
      * @return an array containing the quotient and remainder
      */
-    private BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
+    private static BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
         int r = a.mag.length;
         int s = b.mag.length;
 
@@ -2994,7 +2994,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
-    private BigInteger[] divide2n1n(BigInteger a, BigInteger b) {
+    private static BigInteger[] divide2n1n(BigInteger a, BigInteger b) {
         int n = b.mag.length;
         if (n%2!=0 || n<BURNIKEL_ZIEGLER_THRESHOLD)
             return a.divideAndRemainderKnuth(b);
@@ -3018,7 +3018,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param b a positive number such that <code>b.bitLength()</code> is even
      * @return <code>a/b</code> and <code>a%b</code>
      */
-    private BigInteger[] divide3n2n(BigInteger a, BigInteger b) {
+    private static BigInteger[] divide3n2n(BigInteger a, BigInteger b) {
         int n = b.mag.length / 2;   // half the length of b in ints
 
         // split a in 3 parts of length n or less
