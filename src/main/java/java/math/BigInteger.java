@@ -2299,10 +2299,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         int n = a.length / 2;
         // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
-        if (a[n-1] == 1)
-            subModFn(cpad, reverse(Arrays.copyOf(b0, cpad.length)));
-        if (b[n-1] == 1)
-            subModFn(cpad, reverse(Arrays.copyOf(a0, cpad.length)));
+        if (a[n-1] == 1) {
+            int[] b0pad = new int[cpad.length];
+            System.arraycopy(b0, 0, b0pad, cpad.length-b0.length, b0.length);
+            subModFn(cpad, b0pad);
+        }
+        if (b[n-1] == 1) {
+            int[] a0pad = new int[cpad.length];
+            System.arraycopy(a0, 0, a0pad, cpad.length-a0.length, a0.length);
+            subModFn(cpad, a0pad);
+        }
         return cpad;
     }
 
@@ -2577,13 +2583,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             System.arraycopy(a, a.length-i*pieceSize-pieceSize, ai[i], targetPieceSize-pieceSize, pieceSize);
         System.arraycopy(a, a.length-a.length/pieceSize*pieceSize-(a.length%pieceSize), ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
         return ai;
-    }
-
-    private static int[] reverse(int[] a) {
-        int[] b = new int[a.length];
-        for (int i=0; i<a.length; i++)
-            b[i] = a[a.length-1-i];
-        return b;
     }
 
     // Squaring
