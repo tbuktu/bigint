@@ -50,6 +50,7 @@ import java.io.*;
 public class BigIntegerTest {
     static Random rnd = new Random();
     static int size = 1000; // numbers per batch
+    static int reducedSize = 10;   // numbers per batch in the Schoenhage-Strassen/Barrett range
     static boolean failure = false;
 
     public static void pow(int order) {
@@ -73,7 +74,8 @@ public class BigIntegerTest {
     public static void arithmetic(int order) {
         int failCount = 0;
 
-        for (int i=0; i<size; i++) {
+        int iterations = order<100000 ? size : reducedSize;
+        for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order);
             while(x.compareTo(BigInteger.ZERO) != 1)
                 x = fetchNumber(order);
@@ -277,7 +279,8 @@ public class BigIntegerTest {
     public static void divideAndRemainder(int order) {
         int failCount1 = 0;
 
-        for (int i=0; i<size; i++) {
+        int iterations = order<100000 ? size : reducedSize;
+        for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order).abs();
             while(x.compareTo(BigInteger.valueOf(3L)) != 1)
                 x = fetchNumber(order).abs();
@@ -346,7 +349,8 @@ public class BigIntegerTest {
     public static void modInv(int order) {
         int failCount = 0, successCount = 0, nonInvCount = 0;
 
-        for (int i=0; i<size; i++) {
+        int iterations = order<100000 ? size : reducedSize;
+        for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order);
             while(x.equals(BigInteger.ZERO))
                 x = fetchNumber(order);
@@ -698,12 +702,13 @@ public class BigIntegerTest {
      *
      */
     public static void main(String[] args) throws Exception {
-
         // Some variables for sizing test numbers in bits
         int order1 = 100;
         int order2 = 60;
         int order3 = 1800;   // #bits for testing Karatsuba and Burnikel-Ziegler
         int order4 = 3000;   // #bits for testing Toom-Cook
+        int order5 = 1000000; // #bits for testing Schoenhage-Strassen
+        int order6 = 3500000; // #bits for testing Barrett
 
         if (args.length >0)
             order1 = (int)((Integer.parseInt(args[0]))* 3.333);
@@ -713,6 +718,10 @@ public class BigIntegerTest {
             order3 = (int)((Integer.parseInt(args[2]))* 3.333);
         if (args.length >3)
             order4 = (int)((Integer.parseInt(args[3]))* 3.333);
+        if (args.length >4)
+            order5 = (int)((Integer.parseInt(args[4]))* 3.333);
+        if (args.length >5)
+            order6 = (int)((Integer.parseInt(args[5]))* 3.333);
 
         prime();
         nextProbablePrime();
@@ -720,10 +729,14 @@ public class BigIntegerTest {
         arithmetic(order1);   // small numbers
         arithmetic(order3);   // Karatsuba / Burnikel-Ziegler range
         arithmetic(order4);   // Toom-Cook range
+        arithmetic(order5);   // SS range
+        arithmetic(order6);   // Barrett range
 
         divideAndRemainder(order1);   // small numbers
         divideAndRemainder(order3);   // Karatsuba / Burnikel-Ziegler range
         divideAndRemainder(order4);   // Toom-Cook range
+        divideAndRemainder(order5);   // SS range
+        divideAndRemainder(order6);   // Barrett range
 
         pow(order1);
 
