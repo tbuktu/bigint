@@ -800,7 +800,13 @@ public class BigIntegerTest {
                 break;
 
             case 4: // Random bit density
-                result = new BigInteger(rnd.nextInt(order-1), rnd);
+                byte[] val = new byte[(order+7)/8];
+                int iterations = rnd.nextInt(order);
+                for (int i=0; i<iterations; i++) {
+                    int bitIdx = rnd.nextInt(order);
+                    val[bitIdx/8] |= 1 << (bitIdx%8);
+                }
+                result = new BigInteger(1, val);
                 break;
             case 5: // Runs of consecutive ones and zeros
                 result = ZERO;
