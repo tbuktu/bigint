@@ -115,6 +115,32 @@ public class BigIntegerTest {
         report("Arithmetic II for " + order + " bits", failCount);
     }
 
+    // Tests SS edge cases by multiplying numbers of the form 2^n + {-1,0,1}
+    public static void schoenhageStrassen() {
+        int failCount = 0;
+
+        for (int i=0; i<10; i++) {
+            int m = 1 << (23+rnd.nextInt(3));
+            BigInteger x = ONE.shiftLeft(m);
+            BigInteger xd = BigInteger.valueOf(rnd.nextInt(3) - 1);
+
+            int n = 1 << (23+rnd.nextInt(3));
+            BigInteger y = ONE.shiftLeft(n);
+            BigInteger yd = BigInteger.valueOf(rnd.nextInt(3) - 1);
+
+            BigInteger product = x.add(xd).multiply(y.add(yd));
+            BigInteger expected = ONE.shiftLeft(m + n);
+            expected = expected.add(x.multiply(yd));
+            expected = expected.add(y.multiply(xd));
+            expected = expected.add(xd.multiply(yd));
+
+            if (!product.equals(expected)) {
+                failCount++;
+            }
+        }
+        report("Schoenhage-Strassen", failCount);
+    }
+
     public static void bitCount() {
         int failCount = 0;
 
@@ -725,6 +751,8 @@ public class BigIntegerTest {
 
         prime();
         nextProbablePrime();
+
+        schoenhageStrassen();
 
         arithmetic(order1);   // small numbers
         arithmetic(order3);   // Karatsuba / Burnikel-Ziegler range
