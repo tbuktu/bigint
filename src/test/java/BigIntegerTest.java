@@ -731,8 +731,8 @@ public class BigIntegerTest {
         // Some variables for sizing test numbers in bits
         int order1 = 100;
         int order2 = 60;
-        int order3 = 1800;   // #bits for testing Karatsuba and Burnikel-Ziegler
-        int order4 = 3000;   // #bits for testing Toom-Cook
+        int order3 = 3600;   // #bits for testing Karatsuba and Burnikel-Ziegler
+        int order4 = 6000;   // #bits for testing Toom-Cook
         int order5 = 1000000; // #bits for testing Schoenhage-Strassen
         int order6 = 3500000; // #bits for testing Barrett
 
