@@ -1,0 +1,75 @@
+Copyright (c) 2013, Timothy Buktu
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------------
+
+--- jdk8/jdk/src/share/classes/java/math/MutableBigInteger.java	2013-03-09 11:31:49.000000000 +0100
++++ src/main/java/java/math/MutableBigInteger.java	2013-05-07 00:49:30.520064057 +0200
+@@ -910,6 +910,31 @@
+      * Calculates the quotient of this div b and places the quotient in the
+      * provided MutableBigInteger objects and the remainder object is returned.
+      *
++     */
++    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient) {
++        return divide(b,quotient,true);
++    }
++
++    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
++        if (intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD || b.intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
++            return divideKnuth(b, quotient, needReminder);
++        else {
++            // For numbers above the BURNIKEL_ZIEGLER_THRESHOLD, use the algorithms in BigInteger
++            BigInteger[] quotRem = toBigInteger(1).divideAndRemainder(b.toBigInteger(1));
++            MutableBigInteger quotTemp = new MutableBigInteger(quotRem[0]);
++            quotient.setValue(quotTemp.value, quotTemp.intLen);
++            return new MutableBigInteger(quotRem[1]);
++        }
++    }
++
++    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient) {
++        return divideKnuth(b,quotient,true);
++    }
++
++    /**
++     * Calculates the quotient of this div b and places the quotient in the
++     * provided MutableBigInteger objects and the remainder object is returned.
++     *
+      * Uses Algorithm D in Knuth section 4.3.1.
+      * Many optimizations to that algorithm have been adapted from the Colin
+      * Plumb C library.
+@@ -917,11 +942,7 @@
+      * changed.
+      *
+      */
+-    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient) {
+-        return divide(b,quotient,true);
+-    }
+-
+-    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
++    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
+         if (b.intLen == 0)
+             throw new ArithmeticException("BigInteger divide by zero");
+ 
