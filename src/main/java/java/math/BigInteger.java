@@ -2435,7 +2435,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         numBits = numBits % 32;
         if (numBits != 0) {
             int b0 = b[0];
-            b[0] = b[0] <<= numBits;
+            b[0] <<= numBits;
             for (int i=1; i<b.length; i++) {
                 b[i-1] |= b[i] >>> (32-numBits);
                 b[i] <<= numBits;
