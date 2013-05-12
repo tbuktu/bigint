@@ -2005,7 +2005,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         modFn(ai);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
-            c[i] = multModFn(ai[i], ai[i]);
+            c[i] = squareModFn(ai[i]);
         idft(c, m, n);
         modFn(c);
 
@@ -2369,6 +2369,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
             return cpad;
         }
+    }
+
+    /** @see #multModFn(int[], int[]) */
+    private static int[] squareModFn(int[] a) {
+        // if a=Fn-1, a^2=1 (mod Fn)
+        if (a[a.length/2-1] == 1) {
+            int[] c = new int[a.length];
+            c[c.length-1] = 1;
+            return c;
+        }
+
+        int[] a0 = Arrays.copyOfRange(a, a.length/2, a.length);
+        BigInteger aBigInt = new BigInteger(1, a0);
+        int[] c = aBigInt.square().mag;
+
+        // make sure c is the same length as a
+        int[] cpad = new int[a.length];
+        System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
+
+        return cpad;
     }
 
     private static void modFn(int[] a) {
