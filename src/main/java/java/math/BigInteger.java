@@ -2211,10 +2211,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 for (int k=slen-1; k>=0; k--) {
                     System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
                     addModFn(A[idx], A[idx2]);
-                    cyclicShiftRight(A[idx], 1, A[idx]);
+                    cyclicShiftRightBits(A[idx], 1, A[idx]);
 
                     subModFn(c, A[idx2]);
-                    cyclicShiftRight(c, x, A[idx2]);
+                    cyclicShiftRightBits(c, x, A[idx2]);
                     idx++;
                     idx2++;
                 }
@@ -2418,7 +2418,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param numBits the shift amount in bits
      * @param b the return value; must be at least as long as <code>a</code>
      */
-    private static void cyclicShiftRight(int[] a, int numBits, int[] b) {
+    private static void cyclicShiftRightBits(int[] a, int numBits, int[] b) {
         int numElements = numBits / 32;
         System.arraycopy(a, 0, b, numElements, a.length-numElements);
         System.arraycopy(a, a.length-numElements, b, 0, numElements);
