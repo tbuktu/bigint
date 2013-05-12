@@ -2599,7 +2599,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (bBitLength%32 > 0) {
             aIdx = a.length - 1 - (aBitLength/32 + bBitLength/32);
             int bIdx = bBitLength / 32;
-            int bi = b[b.length-1-bStart+bIdx];
+            int bi = b[b.length-1-bStart-bIdx];
             bi &= -1 >>> (32-bBitLength);
             a[aIdx] |= bi << bit32;
             if (bit32+(bBitLength%32) > 32)
