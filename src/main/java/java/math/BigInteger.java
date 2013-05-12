@@ -2565,7 +2565,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             aIdx--;
             bIdx--;
         }
-        a[aIdx+1] &= -1 >>> (32-(numBits%32));
+        if (numElements > 0)
+            a[aIdx+1] &= -1 >>> (32-(numBits%32));
         for (; aIdx>=0; aIdx--)
             a[aIdx] = 0;
     }
