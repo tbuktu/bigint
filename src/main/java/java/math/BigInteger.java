@@ -2317,40 +2317,58 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo Fn
-     * where Fn=2<sup>2<sup>n+1</sup></sup>, and returns the result in a new array.<br/>
-     * <code>a</code> and <code>b</code> are assumed to be reduced mod Fn, i.e. 0&le;a&lt;Fn and 0&le;b&lt;Fn,
-     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
+     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>n</sup>+1,
+     * and returns the result in a new array.<br/>
+     * <code>a</code> and <code>b</code> are assumed to be reduced mod 2<sup>n</sup>+1, i.e. 0&le;a&lt;2<sup>n</sup>+1
+     * and 0&le;b&lt;2<sup>n</sup>+1, where n is <code>a.length*32/2</code>; in other words, n is half the number
+     * of bits in <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
      */
     private static int[] multModFn(int[] a, int[] b) {
-        int[] a0 = Arrays.copyOfRange(a, a.length/2, a.length);
-        int[] b0 = Arrays.copyOfRange(b, b.length/2, b.length);
-
-        BigInteger aBigInt = new BigInteger(1, a0);
-        BigInteger bBigInt = new BigInteger(1, b0);
-        int[] c = aBigInt.multiply(bBigInt).mag;
-
-        // make sure c is the same length as a and b
-        int[] cpad = new int[a.length];
-        System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
-
         int n = a.length / 2;
-        // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
+        // The upper halves of a and b can only be 0 or 1 because a and b are reduced mod 2^n+1,
+        // so multiply just the lower halves of a and b. Handle the 3 special cases where one or
+        // both upper halves equal 1 (i.e., a[n-1]=1 and/or b[n-1]=1). The upper half of a number
+        // reduced modulo 2^n+1 equals 1 iff the number=2^n.
         if (a[n-1] == 1) {
-            int[] b0pad = new int[cpad.length];
-            System.arraycopy(b0, 0, b0pad, cpad.length-b0.length, b0.length);
-            subModFn(cpad, b0pad);
+            // if a=b=2^n, a*b=1 (mod 2^n+1)
+            if (b[n-1] == 1) {
+                int[] c = new int[a.length];
+                c[c.length-1] = 1;
+                return c;
+            }
+            // if a=2^n and b!=2^n+1, a*b=-b (mod 2^n+1)
+            else {
+                int[] b0pad = new int[a.length];
+                System.arraycopy(b, n, b0pad, n, n);
+                int[] c = new int[a.length];
+                subModFn(c, b0pad);
+                return c;
+            }
         }
-        if (b[n-1] == 1) {
-            int[] a0pad = new int[cpad.length];
-            System.arraycopy(a0, 0, a0pad, cpad.length-a0.length, a0.length);
-            subModFn(cpad, a0pad);
+        // if a!=2^n and b=2^n, a*b=-a (mod 2^n+1)
+        else if (b[n-1] == 1) {
+            int[] a0pad = new int[b.length];
+            System.arraycopy(a, n, a0pad, n, n);
+            int[] c = new int[b.length];
+            subModFn(c, a0pad);
+            return c;
         }
-        return cpad;
+        // if a!=2^n and b!=2^n, a*b=a0*b0
+        else {
+            int[] a0 = Arrays.copyOfRange(a, n, a.length);
+            int[] b0 = Arrays.copyOfRange(b, n, b.length);
+            BigInteger aBigInt = new BigInteger(1, a0);
+            BigInteger bBigInt = new BigInteger(1, b0);
+            int[] c = aBigInt.multiply(bBigInt).mag;
+    
+            // make sure c is the same length as a and b
+            int[] cpad = new int[a.length];
+            System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
+            return cpad;
+        }
     }
 
     private static void modFn(int[] a) {
