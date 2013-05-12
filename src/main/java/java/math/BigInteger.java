@@ -2509,7 +2509,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             aIdx--;
             bIdx--;
         }
-        while (carry) {
+        while (carry && aIdx>=0) {
             a[aIdx]++;
             carry = a[aIdx] == 0;
             aIdx--;
