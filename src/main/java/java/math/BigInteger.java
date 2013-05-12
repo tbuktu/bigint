@@ -1094,9 +1094,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         for (int i=Character.MIN_RADIX; i<=Character.MAX_RADIX; i++)
         {
-           powerCache[i] = new ArrayList<BigInteger>(1);
-           powerCache[i].add(BigInteger.valueOf(i));
-           logCache[i] = Math.log(i);
+            powerCache[i] = new ArrayList<BigInteger>(1);
+            powerCache[i].add(BigInteger.valueOf(i));
+            logCache[i] = Math.log(i);
         }
     }
 
@@ -1401,31 +1401,31 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (val.signum == 0 || signum == 0)
             return ZERO;
 
-       int xlen = mag.length;
-       int ylen = val.mag.length;
+        int xlen = mag.length;
+        int ylen = val.mag.length;
 
-       if ((xlen < KARATSUBA_THRESHOLD) || (ylen < KARATSUBA_THRESHOLD))
-       {
-           int resultSign = signum == val.signum ? 1 : -1;
-           if (val.mag.length == 1) {
-               return  multiplyByInt(mag,val.mag[0], resultSign);
-           }
-           if(mag.length == 1) {
-               return multiplyByInt(val.mag,mag[0], resultSign);
-           }
-           int[] result = multiplyToLen(mag, xlen,
-                                        val.mag, ylen, null);
-           result = trustedStripLeadingZeroInts(result);
-           return new BigInteger(result, resultSign);
-       }
-       else
-           if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
-               return multiplyKaratsuba(this, val);
-           else
-               if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
-                   return multiplyToomCook3(this, val);
-               else
-                   return multiplySchoenhageStrassen(this, val);
+        if ((xlen < KARATSUBA_THRESHOLD) || (ylen < KARATSUBA_THRESHOLD))
+        {
+            int resultSign = signum == val.signum ? 1 : -1;
+            if (val.mag.length == 1) {
+                return  multiplyByInt(mag,val.mag[0], resultSign);
+            }
+            if(mag.length == 1) {
+                return multiplyByInt(val.mag,mag[0], resultSign);
+            }
+            int[] result = multiplyToLen(mag, xlen,
+                                         val.mag, ylen, null);
+            result = trustedStripLeadingZeroInts(result);
+            return new BigInteger(result, resultSign);
+        }
+        else
+            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
+                return multiplyKaratsuba(this, val);
+            else
+                if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
+                    return multiplyToomCook3(this, val);
+                else
+                    return multiplySchoenhageStrassen(this, val);
     }
 
     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
@@ -1726,27 +1726,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         borrow = 0L;
         for (int i=len-1; i>=0; i--)
         {
-           x = (mag[i] & LONG_MASK);
-           w = x - borrow;
-           if (borrow > x)       // Did we make the number go negative?
-              borrow = 1L;
-           else
-              borrow = 0L;
+            x = (mag[i] & LONG_MASK);
+            w = x - borrow;
+            if (borrow > x)       // Did we make the number go negative?
+                borrow = 1L;
+            else
+                borrow = 0L;
 
-           // 0xAAAAAAAB is the modular inverse of 3 (mod 2^32).  Thus,
-           // the effect of this is to divide by 3 (mod 2^32).
-           // This is much faster than division on most architectures.
-           q = (w * 0xAAAAAAABL) & LONG_MASK;
-           result[i] = (int) q;
+            // 0xAAAAAAAB is the modular inverse of 3 (mod 2^32).  Thus,
+            // the effect of this is to divide by 3 (mod 2^32).
+            // This is much faster than division on most architectures.
+            q = (w * 0xAAAAAAABL) & LONG_MASK;
+            result[i] = (int) q;
 
-           // Now check the borrow. The second check can of course be
-           // eliminated if the first fails.
-           if (q >= 0x55555556L)
-           {
-              borrow++;
-              if (q >= 0xAAAAAAABL)
-                 borrow++;
-           }
+            // Now check the borrow. The second check can of course be
+            // eliminated if the first fails.
+            if (q >= 0x55555556L)
+            {
+                borrow++;
+                if (q >= 0xAAAAAAABL)
+                    borrow++;
+            }
         }
         result = trustedStripLeadingZeroInts(result);
         return new BigInteger(result, signum);
@@ -2645,7 +2645,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         else
             if (len < TOOM_COOK_SQUARE_THRESHOLD)
-                 return squareKaratsuba();
+                return squareKaratsuba();
             else
                 if (!shouldSquareSchoenhageStrassen(len))
                     return squareToomCook3();
@@ -3295,19 +3295,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             partToSquare = partToSquare.shiftRight(powersOfTwo);
             remainingBits = partToSquare.bitLength();
             if (remainingBits == 1)  // Nothing left but +/- 1?
-               if (signum<0 && (exponent&1)==1)
-                  return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
-               else
-                  return ONE.shiftLeft(powersOfTwo*exponent);
+                if (signum<0 && (exponent&1)==1)
+                    return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
+                else
+                    return ONE.shiftLeft(powersOfTwo*exponent);
         }
         else
         {
-           remainingBits = partToSquare.bitLength();
-           if (remainingBits == 1)  // Nothing left but +/- 1?
-               if (signum<0 && (exponent&1)==1)
-                  return NEGATIVE_ONE;
-               else
-                  return ONE;
+            remainingBits = partToSquare.bitLength();
+            if (remainingBits == 1)  // Nothing left but +/- 1?
+                if (signum<0 && (exponent&1)==1)
+                    return NEGATIVE_ONE;
+                else
+                    return ONE;
         }
 
         // This is a quick way to approximate the size of the result,
@@ -3340,9 +3340,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             {
                 int bitsToShift = powersOfTwo*exponent;
                 if (bitsToShift + scaleFactor <= 62) // Fits in long?
-                   return valueOf((result << bitsToShift) * newSign);
+                    return valueOf((result << bitsToShift) * newSign);
                 else
-                   return valueOf(result*newSign).shiftLeft(bitsToShift);
+                    return valueOf(result*newSign).shiftLeft(bitsToShift);
             }
             else
                 return valueOf(result*newSign);
@@ -3366,12 +3366,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // Multiply back the (exponentiated) powers of two (quickly,
             // by shifting left)
             if (powersOfTwo > 0)
-               answer = answer.shiftLeft(powersOfTwo*exponent);
+                answer = answer.shiftLeft(powersOfTwo*exponent);
 
             if (signum<0 && (exponent&1)==1)
-               return answer.negate();
+                return answer.negate();
             else
-               return answer;
+                return answer;
         }
     }
 
@@ -5142,21 +5142,21 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * little-endian binary representation of the magnitude (int 0 is the
      * least significant). If the magnitude is zero, return value is undefined.
      */
-     private int firstNonzeroIntNum() {
-         int fn = firstNonzeroIntNum - 2;
-         if (fn == -2) { // firstNonzeroIntNum not initialized yet
-             fn = 0;
+    private int firstNonzeroIntNum() {
+        int fn = firstNonzeroIntNum - 2;
+        if (fn == -2) { // firstNonzeroIntNum not initialized yet
+            fn = 0;
 
-             // Search for the first nonzero int
-             int i;
-             int mlen = mag.length;
-             for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
-                 ;
-             fn = mlen - i - 1;
-             firstNonzeroIntNum = fn + 2; // offset by two to initialize
-         }
-         return fn;
-     }
+            // Search for the first nonzero int
+            int i;
+            int mlen = mag.length;
+            for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
+                ;
+            fn = mlen - i - 1;
+            firstNonzeroIntNum = fn + 2; // offset by two to initialize
+        }
+        return fn;
+    }
 
     /** use serialVersionUID from JDK 1.1. for interoperability */
     private static final long serialVersionUID = -8287574255936472291L;
