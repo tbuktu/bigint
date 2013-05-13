@@ -27,8 +27,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------------
 
---- jdk8/jdk/src/share/classes/java/math/BigInteger.java	2013-03-09 11:31:49.000000000 +0100
-+++ src/main/java/java/math/BigInteger.java	2013-05-07 00:49:30.520064057 +0200
+--- ./jdk8/jdk/src/share/classes/java/math/BigInteger.java	2013-03-09 11:31:49.000000000 +0100
++++ src/main/java/java/math/BigInteger.java	2013-05-13 02:34:23.814823493 +0200
 @@ -31,6 +31,7 @@
  
  import java.util.Random;
@@ -197,9 +197,9 @@ POSSIBILITY OF SUCH DAMAGE.
 +
 +        for (int i=Character.MIN_RADIX; i<=Character.MAX_RADIX; i++)
 +        {
-+           powerCache[i] = new ArrayList<BigInteger>(1);
-+           powerCache[i].add(BigInteger.valueOf(i));
-+           logCache[i] = Math.log(i);
++            powerCache[i] = new ArrayList<BigInteger>(1);
++            powerCache[i].add(BigInteger.valueOf(i));
++            logCache[i] = Math.log(i);
 +        }
      }
  
@@ -232,35 +232,35 @@ POSSIBILITY OF SUCH DAMAGE.
 -        result = trustedStripLeadingZeroInts(result);
 -        return new BigInteger(result, resultSign);
 +
-+       int xlen = mag.length;
-+       int ylen = val.mag.length;
++        int xlen = mag.length;
++        int ylen = val.mag.length;
 +
-+       if ((xlen < KARATSUBA_THRESHOLD) || (ylen < KARATSUBA_THRESHOLD))
-+       {
-+           int resultSign = signum == val.signum ? 1 : -1;
-+           if (val.mag.length == 1) {
-+               return  multiplyByInt(mag,val.mag[0], resultSign);
-+           }
-+           if(mag.length == 1) {
-+               return multiplyByInt(val.mag,mag[0], resultSign);
-+           }
-+           int[] result = multiplyToLen(mag, xlen,
-+                                        val.mag, ylen, null);
-+           result = trustedStripLeadingZeroInts(result);
-+           return new BigInteger(result, resultSign);
-+       }
-+       else
-+           if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
-+               return multiplyKaratsuba(this, val);
-+           else
-+               if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
-+                   return multiplyToomCook3(this, val);
-+               else
-+                   return multiplySchoenhageStrassen(this, val);
++        if ((xlen < KARATSUBA_THRESHOLD) || (ylen < KARATSUBA_THRESHOLD))
++        {
++            int resultSign = signum == val.signum ? 1 : -1;
++            if (val.mag.length == 1) {
++                return  multiplyByInt(mag,val.mag[0], resultSign);
++            }
++            if(mag.length == 1) {
++                return multiplyByInt(val.mag,mag[0], resultSign);
++            }
++            int[] result = multiplyToLen(mag, xlen,
++                                         val.mag, ylen, null);
++            result = trustedStripLeadingZeroInts(result);
++            return new BigInteger(result, resultSign);
++        }
++        else
++            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
++                return multiplyKaratsuba(this, val);
++            else
++                if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
++                    return multiplyToomCook3(this, val);
++                else
++                    return multiplySchoenhageStrassen(this, val);
      }
  
      private static BigInteger multiplyByInt(int[] x, int y, int sign) {
-@@ -1402,6 +1527,1108 @@
+@@ -1402,6 +1527,1148 @@
      }
  
      /**
@@ -463,27 +463,27 @@ POSSIBILITY OF SUCH DAMAGE.
 +        borrow = 0L;
 +        for (int i=len-1; i>=0; i--)
 +        {
-+           x = (mag[i] & LONG_MASK);
-+           w = x - borrow;
-+           if (borrow > x)       // Did we make the number go negative?
-+              borrow = 1L;
-+           else
-+              borrow = 0L;
++            x = (mag[i] & LONG_MASK);
++            w = x - borrow;
++            if (borrow > x)       // Did we make the number go negative?
++                borrow = 1L;
++            else
++                borrow = 0L;
 +
-+           // 0xAAAAAAAB is the modular inverse of 3 (mod 2^32).  Thus,
-+           // the effect of this is to divide by 3 (mod 2^32).
-+           // This is much faster than division on most architectures.
-+           q = (w * 0xAAAAAAABL) & LONG_MASK;
-+           result[i] = (int) q;
++            // 0xAAAAAAAB is the modular inverse of 3 (mod 2^32).  Thus,
++            // the effect of this is to divide by 3 (mod 2^32).
++            // This is much faster than division on most architectures.
++            q = (w * 0xAAAAAAABL) & LONG_MASK;
++            result[i] = (int) q;
 +
-+           // Now check the borrow. The second check can of course be
-+           // eliminated if the first fails.
-+           if (q >= 0x55555556L)
-+           {
-+              borrow++;
-+              if (q >= 0xAAAAAAABL)
-+                 borrow++;
-+           }
++            // Now check the borrow. The second check can of course be
++            // eliminated if the first fails.
++            if (q >= 0x55555556L)
++            {
++                borrow++;
++                if (q >= 0xAAAAAAABL)
++                    borrow++;
++            }
 +        }
 +        result = trustedStripLeadingZeroInts(result);
 +        return new BigInteger(result, signum);
@@ -742,7 +742,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +        modFn(ai);
 +        int[][] c = new int[halfNumPcs][];
 +        for (int i=0; i<c.length; i++)
-+            c[i] = multModFn(ai[i], ai[i]);
++            c[i] = squareModFn(ai[i]);
 +        idft(c, m, n);
 +        modFn(c);
 +
@@ -948,10 +948,10 @@ POSSIBILITY OF SUCH DAMAGE.
 +                for (int k=slen-1; k>=0; k--) {
 +                    System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
 +                    addModFn(A[idx], A[idx2]);
-+                    cyclicShiftRight(A[idx], 1, A[idx]);
++                    cyclicShiftRightBits(A[idx], 1, A[idx]);
 +
 +                    subModFn(c, A[idx2]);
-+                    cyclicShiftRight(c, x, A[idx2]);
++                    cyclicShiftRightBits(c, x, A[idx2]);
 +                    idx++;
 +                    idx2++;
 +                }
@@ -1054,39 +1054,77 @@ POSSIBILITY OF SUCH DAMAGE.
 +    }
 +
 +    /**
-+     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo Fn
-+     * where Fn=2<sup>2<sup>n+1</sup></sup>, and returns the result in a new array.<br/>
-+     * <code>a</code> and <code>b</code> are assumed to be reduced mod Fn, i.e. 0&le;a&lt;Fn and 0&le;b&lt;Fn,
-+     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-+     * <code>a</code>.<br/>
++     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>n</sup>+1,
++     * and returns the result in a new array.<br/>
++     * <code>a</code> and <code>b</code> are assumed to be reduced mod 2<sup>n</sup>+1, i.e. 0&le;a&lt;2<sup>n</sup>+1
++     * and 0&le;b&lt;2<sup>n</sup>+1, where n is <code>a.length*32/2</code>; in other words, n is half the number
++     * of bits in <code>a</code>.<br/>
 +     * Both input values are given as <code>int</code> arrays; they must be the same length.
 +     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
 +     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
 +     */
 +    private static int[] multModFn(int[] a, int[] b) {
++        int n = a.length / 2;
++        // The upper halves of a and b can only be 0 or 1 because a and b are reduced mod 2^n+1,
++        // so multiply just the lower halves of a and b. Handle the 3 special cases where one or
++        // both upper halves equal 1 (i.e., a[n-1]=1 and/or b[n-1]=1). The upper half of a number
++        // reduced modulo 2^n+1 equals 1 iff the number=2^n.
++        if (a[n-1] == 1) {
++            // if a=b=2^n, a*b=1 (mod 2^n+1)
++            if (b[n-1] == 1) {
++                int[] c = new int[a.length];
++                c[c.length-1] = 1;
++                return c;
++            }
++            // if a=2^n and b!=2^n+1, a*b=-b (mod 2^n+1)
++            else {
++                int[] b0pad = new int[a.length];
++                System.arraycopy(b, n, b0pad, n, n);
++                int[] c = new int[a.length];
++                subModFn(c, b0pad);
++                return c;
++            }
++        }
++        // if a!=2^n and b=2^n, a*b=-a (mod 2^n+1)
++        else if (b[n-1] == 1) {
++            int[] a0pad = new int[b.length];
++            System.arraycopy(a, n, a0pad, n, n);
++            int[] c = new int[b.length];
++            subModFn(c, a0pad);
++            return c;
++        }
++        // if a!=2^n and b!=2^n, a*b=a0*b0
++        else {
++            int[] a0 = Arrays.copyOfRange(a, n, a.length);
++            int[] b0 = Arrays.copyOfRange(b, n, b.length);
++            BigInteger aBigInt = new BigInteger(1, a0);
++            BigInteger bBigInt = new BigInteger(1, b0);
++            int[] c = aBigInt.multiply(bBigInt).mag;
++    
++            // make sure c is the same length as a and b
++            int[] cpad = new int[a.length];
++            System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
++            return cpad;
++        }
++    }
++
++    /** @see #multModFn(int[], int[]) */
++    private static int[] squareModFn(int[] a) {
++        // if a=Fn-1, a^2=1 (mod Fn)
++        if (a[a.length/2-1] == 1) {
++            int[] c = new int[a.length];
++            c[c.length-1] = 1;
++            return c;
++        }
++
 +        int[] a0 = Arrays.copyOfRange(a, a.length/2, a.length);
-+        int[] b0 = Arrays.copyOfRange(b, b.length/2, b.length);
-+
 +        BigInteger aBigInt = new BigInteger(1, a0);
-+        BigInteger bBigInt = new BigInteger(1, b0);
-+        int[] c = aBigInt.multiply(bBigInt).mag;
++        int[] c = aBigInt.square().mag;
 +
-+        // make sure c is the same length as a and b
++        // make sure c is the same length as a
 +        int[] cpad = new int[a.length];
 +        System.arraycopy(c, 0, cpad, a.length-c.length, c.length);
 +
-+        int n = a.length / 2;
-+        // special case: if a=Fn-1, add b*2^2^n which is the same as subtracting b
-+        if (a[n-1] == 1) {
-+            int[] b0pad = new int[cpad.length];
-+            System.arraycopy(b0, 0, b0pad, cpad.length-b0.length, b0.length);
-+            subModFn(cpad, b0pad);
-+        }
-+        if (b[n-1] == 1) {
-+            int[] a0pad = new int[cpad.length];
-+            System.arraycopy(a0, 0, a0pad, cpad.length-a0.length, a0.length);
-+            subModFn(cpad, a0pad);
-+        }
 +        return cpad;
 +    }
 +
@@ -1137,7 +1175,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * @param numBits the shift amount in bits
 +     * @param b the return value; must be at least as long as <code>a</code>
 +     */
-+    private static void cyclicShiftRight(int[] a, int numBits, int[] b) {
++    private static void cyclicShiftRightBits(int[] a, int numBits, int[] b) {
 +        int numElements = numBits / 32;
 +        System.arraycopy(a, 0, b, numElements, a.length-numElements);
 +        System.arraycopy(a, a.length-numElements, b, 0, numElements);
@@ -1208,7 +1246,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +            aIdx--;
 +            bIdx--;
 +        }
-+        while (carry) {
++        while (carry && aIdx>=0) {
 +            a[aIdx]++;
 +            carry = a[aIdx] == 0;
 +            aIdx--;
@@ -1237,9 +1275,10 @@ POSSIBILITY OF SUCH DAMAGE.
 +            aIdx--;
 +            bIdx--;
 +        }
-+        a[0] &= -1 >>> (32-(numBits%32));
-+        for (i=a.length-1-numElements; i>=0; i--)
-+            a[i] = 0;
++        if (numElements > 0)
++            a[aIdx+1] &= -1 >>> (32-(numBits%32));
++        for (; aIdx>=0; aIdx--)
++            a[aIdx] = 0;
 +    }
 +
 +    /**
@@ -1264,7 +1303,8 @@ POSSIBILITY OF SUCH DAMAGE.
 +            aIdx--;
 +            bIdx--;
 +        }
-+        a[aIdx+1] &= -1 >>> (32-(numBits%32));
++        if (numElements > 0)
++            a[aIdx+1] &= -1 >>> (32-(numBits%32));
 +        for (; aIdx>=0; aIdx--)
 +            a[aIdx] = 0;
 +    }
@@ -1297,7 +1337,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +        if (bBitLength%32 > 0) {
 +            aIdx = a.length - 1 - (aBitLength/32 + bBitLength/32);
 +            int bIdx = bBitLength / 32;
-+            int bi = b[b.length-1-bStart+bIdx];
++            int bi = b[b.length-1-bStart-bIdx];
 +            bi &= -1 >>> (32-bBitLength);
 +            a[aIdx] |= bi << bit32;
 +            if (bit32+(bBitLength%32) > 32)
@@ -1369,7 +1409,7 @@ POSSIBILITY OF SUCH DAMAGE.
       * Returns a BigInteger whose value is {@code (this<sup>2</sup>)}.
       *
       * @return {@code this<sup>2</sup>}
-@@ -1409,8 +2636,21 @@
+@@ -1409,8 +2676,21 @@
      private BigInteger square() {
          if (signum == 0)
              return ZERO;
@@ -1384,7 +1424,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +        }
 +        else
 +            if (len < TOOM_COOK_SQUARE_THRESHOLD)
-+                 return squareKaratsuba();
++                return squareKaratsuba();
 +            else
 +                if (!shouldSquareSchoenhageStrassen(len))
 +                    return squareToomCook3();
@@ -1393,7 +1433,7 @@ POSSIBILITY OF SUCH DAMAGE.
      }
  
      /**
-@@ -1481,6 +2721,83 @@
+@@ -1481,6 +2761,83 @@
      }
  
      /**
@@ -1477,7 +1517,7 @@ POSSIBILITY OF SUCH DAMAGE.
       * Returns a BigInteger whose value is {@code (this / val)}.
       *
       * @param  val value by which this BigInteger is to be divided.
-@@ -1488,11 +2805,28 @@
+@@ -1488,11 +2845,28 @@
       * @throws ArithmeticException if {@code val} is zero.
       */
      public BigInteger divide(BigInteger val) {
@@ -1507,7 +1547,7 @@ POSSIBILITY OF SUCH DAMAGE.
          return q.toBigInteger(this.signum * val.signum);
      }
  
-@@ -1508,11 +2842,45 @@
+@@ -1508,11 +2882,45 @@
       * @throws ArithmeticException if {@code val} is zero.
       */
      public BigInteger[] divideAndRemainder(BigInteger val) {
@@ -1554,7 +1594,7 @@ POSSIBILITY OF SUCH DAMAGE.
          result[0] = q.toBigInteger(this.signum == val.signum ? 1 : -1);
          result[1] = r.toBigInteger(this.signum);
          return result;
-@@ -1527,11 +2895,373 @@
+@@ -1527,11 +2935,373 @@
       * @throws ArithmeticException if {@code val} is zero.
       */
      public BigInteger remainder(BigInteger val) {
@@ -1929,7 +1969,7 @@ POSSIBILITY OF SUCH DAMAGE.
      }
  
      /**
-@@ -1549,23 +3279,100 @@
+@@ -1549,23 +3319,100 @@
          if (signum==0)
              return (exponent==0 ? ONE : this);
  
@@ -1963,19 +2003,19 @@ POSSIBILITY OF SUCH DAMAGE.
 +            partToSquare = partToSquare.shiftRight(powersOfTwo);
 +            remainingBits = partToSquare.bitLength();
 +            if (remainingBits == 1)  // Nothing left but +/- 1?
-+               if (signum<0 && (exponent&1)==1)
-+                  return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
-+               else
-+                  return ONE.shiftLeft(powersOfTwo*exponent);
++                if (signum<0 && (exponent&1)==1)
++                    return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
++                else
++                    return ONE.shiftLeft(powersOfTwo*exponent);
 +        }
 +        else
 +        {
-+           remainingBits = partToSquare.bitLength();
-+           if (remainingBits == 1)  // Nothing left but +/- 1?
-+               if (signum<0 && (exponent&1)==1)
-+                  return NEGATIVE_ONE;
-+               else
-+                  return ONE;
++            remainingBits = partToSquare.bitLength();
++            if (remainingBits == 1)  // Nothing left but +/- 1?
++                if (signum<0 && (exponent&1)==1)
++                    return NEGATIVE_ONE;
++                else
++                    return ONE;
 +        }
 +
 +        // This is a quick way to approximate the size of the result,
@@ -2008,9 +2048,9 @@ POSSIBILITY OF SUCH DAMAGE.
 +            {
 +                int bitsToShift = powersOfTwo*exponent;
 +                if (bitsToShift + scaleFactor <= 62) // Fits in long?
-+                   return valueOf((result << bitsToShift) * newSign);
++                    return valueOf((result << bitsToShift) * newSign);
 +                else
-+                   return valueOf(result*newSign).shiftLeft(bitsToShift);
++                    return valueOf(result*newSign).shiftLeft(bitsToShift);
              }
 +            else
 +                return valueOf(result*newSign);
@@ -2034,18 +2074,18 @@ POSSIBILITY OF SUCH DAMAGE.
 +            // Multiply back the (exponentiated) powers of two (quickly,
 +            // by shifting left)
 +            if (powersOfTwo > 0)
-+               answer = answer.shiftLeft(powersOfTwo*exponent);
++                answer = answer.shiftLeft(powersOfTwo*exponent);
 +
 +            if (signum<0 && (exponent&1)==1)
-+               return answer.negate();
++                return answer.negate();
 +            else
-+               return answer;
++                return answer;
          }
 -        return new BigInteger(result, newSign);
      }
  
      /**
-@@ -2117,7 +3924,7 @@
+@@ -2117,7 +3964,7 @@
           * Perform exponentiation using repeated squaring trick, chopping off
           * high order bits as indicated by modulus.
           */
@@ -2054,7 +2094,7 @@ POSSIBILITY OF SUCH DAMAGE.
          BigInteger baseToPow2 = this.mod2(p);
          int expOffset = 0;
  
-@@ -2323,6 +4130,28 @@
+@@ -2323,6 +4170,28 @@
          return val;
      }
  
@@ -2083,7 +2123,7 @@ POSSIBILITY OF SUCH DAMAGE.
      // Bitwise Operations
  
      /**
-@@ -2812,6 +4641,28 @@
+@@ -2812,6 +4681,28 @@
          if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX)
              radix = 10;
  
@@ -2112,7 +2152,7 @@ POSSIBILITY OF SUCH DAMAGE.
          // Compute upper bound on number of digit groups and allocate space
          int maxNumDigitGroups = (4*mag.length + 6)/7;
          String digitGroup[] = new String[maxNumDigitGroups];
-@@ -2850,6 +4701,79 @@
+@@ -2850,6 +4741,79 @@
          return buf.toString();
      }
  
@@ -2192,3 +2232,40 @@ POSSIBILITY OF SUCH DAMAGE.
      /* zero[i] is a string of i consecutive zeros. */
      private static String zeros[] = new String[64];
      static {
+@@ -3218,21 +5182,21 @@
+      * little-endian binary representation of the magnitude (int 0 is the
+      * least significant). If the magnitude is zero, return value is undefined.
+      */
+-     private int firstNonzeroIntNum() {
+-         int fn = firstNonzeroIntNum - 2;
+-         if (fn == -2) { // firstNonzeroIntNum not initialized yet
+-             fn = 0;
+-
+-             // Search for the first nonzero int
+-             int i;
+-             int mlen = mag.length;
+-             for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
+-                 ;
+-             fn = mlen - i - 1;
+-             firstNonzeroIntNum = fn + 2; // offset by two to initialize
+-         }
+-         return fn;
+-     }
++    private int firstNonzeroIntNum() {
++        int fn = firstNonzeroIntNum - 2;
++        if (fn == -2) { // firstNonzeroIntNum not initialized yet
++            fn = 0;
++
++            // Search for the first nonzero int
++            int i;
++            int mlen = mag.length;
++            for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
++                ;
++            fn = mlen - i - 1;
++            firstNonzeroIntNum = fn + 2; // offset by two to initialize
++        }
++        return fn;
++    }
+ 
+     /** use serialVersionUID from JDK 1.1. for interoperability */
+     private static final long serialVersionUID = -8287574255936472291L;
