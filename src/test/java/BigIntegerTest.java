@@ -32,6 +32,9 @@
 import java.util.Random;
 import java.math.BigInteger;
 import java.io.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.*;
 
 /**
  * This is a simple test class created to ensure that the results
@@ -115,10 +118,11 @@ public class BigIntegerTest {
         report("Arithmetic II for " + order + " bits", failCount);
     }
 
-    // Tests SS edge cases by multiplying numbers of the form 2^n + {-1,0,1}
-    public static void schoenhageStrassen() {
+    public static void schoenhageStrassen(int order) throws Exception {
         int failCount = 0;
+        Random rnd = new Random();
 
+        // test edge cases by multiplying numbers of the form 2^n + {-1,0,1}
         for (int i=0; i<10; i++) {
             int m = 1 << (23+rnd.nextInt(3));
             BigInteger x = ONE.shiftLeft(m);
@@ -130,15 +134,301 @@ public class BigIntegerTest {
 
             BigInteger product = x.add(xd).multiply(y.add(yd));
             BigInteger expected = ONE.shiftLeft(m + n);
-            expected = expected.add(x.multiply(yd));
-            expected = expected.add(y.multiply(xd));
+            expected = expected.add(yd.shiftLeft(m));   // add x.multiply(yd)
+            expected = expected.add(xd.shiftLeft(n));   // add y.multiply(xd)
             expected = expected.add(xd.multiply(yd));
 
             if (!product.equals(expected)) {
                 failCount++;
             }
         }
+
+        // test square()
+        Method squareMethod = BigInteger.class.getDeclaredMethod("square");
+        squareMethod.setAccessible(true);
+        for (int i=0; i<10; i++) {
+            int m = 1 << (23+rnd.nextInt(3));
+            BigInteger x = ONE.shiftLeft(m);
+            BigInteger xd = BigInteger.valueOf(rnd.nextInt(3) - 1);
+
+            BigInteger square = (BigInteger)squareMethod.invoke(x.add(xd));
+            BigInteger expected = ONE.shiftLeft(2 * m);
+            expected = expected.add(xd.shiftLeft(m+1));   // add 2*x.multiply(yd)
+            expected = expected.add(xd.multiply(xd));
+
+            if (!square.equals(expected)) {
+                failCount++;
+            }
+        }
+
+        // verify that idft(dft(a)) = a
+        Method modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[][].class);
+        modFnMethod.setAccessible(true);
+        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class, int.class);
+        dftMethod.setAccessible(true);
+        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class, int.class);
+        idftMethod.setAccessible(true);
+        for (int k=0; k<100; k++) {
+            int m = 8 + rnd.nextInt(8);
+            int n = m/2 + 1;
+            int[][] a = createRandomDftArray(m, n);
+            modFnMethod.invoke(null, new Object[] {a});
+            int[][] aOrig = new int[a.length][];
+            for (int i=0; i<a.length; i++)
+                aOrig[i] = a[i].clone();
+            dftMethod.invoke(null, a, m, n);
+            idftMethod.invoke(null, a, m, n);
+            modFnMethod.invoke(null, new Object[] {a});
+            for (int j=0; j<aOrig.length; j++)
+                if (!Arrays.equals(a[j], aOrig[j]))
+                    failCount++;
+        }
+
+        // test multModFn
+        modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[].class);   // this is the other modFn method
+        modFnMethod.setAccessible(true);
+        Method multModFnMethod = BigInteger.class.getDeclaredMethod("multModFn", int[].class, int[].class);
+        multModFnMethod.setAccessible(true);
+        Constructor<BigInteger> ctor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
+        ctor.setAccessible(true);
+        for (int i=0; i<100; i++) {
+            int length = 1 << (1+rnd.nextInt(10));
+            int[] FnArr = new int[length];
+            FnArr[length/2-1] = 1;
+            FnArr[length-1] = 1;
+            BigInteger Fn = ctor.newInstance(1, FnArr);
+            int[] a = createRandomArray(length);
+            modFnMethod.invoke(null, new Object[] {a});
+            int[] b = createRandomArray(length);
+            modFnMethod.invoke(null, new Object[] {b});
+            int[] c = (int[])multModFnMethod.invoke(null, a, b);
+            modFnMethod.invoke(null, new Object[] {c});
+            BigInteger actual = ctor.newInstance(1, c);
+            BigInteger aBigInt = ctor.newInstance(1, a);
+            BigInteger bBigInt = ctor.newInstance(1, b);
+            BigInteger expected = aBigInt.multiply(bBigInt).mod(Fn);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test squareModFn
+        modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[].class);   // this is the other modFn method
+        modFnMethod.setAccessible(true);
+        Method squareModFnMethod = BigInteger.class.getDeclaredMethod("squareModFn", int[].class);
+        squareModFnMethod.setAccessible(true);
+        for (int i=0; i<100; i++) {
+            int length = 1 << (1+rnd.nextInt(10));
+            int[] FnArr = new int[length];
+            FnArr[length/2-1] = 1;
+            FnArr[length-1] = 1;
+            BigInteger Fn = ctor.newInstance(1, FnArr);
+            int[] a = createRandomArray(length);
+            modFnMethod.invoke(null, new Object[] {a});
+            int[] c = (int[])squareModFnMethod.invoke(null, a);
+            modFnMethod.invoke(null, new Object[] {c});
+            BigInteger actual = ctor.newInstance(1, c);
+            BigInteger aBigInt = ctor.newInstance(1, a);
+            BigInteger expected = (BigInteger)squareMethod.invoke(aBigInt);
+            expected = expected.mod(Fn);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test addModFn
+        Method addModFnMethod = BigInteger.class.getDeclaredMethod("addModFn", int[].class, int[].class);
+        addModFnMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(10);
+            int len = 1 << (n + 1 - 5);
+            int[] aArr = createRandomArray(len);
+            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger a = ctor.newInstance(1, aArr);
+            int[] bArr = createRandomArray(len);
+            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger b = ctor.newInstance(1, bArr);
+            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger expected = a.add(b).mod(Fn);
+            addModFnMethod.invoke(null, aArr, bArr);
+            modFnMethod.invoke(null, aArr);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test subModFn
+        Method subModFnMethod = BigInteger.class.getDeclaredMethod("subModFn", int[].class, int[].class);
+        subModFnMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(10);
+            int len = 1 << (n + 1 - 5);
+            int[] aArr = createRandomArray(len);
+            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger a = ctor.newInstance(1, aArr);
+            int[] bArr = createRandomArray(len);
+            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger b = ctor.newInstance(1, bArr);
+            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger expected = a.subtract(b).mod(Fn);
+            subModFnMethod.invoke(null, aArr, bArr);
+            modFnMethod.invoke(null, aArr);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test cyclicShiftLeftBits / cyclicShiftRightBits
+        Method shiftLeftMethod = BigInteger.class.getDeclaredMethod("cyclicShiftLeftBits", int[].class, int.class, int[].class);
+        shiftLeftMethod.setAccessible(true);
+        Method shiftRightMethod = BigInteger.class.getDeclaredMethod("cyclicShiftRightBits", int[].class, int.class, int[].class);
+        shiftRightMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 1 << rnd.nextInt(20);
+            int[] a = createRandomArray(n);
+            int[] aOrig = a.clone();
+            // pick random shift amounts whose sum is zero
+            List<Integer> amounts = new ArrayList<Integer>();
+            int count = 1 + rnd.nextInt(20);
+            int total = 0;
+            for (int i = 0; i < count; i++) {
+                int amount = rnd.nextInt(n);
+                amounts.add(amount);
+                total += amount;
+            }
+            while (total > 0) {
+                int amount = Math.min(rnd.nextInt(n), total);
+                amounts.add(-amount);
+                total -= amount;
+            }
+            Collections.shuffle(amounts);
+            for (int amount : amounts) {
+                int[] b = new int[a.length];
+                if (amount > 0)
+                    shiftLeftMethod.invoke(null, a, amount, b);
+                else
+                    shiftRightMethod.invoke(null, a, -amount, b);
+                a = b;
+            }
+            if (!Arrays.equals(a, aOrig))
+                failCount++;
+        }
+
+        // test modFn
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(15);
+            int len = 1 << (n + 1 - 5);
+            int[] a = createRandomArray(len);
+            int[] aOrig = a.clone();
+            modFnMethod.invoke(null, a);
+            BigInteger actual = ctor.newInstance(1, a);
+            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger expected = ctor.newInstance(1, aOrig).mod(Fn);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test addModPow2
+        Method addModPow2Method = BigInteger.class.getDeclaredMethod("addModPow2", int[].class, int[].class, int.class);
+        addModPow2Method.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(15);
+            int len = 1 << (n + 1 - 5);
+            int[] aArr = createRandomArray(len);
+            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger a = ctor.newInstance(1, aArr);
+            int[] bArr = createRandomArray(len);
+            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger b = ctor.newInstance(1, bArr);
+            int numBits = rnd.nextInt(n);
+            BigInteger pow2 = BigInteger.valueOf(1<<numBits);
+            BigInteger expected = a.add(b).mod(pow2);
+            addModPow2Method.invoke(null, aArr, bArr, numBits);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test subModPow2
+        Method subModPow2Method = BigInteger.class.getDeclaredMethod("subModPow2", int[].class, int[].class, int.class);
+        subModPow2Method.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(15);
+            int len = 1 << (n + 1 - 5);
+            int[] aArr = createRandomArray(len);
+            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger a = ctor.newInstance(1, aArr);
+            int[] bArr = createRandomArray(len);
+            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            BigInteger b = ctor.newInstance(1, bArr);
+            int numBits = rnd.nextInt(n);
+            BigInteger pow2 = BigInteger.valueOf(1<<numBits);
+            BigInteger expected = a.subtract(b).mod(pow2);
+            subModPow2Method.invoke(null, aArr, bArr, numBits);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test splitBits
+        Method splitBitsMethod = BigInteger.class.getDeclaredMethod("splitBits", int[].class, int.class);
+        splitBitsMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 1 + rnd.nextInt(1000);
+            int[] aArr = createRandomArray(n);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            int pieceSize = 1 + smallRandom(n-1, rnd);
+            int[][] pieces = (int[][])splitBitsMethod.invoke(null, aArr, pieceSize);
+            BigInteger expected = ZERO;
+            for (int i=pieces.length-1; i>=0; i--) {
+                int[] piece = pieces[i];
+                BigInteger pieceBigInt = ctor.newInstance(1, piece);
+                expected = expected.shiftLeft(pieceSize).add(pieceBigInt);
+            }
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test addShifted
+        Method addShiftedMethod = BigInteger.class.getDeclaredMethod("addShifted", int[].class, int[].class, int.class);
+        addShiftedMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int[] aArr = createRandomArray(1 + rnd.nextInt(1000));
+            BigInteger a = ctor.newInstance(1, aArr);
+            int offset = rnd.nextInt(aArr.length);
+            int[] bArr = createRandomArray(1 + rnd.nextInt(1000));
+            BigInteger b = ctor.newInstance(1, bArr);
+            addShiftedMethod.invoke(null, aArr, bArr, offset);
+            BigInteger actual = ctor.newInstance(1, aArr);
+            BigInteger mask = ONE.shiftLeft(aArr.length*32).subtract(ONE);
+            BigInteger expected = a.add(b.shiftLeft(offset*32)).and(mask);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
         report("Schoenhage-Strassen", failCount);
+    }
+
+    // like Random.nextInt(int) but favors small numbers
+    private static int smallRandom(int n, Random rnd) {
+        return (int)(n * Math.pow(rnd.nextDouble(), 5));
+    }
+
+    private static int[] createRandomArray(int length) {
+        Random rnd = new Random();
+        int[] a = new int[length];
+        for (int i=0; i<a.length; i++)
+            a[i] = rnd.nextInt();
+        return a;
+    }
+
+    private static int[][] createRandomDftArray(int m, int n) {
+        Random rnd = new Random();
+        int numElements = m%2==0 ? 1<<n : 1<<(n+1);
+        numElements /= 2;
+        int[][] a = new int[numElements][1<<(n+1-5)];
+        for (int i=0; i<a.length; i++)
+            for (int j=0; j<a[i].length; j++)
+                a[i][j] = rnd.nextInt();
+        return a;
     }
 
     public static void bitCount() {
@@ -749,7 +1039,7 @@ public class BigIntegerTest {
         prime();
         nextProbablePrime();
 
-        schoenhageStrassen();
+        schoenhageStrassen(order5);
 
         arithmetic(order1);   // small numbers
         arithmetic(order3);   // Karatsuba / Burnikel-Ziegler range
