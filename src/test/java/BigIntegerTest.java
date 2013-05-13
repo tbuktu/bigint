@@ -431,6 +431,31 @@ public class BigIntegerTest {
         return a;
     }
 
+    public static void square(int order) {
+        int failCount = 0;
+
+        int iterations = order<100000 ? size : reducedSize;
+        for (int i=0; i<iterations; i++) {
+            BigInteger x = fetchNumber(order);
+
+            try {
+                Method squareMethod = BigInteger.class.getDeclaredMethod("square");
+                squareMethod.setAccessible(true);
+                BigInteger square = (BigInteger)squareMethod.invoke(x);
+                BigInteger expected = x.multiply(x);
+
+                if (!square.equals(expected)) {
+                    failCount++;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                failCount++;
+            }
+        }
+
+        report("Square for " + order + " bits", failCount);
+    }
+
     public static void bitCount() {
         int failCount = 0;
 
@@ -1040,6 +1065,11 @@ public class BigIntegerTest {
         nextProbablePrime();
 
         schoenhageStrassen(order5);
+
+        square(order1);   // small numbers
+        square(order3);   // Karatsuba / Burnikel-Ziegler range
+        square(order4);   // Toom-Cook range
+        square(order5);   // SS/Barrett range
 
         arithmetic(order1);   // small numbers
         arithmetic(order3);   // Karatsuba / Burnikel-Ziegler range
