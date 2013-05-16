@@ -404,6 +404,32 @@ public class BigIntegerTest {
                 failCount++;
         }
 
+        // test appendBits
+        Method appendBitsMethod = BigInteger.class.getDeclaredMethod("appendBits", int[].class, int.class, int[].class, int.class, int.class);
+        appendBitsMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int[] src = createRandomArray(1 + rnd.nextInt(1000));
+            BigInteger srcBigInt = ctor.newInstance(1, src);
+            int[] dest = new int[src.length];
+            int valBits = 1 + smallRandom(src.length*32-1, rnd);
+            int padBits = 1 + smallRandom(src.length*32-1, rnd);
+            BigInteger mask = ONE.shiftLeft(valBits).subtract(ONE);
+            int srcIndex = 0;
+            int destBits = 0;
+            BigInteger expected = ZERO;
+            while (srcIndex+(valBits+31)/32<src.length && destBits+valBits+padBits<dest.length*32) {
+                expected = expected.add(srcBigInt.shiftRight(srcIndex*32).and(mask).shiftLeft(destBits));
+                appendBitsMethod.invoke(null, dest, destBits, src, srcIndex, valBits);
+                srcIndex += (valBits+31) / 32;
+                destBits += valBits + padBits;
+            }
+            if (destBits > 0)
+                dest = Arrays.copyOfRange(dest, dest.length-(destBits+31)/32, dest.length);
+            BigInteger actual = ctor.newInstance(1, dest);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
         report("Schoenhage-Strassen", failCount);
     }
 
