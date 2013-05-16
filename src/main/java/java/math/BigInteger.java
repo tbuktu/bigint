@@ -2671,9 +2671,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static int[][] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
         int[][] ai = new int[numPieces][targetPieceSize];
-        for (int i=0; i<a.length/pieceSize; i++)
-            System.arraycopy(a, a.length-i*pieceSize-pieceSize, ai[i], targetPieceSize-pieceSize, pieceSize);
-        System.arraycopy(a, a.length-a.length/pieceSize*pieceSize-(a.length%pieceSize), ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
+        int aIdx = a.length - pieceSize;
+        int pieceIdx = 0;
+        while (aIdx >= 0) {
+            System.arraycopy(a, aIdx, ai[pieceIdx], targetPieceSize-pieceSize, pieceSize);
+            aIdx -= pieceSize;
+            pieceIdx++;
+        }
+        System.arraycopy(a, 0, ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
         return ai;
     }
 
