@@ -120,7 +120,6 @@ public class BigIntegerTest {
 
     public static void schoenhageStrassen(int order) throws Exception {
         int failCount = 0;
-        Random rnd = new Random();
 
         // test edge cases by multiplying numbers of the form 2^n + {-1,0,1}
         for (int i=0; i<10; i++) {
@@ -439,7 +438,6 @@ public class BigIntegerTest {
     }
 
     private static int[] createRandomArray(int length) {
-        Random rnd = new Random();
         int[] a = new int[length];
         for (int i=0; i<a.length; i++)
             a[i] = rnd.nextInt();
@@ -447,7 +445,6 @@ public class BigIntegerTest {
     }
 
     private static int[][] createRandomDftArray(int m, int n) {
-        Random rnd = new Random();
         int numElements = m%2==0 ? 1<<n : 1<<(n+1);
         numElements /= 2;
         int[][] a = new int[numElements][1<<(n+1-5)];
