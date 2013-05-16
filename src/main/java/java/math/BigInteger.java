@@ -1805,7 +1805,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (b.signum() < 0)
             b = b.negate();
 
-        int[] cArr = multiplySchoenhageStrassen(a.mag, a.bitLength(), b.mag, b.bitLength());
+        int[] cArr = multiplySchoenhageStrassen(a.mag, b.mag);
 
         BigInteger c = new BigInteger(1, cArr);
         if (signum < 0)
@@ -1824,7 +1824,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // remove any minus sign
         int[] aArr = signum()>=0 ? mag : negate().mag;
 
-        int[] cArr = squareSchoenhageStrassen(aArr, bitLength());
+        int[] cArr = squareSchoenhageStrassen(aArr);
         BigInteger c = new BigInteger(1, cArr);
 
         return c;
@@ -1878,14 +1878,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *       Schoenhage-Strassen-Algorithmus</a></li>
      * </ol>
      * @param a
-     * @param aBitLen
      * @param b
-     * @param bBitLen
      * @return a*b
      */
-    private static int[] multiplySchoenhageStrassen(int[] a, int aBitLen, int[] b, int bBitLen) {
+    private static int[] multiplySchoenhageStrassen(int[] a, int[] b) {
         // set M to the number of binary digits in a or b, whichever is greater
-        int M = Math.max(aBitLen, bBitLen);
+        int M = Math.max(a.length*32, b.length*32);
 
         // find the lowest m such that m>=log2(2M)
         int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
@@ -1963,13 +1961,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Squares a <b>positive</b> number of length <code>aBitLen</code> that is represented as an int
      * array, i.e. in base 2<sup>32</sup>.
      * @param a
-     * @param aBitLen
      * @return a<sup>2</sup>
      * @see #multiplySchoenhageStrassen(int[], int, int[], int)
      */
-    private int[] squareSchoenhageStrassen(int[] a, int aBitLen) {
+    private int[] squareSchoenhageStrassen(int[] a) {
         // set M to the number of binary digits in a
-        int M = aBitLen;
+        int M = a.length * 32;
 
         // find the lowest m such that m>=log2(2M)
         int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
