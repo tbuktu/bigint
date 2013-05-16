@@ -1840,25 +1840,31 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * <p/>
      * The Schoenhage-Strassen algorithm algorithm works as follows:
      * <ol>
-     *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.</li>
+     *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.
+     *       See the code for how n is calculated.</li>
      *   <li>Take the low n+2 bits of each piece of a, zero-pad them to 3n+5 bits,
      *       and concatenate them to a new number u.</li>
      *   <li>Do the same for b to obtain v.</li>
-     *   <li>Calculate all pieces of z' by multiplying u and v (using Schoenhage-Strassen or another
-     *       algorithm). The product will contain all pieces of a*b mod n+2.</li>
+     *   <li>Calculate all pieces of gamma by multiplying u and v (using Schoenhage-Strassen or another
+     *       algorithm).</li>
+     *   <li>Split gamma into pieces of 3n+5 bits.</li>
+     *   <li>Calculate z'<sub>i</sub> = gamma<sub>i</sub> + gamma<sub>i+2*2<sup>n</sup></sub> -
+     *       gamma<sub>i+2<sup>n</sup></sub> - gamma<sub>i+3*2<sup>n</sup></sub> and reduce modulo
+     *       2<sup>n+2</sup>.<br/>
+     *       z'<sub>i</sub> will be the i-th piece of a*b mod 2<sup>n+2</sup>.</li>
      *   <li>Pad the pieces of a and b from step 1 to 2<sup>n+1</sup> bits.</li>
      *   <li>Perform a
      *       <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
      *       Discrete Fourier Transform</a> (DFT) on the padded pieces.</li>
      *   <li>Calculate all pieces of z" by multiplying the i-th piece of a by the i-th piece of b.</li>
      *   <li>Perform an Inverse Discrete Fourier Transform (IDFT) on z". z" will contain all pieces of
-     *       a*b mod Fn where Fn=2<sup>2<sup>n+1</sup></sup>.</li>
+     *       a*b mod F<sub>n</sub> where F<sub>n</sub>=2<sup>2<sup>n</sup></sup>+1.</li>
      *   <li>Calculate all pieces of z such that each piece is congruent to z' modulo n+2 and congruent to
-     *       z" modulo Fn. This is done using the
+     *       z" modulo F<sub>n</sub>. This is done using the
      *       <a href="http://en.wikipedia.org/wiki/Chinese_remainder_theorem">Chinese remainder theorem</a>.</li>
      *   <li>Calculate c by adding z<sub>i</sub> * 2<sup>i*2<sup>n-1</sup></sup> for all i, where z<sub>i</sub> is the
      *       i-th piece of z.</li>
-     *   <li>Return c reduced modulo 2<sup>2<sup>m+1</sup></sup>.</li>
+     *   <li>Return c reduced modulo 2<sup>2<sup>m</sup></sup>+1. See the code for how m is calculated.</li>
      * </ol>
      *
      * References:
@@ -2126,9 +2132,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Performs a
+     * Performs a modified
      * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
      * Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.<br/>
+     * The modification is that the first step is omitted because only the lower half of the result is needed.<br/>
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
@@ -2241,13 +2248,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n+1</sup></sup>,
+     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
      * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
      */
     private static void addModFn(int[] a, int[] b) {
         boolean carry = false;
@@ -2273,13 +2280,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n+1</sup></sup>,
+     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
      * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
      * <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
      */
     private static void subModFn(int[] a, int[] b) {
         // subtraction works by shifting b by b.length/2, then adding a and b
@@ -2323,8 +2330,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * and 0&le;b&lt;2<sup>n</sup>+1, where n is <code>a.length*32/2</code>; in other words, n is half the number
      * of bits in <code>a</code>.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
      */
     private static int[] multModFn(int[] a, int[] b) {
         int n = a.length / 2;
@@ -2391,7 +2398,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return cpad;
     }
 
+    /**
+     * Reduces a number modulo F<sub>n</sub>. The value of n is determined from the array's length.
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
+     */
     private static void modFn(int[] a) {
+        // Reduction modulo Fn is done by subtracting the upper half from the lower half
         int len = a.length;
         boolean carry = false;
         for (int i=len-1; i>=len/2; i--) {
@@ -2419,7 +2431,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Reduces all subarrays modulo 2<sup>2<sup>n+1</sup></sup> where n=<code>a[i].length*32/2</code> for all i;
+     * Reduces all subarrays modulo 2<sup>2<sup>n</sup></sup>+1 where n=<code>a[i].length*32/2</code> for all i;
      * in other words, n is half the number of bits in the subarray.
      * @param a int arrays whose length is a power of 2
      */
@@ -2429,12 +2441,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n+1</sup></sup>, where n is
+     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n</sup></sup>+1, where n is
      * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
      * "Right" means towards the lower array indices and the lower bits; this is equivalent to
-     * a multiplication by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
+     * a multiplication by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1.<br/>
      * The result is returned in the third argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
      * @param numBits the shift amount in bits
      * @param b the return value; must be at least as long as <code>a</code>
      */
@@ -2456,12 +2468,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Cyclicly shifts a number to the left modulo 2<sup>2<sup>n+1</sup></sup>, where n is
+     * Cyclicly shifts a number to the left modulo 2<sup>2<sup>n</sup></sup>+1, where n is
      * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
      * "Left" means towards the lower array indices and the lower bits; this is equivalent to
-     * a multiplication by 2<sup>numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
+     * a multiplication by 2<sup>numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1.<br/>
      * The result is returned in the third argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
      * @param numBits the shift amount in bits
      * @param b the return value; must be at least as long as <code>a</code>
      */
@@ -2486,8 +2498,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Adds two numbers, <code>a</code> and <code>b</code>, after shifting <code>b</code> by
      * <code>numElements</code> elements.<br/>
      * Both numbers are given as <code>int</code> arrays and must be <b>positive</b> numbers
-     * (meaning they are interpreted as unsigned).</br> The result is returned in the first
-     * argument.
+     * (meaning they are interpreted as unsigned).<br/>
+     * The result is returned in the first argument.
      * If any elements of b are shifted outside the valid range for <code>a</code>, they are dropped.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit
      * @param b a number in base 2<sup>32</sup> starting with the highest digit
