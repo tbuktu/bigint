@@ -143,7 +143,7 @@ public class BigIntegerTest {
             }
         }
 
-        // test square()
+        // test edge cases by squaring numbers of the form 2^n + {-1,0,1}
         Method squareMethod = BigInteger.class.getDeclaredMethod("square");
         squareMethod.setAccessible(true);
         for (int i=0; i<10; i++) {
@@ -153,7 +153,7 @@ public class BigIntegerTest {
 
             BigInteger square = (BigInteger)squareMethod.invoke(x.add(xd));
             BigInteger expected = ONE.shiftLeft(2 * m);
-            expected = expected.add(xd.shiftLeft(m+1));   // add 2*x.multiply(yd)
+            expected = expected.add(xd.shiftLeft(m+1));   // add 2*x.multiply(xd)
             expected = expected.add(xd.multiply(xd));
 
             if (!square.equals(expected)) {
