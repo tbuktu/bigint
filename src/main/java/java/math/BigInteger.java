@@ -2586,7 +2586,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int aIdx = a.length - 1 - aBitLength/32;
         int bit32 = aBitLength % 32;
 
-        for (int i=bStart+bBitLength/32-1; i>=bStart; i--)
+        for (int i=b.length-1-bStart; i>b.length-1-bStart-bBitLength/32; i--)
             if (bit32 > 0) {
                 a[aIdx] |= b[i] << bit32;
                 aIdx--;
@@ -2601,7 +2601,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             aIdx = a.length - 1 - (aBitLength/32 + bBitLength/32);
             int bIdx = bBitLength / 32;
             int bi = b[b.length-1-bStart-bIdx];
-            bi &= -1 >>> (32-bBitLength);
+            bi &= -1 >>> (32-bBitLength%32);
             a[aIdx] |= bi << bit32;
             if (bit32+(bBitLength%32) > 32)
                 a[aIdx-1] = bi >>> (32-bit32);
