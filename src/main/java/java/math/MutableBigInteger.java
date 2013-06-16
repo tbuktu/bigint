@@ -124,6 +124,17 @@ class MutableBigInteger {
     }
 
     /**
+     * Returns an <code>n</code>-int number all of whose bits are ones
+     * @param n number of ints in the <code>mag</code> array
+     * @return a number equal to <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
+     */
+    static MutableBigInteger ones(int n) {
+        int[] val = new int[n];
+        Arrays.fill(val, -1);
+        return new MutableBigInteger(val);
+    }
+
+    /**
      * Internal helper method to return the magnitude array. The caller is not
      * supposed to modify the returned array.
      */
@@ -152,6 +163,14 @@ class MutableBigInteger {
         if (intLen == 0 || sign == 0)
             return BigInteger.ZERO;
         return new BigInteger(getMagnitudeArray(), sign);
+    }
+
+    /**
+     * Converts this number to a nonnegative <code>BigInteger</code>.
+     */
+    BigInteger toBigInteger() {
+        normalize();
+        return toBigInteger(isZero() ? 0 : 1);
     }
 
     /**
@@ -227,6 +246,32 @@ class MutableBigInteger {
         // comparison.
         int[] bval = b.value;
         for (int i = offset, j = b.offset; i < intLen + offset; i++, j++) {
+            int b1 = value[i] + 0x80000000;
+            int b2 = bval[j]  + 0x80000000;
+            if (b1 < b2)
+                return -1;
+            if (b1 > b2)
+                return 1;
+        }
+        return 0;
+    }
+
+    /**
+     * Returns a value equal to what <code>b.leftShift(32*ints); return compare(b);</code>
+     * would return, but doesn't change the value of <code>b</code>.
+     */
+    final int compareShifted(MutableBigInteger b, int ints) {
+        int blen = b.intLen;
+        int alen = intLen - ints;
+        if (alen < blen)
+            return -1;
+        if (alen > blen)
+           return 1;
+
+        // Add Integer.MIN_VALUE to make the comparison act as unsigned integer
+        // comparison.
+        int[] bval = b.value;
+        for (int i = offset, j = b.offset; i < alen + offset; i++, j++) {
             int b1 = value[i] + 0x80000000;
             int b2 = bval[j]  + 0x80000000;
             if (b1 < b2)
@@ -454,6 +499,16 @@ class MutableBigInteger {
     }
 
     /**
+     * Like {@link #rightShift(int)} but <code>n</code> can be grater than the length of the number.
+     */
+    void safeRightShift(int n) {
+        if (n/32 >= intLen)
+            reset();
+        else
+            rightShift(n);
+    }
+
+    /**
      * Right shift this MutableBigInteger n bits. The MutableBigInteger is left
      * in normal form.
      */
@@ -615,6 +670,35 @@ class MutableBigInteger {
     }
 
     /**
+     * Returns a <code>BigInteger</code> equal to the <code>n</code>
+     * low ints of this number.
+     */
+    BigInteger getLower(int n) {
+        if (isZero())
+            return BigInteger.ZERO;
+        else if (intLen < n)
+            return toBigInteger(1);
+        else {
+            // strip zeros
+            int len = n;
+            while (len>0 && value[offset+intLen-len]==0)
+                len--;
+            int sign = len>0 ? 1 : 0;
+            return new BigInteger(Arrays.copyOfRange(value, offset+intLen-len, offset+intLen), sign);
+        }
+    }
+
+    /**
+     * Discards all ints whose index is greater than <code>n</code>.
+     */
+    void keepLower(int n) {
+        if (intLen >= n) {
+            offset += intLen - n;
+            intLen = n;
+        }
+    }
+
+    /**
      * Adds the contents of two MutableBigInteger objects.The result
      * is placed within this MutableBigInteger.
      * The contents of the addend are not changed.
@@ -673,6 +757,110 @@ class MutableBigInteger {
         offset = result.length - resultLen;
     }
 
+    /**
+     * Adds the value of <code>addend</code> shifted <code>n</code> ints to the left.
+     * Has the same effect as <code>addend.leftShift(32*ints); add(b);</code>
+     * but doesn't change the value of <code>b</code>.
+     */
+    void addShifted(MutableBigInteger addend, int n) {
+        if (addend.isZero())
+            return;
+
+        int x = intLen;
+        int y = addend.intLen + n;
+        int resultLen = (intLen > y ? intLen : y);
+        int[] result = (value.length < resultLen ? new int[resultLen] : value);
+
+        int rstart = result.length-1;
+        long sum;
+        long carry = 0;
+
+        // Add common parts of both numbers
+        while(x>0 && y>0) {
+            x--; y--;
+            int bval = y+addend.offset<addend.value.length ? addend.value[y+addend.offset] : 0;
+            sum = (value[x+offset] & LONG_MASK) +
+                (bval & LONG_MASK) + carry;
+            result[rstart--] = (int)sum;
+            carry = sum >>> 32;
+        }
+
+        // Add remainder of the longer number
+        while(x>0) {
+            x--;
+            if (carry == 0 && result == value && rstart == (x + offset))
+                return;
+            sum = (value[x+offset] & LONG_MASK) + carry;
+            result[rstart--] = (int)sum;
+            carry = sum >>> 32;
+        }
+        while(y>0) {
+            y--;
+            int bval = y+addend.offset<addend.value.length ? addend.value[y+addend.offset] : 0;
+            sum = (bval & LONG_MASK) + carry;
+            result[rstart--] = (int)sum;
+            carry = sum >>> 32;
+        }
+
+        if (carry > 0) { // Result must grow in length
+            resultLen++;
+            if (result.length < resultLen) {
+                int temp[] = new int[resultLen];
+                // Result one word longer from carry-out; copy low-order
+                // bits into new result.
+                System.arraycopy(result, 0, temp, 1, result.length);
+                temp[0] = 1;
+                result = temp;
+            } else {
+                result[rstart--] = 1;
+            }
+        }
+
+        value = result;
+        intLen = resultLen;
+        offset = result.length - resultLen;
+    }
+
+    /**
+     * Like {@link #addShifted(MutableBigInteger, int)} but <code>this.intLen</code> must
+     * not be greater than <code>n</code>. In other words, concatenates <code>this</code>
+     * and <code>addend</code>.
+     */
+    void addDisjoint(MutableBigInteger addend, int n) {
+        if (addend.isZero())
+            return;
+
+        int x = intLen;
+        int y = addend.intLen + n;
+        int resultLen = (intLen > y ? intLen : y);
+        int[] result = (value.length < resultLen ? new int[resultLen] : value);
+
+        int rstart = result.length-1;
+
+        // Add common parts of both numbers
+        System.arraycopy(value, offset, result, rstart+1-x, x);
+        y -= x;
+        rstart -= x;
+
+        System.arraycopy(addend.value, addend.offset, result, rstart+1-y, Math.min(y, addend.value.length-addend.offset));
+
+        value = result;
+        intLen = resultLen;
+        offset = result.length - resultLen;
+    }
+
+    /**
+     * Adds the low <code>n</code> ints of <code>addend</code>.
+     */
+    void addLower(MutableBigInteger addend, int n) {
+        MutableBigInteger a = new MutableBigInteger(addend);
+        if (a.offset + a.intLen >= n) {
+            a.offset = a.offset + a.intLen - n;
+            a.intLen = n;
+        }
+        a.normalize();
+        add(a);
+    }
 
     /**
      * Subtracts the smaller of this and b from the larger and places the
