@@ -124,14 +124,16 @@ class MutableBigInteger {
     }
 
     /**
-     * Returns an <code>n</code>-int number all of whose bits are ones
-     * @param n number of ints in the <code>mag</code> array
-     * @return a number equal to <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
+     * Makes this number an <code>n</code>-int number all of whose bits are ones
+     * @param n number of ints in the <code>value</code> array
+     * @return a number equal to <code>((1<<(32*n)))-1</code>
      */
-    static MutableBigInteger ones(int n) {
-        int[] val = new int[n];
-        Arrays.fill(val, -1);
-        return new MutableBigInteger(val);
+    void ones(int n) {
+        if (n > value.length)
+            value = new int[n];
+        Arrays.fill(value, -1);
+        offset = 0;
+        intLen = n;
     }
 
     /**
@@ -1166,6 +1168,99 @@ class MutableBigInteger {
             }
         }
         return divideMagnitude(b, quotient, needReminder);
+    }
+
+    /**
+     * This method implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
+     * It divides a 2n-digit number by a n-digit number.<br/>
+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.
+     * <br/>
+     * <code>this</code> must be a nonnegative number such that <code>this.bitLength() <= 2*b.bitLength()</code>
+     * @param b a positive number such that <code>b.bitLength()</code> is even
+     * @param quotient output parameter for <code>this/b</code>
+     * @return <code>this%b</code>
+     */
+    MutableBigInteger divide2n1n(MutableBigInteger b, MutableBigInteger quotient) {
+        // TODO: make it work without this
+        quotient.clear();
+        quotient.value = new int[1];
+
+        int n = b.intLen;
+        if (n%2!=0 || n<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
+            return divideKnuth(b, quotient);
+
+        // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
+        MutableBigInteger aUpper = new MutableBigInteger(this);
+        aUpper.safeRightShift(32*(n/2));
+        MutableBigInteger c1Quot = new MutableBigInteger();
+        MutableBigInteger c1Rem;
+        c1Rem = aUpper.divide3n2n(b, c1Quot);
+
+        // divide the concatenation of c1Rem and a4 by b
+        keepLower(n/2);   // a = a4
+        addDisjoint(c1Rem, n/2);   // a = (c1Rem, a4)
+        MutableBigInteger c2Rem;
+        c2Rem = divide3n2n(b, quotient);
+
+        // quotient = the concatentation of the two above quotients
+        quotient.addDisjoint(c1Quot, n/2);
+        return c2Rem;
+    }
+
+    /**
+     * This method implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
+     * It divides a 3n-digit number by a 2n-digit number.<br/>
+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
+     * <br/>
+     * <code>this</code> must be a nonnegative number such that <code>2*this.bitLength() <= 3*b.bitLength()</code>
+     * @param quotient output parameter for <code>this/b</code>
+     * @return <code>a%b</code>
+     */
+    MutableBigInteger divide3n2n(MutableBigInteger b, MutableBigInteger quotient) {
+        int n = b.intLen / 2;   // half the length of b in ints
+
+        // split a in 2 parts of length n or less
+        MutableBigInteger b1 = new MutableBigInteger(b);
+        b1.safeRightShift(n * 32);
+        BigInteger b2 = b.getLower(n);
+
+        MutableBigInteger r;
+        // a12 = this shifted to the right by n ints
+        MutableBigInteger a12 = new MutableBigInteger(this);
+        a12.safeRightShift(32*n);
+        MutableBigInteger d;
+        if (compareShifted(b, n) < 0) {   // if ((a>>2*n*32) < (b>>n*32))
+            // quotient=a12/b1, r=a12%b1
+            r = a12.divide2n1n(b1, quotient);
+            d = new MutableBigInteger(quotient.toBigInteger().multiply(b2));
+        }
+        else {
+            // quotient=beta^n-1, r=a12-b1*2^n+b1
+            quotient.ones(n);
+            a12.add(b1);
+            b1.leftShift(32*n);
+            a12.subtract(b1);
+            r = a12;
+
+            // d = quotient*b2
+            d = new MutableBigInteger(b2);
+            d.leftShift(32 * n);
+            d.subtract(new MutableBigInteger(b2));
+        }
+
+        // r = r*beta^n + a3 - d (paper says a4) where a3=the low n ints of a
+        // However, don't subtract d until after the while loop so r doesn't become negative
+        r.leftShift(32 * n);
+        r.addLower(this, n);
+
+        // add b until r>=d
+        while (r.compare(d) < 0) {
+            r.add(b);
+            quotient.subtract(MutableBigInteger.ONE);
+        }
+        r.subtract(d);
+
+        return r;
     }
 
     /**
