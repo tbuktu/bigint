@@ -2912,7 +2912,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param bitLength the number of bits in each of the two inputs
      * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
      */
-    private boolean shouldDivideBarrett(int bitLength) {
+    static boolean shouldDivideBarrett(int bitLength) {
         if (bitLength < 3300000)
             return false;
         if (bitLength < 4100000)

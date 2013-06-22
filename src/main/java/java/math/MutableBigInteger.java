@@ -1116,8 +1116,10 @@ class MutableBigInteger {
     MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
         if (intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD || b.intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
             return divideKnuth(b, quotient, needReminder);
+        else if (!BigInteger.shouldDivideBarrett(32 * Math.min(intLen, b.intLen)))
+            return divideAndRemainderBurnikelZiegler(b, quotient);
         else {
-            // For numbers above the BURNIKEL_ZIEGLER_THRESHOLD, use the algorithms in BigInteger
+            // For numbers in the Barrett range, use the algorithms in BigInteger
             BigInteger[] quotRem = toBigInteger(1).divideAndRemainder(b.toBigInteger(1));
             MutableBigInteger quotTemp = new MutableBigInteger(quotRem[0]);
             quotient.setValue(quotTemp.value, quotTemp.intLen);
