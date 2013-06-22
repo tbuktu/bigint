@@ -1217,6 +1217,7 @@ class MutableBigInteger {
             z.addDisjoint(a1, n);   // Z[t-2]
             MutableBigInteger cQuot = new MutableBigInteger();
             MutableBigInteger cRem;
+            quotient.offset = quotient.intLen = 0;
             for (int i=t-2; i>0; i--) {
                 cRem = z.divide2n1n(bMutable, cQuot);
                 z = getBlock(i-1, t, n);
