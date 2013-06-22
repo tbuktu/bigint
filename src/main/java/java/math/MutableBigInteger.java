@@ -1245,7 +1245,7 @@ class MutableBigInteger {
      * @param quotient output parameter for <code>this/b</code>
      * @return <code>this%b</code>
      */
-    MutableBigInteger divide2n1n(MutableBigInteger b, MutableBigInteger quotient) {
+    private MutableBigInteger divide2n1n(MutableBigInteger b, MutableBigInteger quotient) {
         // TODO: make it work without this
         quotient.clear();
         quotient.value = new int[1];
@@ -1281,7 +1281,7 @@ class MutableBigInteger {
      * @param quotient output parameter for <code>this/b</code>
      * @return <code>a%b</code>
      */
-    MutableBigInteger divide3n2n(MutableBigInteger b, MutableBigInteger quotient) {
+    private MutableBigInteger divide3n2n(MutableBigInteger b, MutableBigInteger quotient) {
         int n = b.intLen / 2;   // half the length of b in ints
 
         // split a in 2 parts of length n or less
