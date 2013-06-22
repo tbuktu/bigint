@@ -2993,96 +2993,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return an array containing the quotient and remainder
      */
     private BigInteger[] divideAndRemainderBurnikelZiegler(BigInteger val) {
-        BigInteger[] c = divideAndRemainderBurnikelZieglerPositive(abs(), val.abs());
-
-        // fix signs
-        if (signum*val.signum < 0)
-            c[0] = c[0].negate();
-        if (signum < 0)
-            c[1] = c[1].negate();
-        return c;
-    }
-
-    /**
-     * Computes <code>a/b</code> and <code>a%b</code> using the
-     * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
-     * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
-     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
-     * <code>a</code> and <code>b</code> must be nonnegative.
-     * @param a the dividend
-     * @param b the divisor
-     * @return an array containing the quotient and remainder
-     */
-    private static BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
-        int r = a.mag.length;
-        int s = b.mag.length;
-
-        if (r < s)
-            return new BigInteger[] {ZERO, a};
-        else {
-            // let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
-            int m = 1 << (32-Integer.numberOfLeadingZeros(s/BURNIKEL_ZIEGLER_THRESHOLD));
-
-            int j = (s+m-1) / m;      // j = ceil(s/m)
-            int n = j * m;            // block length in 32-bit units
-            int n32 = 32 * n;         // block length in bits
-            int sigma = Math.max(0, n32 - b.bitLength());
-            b = b.shiftLeft(sigma);   // shift b so its length is a multiple of n
-            a = a.shiftLeft(sigma);   // shift a by the same amount
-
-            // t is the number of blocks needed to accommodate 'a' plus one additional bit
-            int t = (a.bitLength()+n32) / n32;
-            if (t < 2)
-                t = 2;
-            BigInteger a1 = a.getBlock(t-1, t, n);   // the most significant block of a
-            BigInteger a2 = a.getBlock(t-2, t, n);   // the second to most significant block
-
-            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
-            MutableBigInteger z = new MutableBigInteger(a1.shiftLeftInts(n).add(a2));   // Z[t-2]
-            MutableBigInteger quotient = new MutableBigInteger(0);
-            MutableBigInteger cQuot = new MutableBigInteger();
-            MutableBigInteger cRem;
-            for (int i=t-2; i>0; i--) {
-                cRem = z.divide2n1n(new MutableBigInteger(b), cQuot);
-                z = new MutableBigInteger(a.getBlock(i-1, t, n));
-                z.addDisjoint(cRem, n);
-                quotient.addShifted(cQuot, i*n);
-            }
-            // do the loop one more time for i=0 but leave z unchanged
-            cRem = z.divide2n1n(new MutableBigInteger(b), cQuot);
-            quotient.add(cQuot);
-
-            BigInteger remainder = cRem.toBigInteger().shiftRight(sigma);   // a and b were shifted, so shift back
-            quotient.normalize();
-            BigInteger quotientBigInt = quotient.toBigInteger();
-            return new BigInteger[] {quotientBigInt, remainder};
-        }
-    }
-
-    /**
-     * Returns a <code>BigInteger</code> containing <code>blockLength</code> ints from
-     * <code>this</code> number, starting at <code>index*blockLength</code>.<br/>
-     * Used by Burnikel-Ziegler division.
-     * @param index the block index
-     * @param numBlocks the total number of blocks in <code>this</code> number
-     * @param blockLength length of one block in units of 32 bits
-     * @return
-     */
-    private BigInteger getBlock(int index, int numBlocks, int blockLength) {
-        int blockStart = index * blockLength;
-        if (blockStart >= mag.length)
-            return ZERO;
-
-        int blockEnd;
-        if (index == numBlocks-1)
-            blockEnd = (bitLength()+31) / 32;
-        else
-            blockEnd = (index+1) * blockLength;
-        if (blockEnd > mag.length)
-            return ZERO;
-
-        int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, mag.length-blockEnd, mag.length-blockStart));
-        return new BigInteger(newMag, signum);
+        MutableBigInteger q = new MutableBigInteger();
+        MutableBigInteger r = new MutableBigInteger(this).divideAndRemainderBurnikelZiegler(new MutableBigInteger(val), q);
+        BigInteger qBigInt = q.isZero() ? ZERO : q.toBigInteger(signum*val.signum);
+        BigInteger rBigInt = r.isZero() ? ZERO : r.toBigInteger(signum);
+        return new BigInteger[] {qBigInt, rBigInt};
     }
 
     /** Barrett division */

@@ -532,6 +532,14 @@ class MutableBigInteger {
     }
 
     /**
+     * Like {@link #leftShift(int)} but <code>n</code> can be zero.
+     */
+    void safeLeftShift(int n) {
+        if (n > 0)
+            leftShift(n);
+    }
+
+    /**
      * Left shift this MutableBigInteger n bits.
      */
     void leftShift(int n) {
@@ -1171,6 +1179,60 @@ class MutableBigInteger {
     }
 
     /**
+     * Computes <code>this/b</code> and <code>this%b</code> using the
+     * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
+     * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
+     * <code>this</code> and <code>b</code> must be nonnegative.
+     * @param b the divisor
+     * @param quotient output parameter for <code>this/b</code>
+     * @return the remainder
+     */
+    MutableBigInteger divideAndRemainderBurnikelZiegler(MutableBigInteger b, MutableBigInteger quotient) {
+        int r = intLen;
+        int s = b.intLen;
+
+        if (r < s)
+            return this;
+        else {
+            // let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
+            int m = 1 << (32-Integer.numberOfLeadingZeros(s/BigInteger.BURNIKEL_ZIEGLER_THRESHOLD));
+
+            int j = (s+m-1) / m;      // j = ceil(s/m)
+            int n = j * m;            // block length in 32-bit units
+            int n32 = 32 * n;         // block length in bits
+            int sigma = Math.max(0, n32 - b.bitLength());
+            MutableBigInteger bMutable = new MutableBigInteger(b);
+            bMutable.safeLeftShift(sigma);   // shift b so its length is a multiple of n
+            safeLeftShift(sigma);     // shift this by the same amount
+
+            // t is the number of blocks needed to accommodate this plus one additional bit
+            int t = (bitLength()+n32) / n32;
+            if (t < 2)
+                t = 2;
+
+            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
+            MutableBigInteger a1 = getBlock(t-1, t, n);   // the most significant block of this
+            MutableBigInteger z = getBlock(t-2, t, n);   // the second to most significant block
+            z.addDisjoint(a1, n);   // Z[t-2]
+            MutableBigInteger cQuot = new MutableBigInteger();
+            MutableBigInteger cRem;
+            for (int i=t-2; i>0; i--) {
+                cRem = z.divide2n1n(bMutable, cQuot);
+                z = getBlock(i-1, t, n);
+                z.addDisjoint(cRem, n);
+                quotient.addShifted(cQuot, i*n);
+            }
+            // do the loop one more time for i=0 but leave z unchanged
+            cRem = z.divide2n1n(bMutable, cQuot);
+            quotient.add(cQuot);
+
+            cRem.rightShift(sigma);   // this and b were shifted, so shift back
+            return cRem;
+        }
+    }
+
+    /**
      * This method implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
      * It divides a 2n-digit number by a n-digit number.<br/>
      * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.
@@ -1261,6 +1323,39 @@ class MutableBigInteger {
         r.subtract(d);
 
         return r;
+    }
+
+    /**
+     * Returns a <code>MutableBigInteger</code> containing <code>blockLength</code> ints from
+     * <code>this</code> number, starting at <code>index*blockLength</code>.<br/>
+     * Used by Burnikel-Ziegler division.
+     * @param index the block index
+     * @param numBlocks the total number of blocks in <code>this</code> number
+     * @param blockLength length of one block in units of 32 bits
+     * @return
+     */
+    MutableBigInteger getBlock(int index, int numBlocks, int blockLength) {
+        int blockStart = index * blockLength;
+        if (blockStart >= intLen)
+            return new MutableBigInteger();
+
+        int blockEnd;
+        if (index == numBlocks-1)
+            blockEnd = intLen;
+        else
+            blockEnd = (index+1) * blockLength;
+        if (blockEnd > intLen)
+            return new MutableBigInteger();
+
+        int[] newVal = Arrays.copyOfRange(value, offset+intLen-blockEnd, offset+intLen-blockStart);
+        return new MutableBigInteger(newVal);
+    }
+
+    /** @see BigInteger#bitLength() */
+    int bitLength() {
+        if (intLen == 0)
+            return 0;
+        return intLen*32 - Integer.numberOfLeadingZeros(value[offset]);
     }
 
     /**
