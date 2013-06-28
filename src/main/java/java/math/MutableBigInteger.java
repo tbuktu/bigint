@@ -1265,14 +1265,12 @@ class MutableBigInteger {
         MutableBigInteger aUpper = new MutableBigInteger(this);
         aUpper.safeRightShift(32*(n/2));
         MutableBigInteger c1Quot = new MutableBigInteger();
-        MutableBigInteger c1Rem;
-        c1Rem = aUpper.divide3n2n(b, c1Quot);
+        MutableBigInteger c1Rem = aUpper.divide3n2n(b, c1Quot);
 
         // divide the concatenation of c1Rem and a4 by b
         keepLower(n/2);   // a = a4
         addDisjoint(c1Rem, n/2);   // a = (c1Rem, a4)
-        MutableBigInteger c2Rem;
-        c2Rem = divide3n2n(b, quotient);
+        MutableBigInteger c2Rem = divide3n2n(b, quotient);
 
         // quotient = the concatentation of the two above quotients
         quotient.addDisjoint(c1Quot, n/2);
