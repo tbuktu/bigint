@@ -853,7 +853,7 @@ class MutableBigInteger {
 
         int rstart = result.length-1;
 
-        // Add common parts of both numbers
+        // copy from this if needed
         System.arraycopy(value, offset, result, rstart+1-x, x);
         y -= x;
         rstart -= x;
