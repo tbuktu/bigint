@@ -843,7 +843,13 @@ class MutableBigInteger {
         int x = intLen;
         int y = addend.intLen + n;
         int resultLen = (intLen > y ? intLen : y);
-        int[] result = (value.length < resultLen ? new int[resultLen] : value);
+        int[] result;
+        if (value.length < resultLen)
+            result = new int[resultLen];
+        else {
+            result = value;
+            Arrays.fill(value, offset+intLen, value.length, 0);
+        }
 
         int rstart = result.length-1;
 
@@ -852,7 +858,12 @@ class MutableBigInteger {
         y -= x;
         rstart -= x;
 
-        System.arraycopy(addend.value, addend.offset, result, rstart+1-y, Math.min(y, addend.value.length-addend.offset));
+        int len = Math.min(y, addend.value.length-addend.offset);
+        System.arraycopy(addend.value, addend.offset, result, rstart+1-y, len);
+
+        // zero the gap
+        for (int i=rstart+1-y+len; i<rstart+1; i++)
+            result[i] = 0;
 
         value = result;
         intLen = resultLen;
@@ -1246,10 +1257,6 @@ class MutableBigInteger {
      * @return <code>this%b</code>
      */
     private MutableBigInteger divide2n1n(MutableBigInteger b, MutableBigInteger quotient) {
-        // TODO: make it work without this
-        quotient.clear();
-        quotient.value = new int[1];
-
         int n = b.intLen;
         if (n%2!=0 || n<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
             return divideKnuth(b, quotient);
