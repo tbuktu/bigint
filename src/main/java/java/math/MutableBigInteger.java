@@ -1159,7 +1159,7 @@ class MutableBigInteger {
 
         // Dividend is zero
         if (intLen == 0) {
-            quotient.intLen = quotient.offset;
+            quotient.intLen = quotient.offset = 0;
             return needReminder ? new MutableBigInteger() : null;
         }
 
