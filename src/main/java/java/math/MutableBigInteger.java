@@ -1199,7 +1199,8 @@ class MutableBigInteger {
      * Computes <code>this/b</code> and <code>this%b</code> using the
      * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
      * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
-     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
+     * The parameter beta was chosen to b 2<sup>32</sup> so almost all shifts are
+     * multiples of 32 bits.<br/>
      * <code>this</code> and <code>b</code> must be nonnegative.
      * @param b the divisor
      * @param quotient output parameter for <code>this/b</code>
@@ -1212,41 +1213,48 @@ class MutableBigInteger {
         if (r < s)
             return this;
         else {
-            // let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
+            // step 1: let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
             int m = 1 << (32-Integer.numberOfLeadingZeros(s/BigInteger.BURNIKEL_ZIEGLER_THRESHOLD));
 
-            int j = (s+m-1) / m;      // j = ceil(s/m)
-            int n = j * m;            // block length in 32-bit units
+            int j = (s+m-1) / m;      // step 2a: j = ceil(s/m)
+            int n = j * m;            // step 2b: block length in 32-bit units
             int n32 = 32 * n;         // block length in bits
-            int sigma = Math.max(0, n32 - b.bitLength());
+            int sigma = Math.max(0, n32 - b.bitLength());   // step 3: sigma = max{T | (2^T)*B < beta^n}
             MutableBigInteger bMutable = new MutableBigInteger(b);
-            bMutable.safeLeftShift(sigma);   // shift b so its length is a multiple of n
-            safeLeftShift(sigma);     // shift this by the same amount
+            bMutable.safeLeftShift(sigma);   // step 4a: shift b so its length is a multiple of n
+            safeLeftShift(sigma);     // step 4b: shift this by the same amount
 
-            // t is the number of blocks needed to accommodate this plus one additional bit
+            // step 5: t is the number of blocks needed to accommodate this plus one additional bit
             int t = (bitLength()+n32) / n32;
             if (t < 2)
                 t = 2;
 
-            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
+            // step 6: conceptually split this into blocks a[t-1], ..., a[0]
             MutableBigInteger a1 = getBlock(t-1, t, n);   // the most significant block of this
-            MutableBigInteger z = getBlock(t-2, t, n);   // the second to most significant block
-            z.addDisjoint(a1, n);   // Z[t-2]
-            MutableBigInteger cQuot = new MutableBigInteger();
-            MutableBigInteger cRem;
+
+            // step 7: z[t-2] = [a[t-1], a[t-2]]
+            MutableBigInteger z = getBlock(t-2, t, n);    // the second to most significant block
+            z.addDisjoint(a1, n);   // z[t-2]
+
+            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
+            MutableBigInteger qi = new MutableBigInteger();
+            MutableBigInteger ri;
             quotient.offset = quotient.intLen = 0;
             for (int i=t-2; i>0; i--) {
-                cRem = z.divide2n1n(bMutable, cQuot);
-                z = getBlock(i-1, t, n);
-                z.addDisjoint(cRem, n);
-                quotient.addShifted(cQuot, i*n);
-            }
-            // do the loop one more time for i=0 but leave z unchanged
-            cRem = z.divide2n1n(bMutable, cQuot);
-            quotient.add(cQuot);
+                // step 8a: compute (qi,ri) such that z=b*qi+ri
+                ri = z.divide2n1n(bMutable, qi);
 
-            cRem.rightShift(sigma);   // this and b were shifted, so shift back
-            return cRem;
+                // step 8b: z = [ri, a[i-1]]
+                z = getBlock(i-1, t, n);   // a[i-1]
+                z.addDisjoint(ri, n);
+                quotient.addShifted(qi, i*n);   // update q (part of step 9)
+            }
+            // final iteration of step 8: do the loop one more time for i=0 but leave z unchanged
+            ri = z.divide2n1n(bMutable, qi);
+            quotient.add(qi);
+
+            ri.rightShift(sigma);   // step 9: this and b were shifted, so shift back
+            return ri;
         }
     }
 
@@ -1262,23 +1270,27 @@ class MutableBigInteger {
      */
     private MutableBigInteger divide2n1n(MutableBigInteger b, MutableBigInteger quotient) {
         int n = b.intLen;
+
+        // step 1: base case
         if (n%2!=0 || n<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
             return divideKnuth(b, quotient);
 
-        // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
+        // step 2: view this as [a1,a2,a3,a4] where each ai is n/2 ints or less
         MutableBigInteger aUpper = new MutableBigInteger(this);
-        aUpper.safeRightShift(32*(n/2));
-        MutableBigInteger c1Quot = new MutableBigInteger();
-        MutableBigInteger c1Rem = aUpper.divide3n2n(b, c1Quot);
+        aUpper.safeRightShift(32*(n/2));   // aUpper = [a1,a2,a3]
+        keepLower(n/2);   // this = a4
 
-        // divide the concatenation of c1Rem and a4 by b
-        keepLower(n/2);   // a = a4
-        addDisjoint(c1Rem, n/2);   // a = (c1Rem, a4)
-        MutableBigInteger c2Rem = divide3n2n(b, quotient);
+        // step 3: q1=aUpper/b, r1=aUpper%b
+        MutableBigInteger q1 = new MutableBigInteger();
+        MutableBigInteger r1 = aUpper.divide3n2n(b, q1);
 
-        // quotient = the concatentation of the two above quotients
-        quotient.addDisjoint(c1Quot, n/2);
-        return c2Rem;
+        // step 4: quotient=[r1,this]/b, r2=[r1,this]%b
+        addDisjoint(r1, n/2);   // this = [r1,this]
+        MutableBigInteger r2 = divide3n2n(b, quotient);
+
+        // step 5: let quotient=[q1,quotient] and return r2
+        quotient.addDisjoint(q1, n/2);
+        return r2;
     }
 
     /**
@@ -1288,46 +1300,49 @@ class MutableBigInteger {
      * <br/>
      * <code>this</code> must be a nonnegative number such that <code>2*this.bitLength() <= 3*b.bitLength()</code>
      * @param quotient output parameter for <code>this/b</code>
-     * @return <code>a%b</code>
+     * @return <code>this%b</code>
      */
     private MutableBigInteger divide3n2n(MutableBigInteger b, MutableBigInteger quotient) {
         int n = b.intLen / 2;   // half the length of b in ints
 
-        // split a in 2 parts of length n or less
+        // step 1: view this as [a1,a2,a3] where each ai is n ints or less; let a12=[a1,a2]
+        MutableBigInteger a12 = new MutableBigInteger(this);
+        a12.safeRightShift(32*n);
+
+        // step 2: view b as [b1,b2] where each bi is n ints or less
         MutableBigInteger b1 = new MutableBigInteger(b);
         b1.safeRightShift(n * 32);
         BigInteger b2 = b.getLower(n);
 
         MutableBigInteger r;
-        // a12 = this shifted to the right by n ints
-        MutableBigInteger a12 = new MutableBigInteger(this);
-        a12.safeRightShift(32*n);
         MutableBigInteger d;
-        if (compareShifted(b, n) < 0) {   // if ((a>>2*n*32) < (b>>n*32))
-            // quotient=a12/b1, r=a12%b1
+        if (compareShifted(b, n) < 0) {
+            // step 3a: if a1<b1, let quotient=a12/b1 and r=a12%b1
             r = a12.divide2n1n(b1, quotient);
+
+            // step 4: d=quotient*b2
             d = new MutableBigInteger(quotient.toBigInteger().multiply(b2));
         }
         else {
-            // quotient=beta^n-1, r=a12-b1*2^n+b1
+            // step 3b: if a1>=b1, let quotient=beta^n-1 and r=a12-b1*2^n+b1
             quotient.ones(n);
             a12.add(b1);
             b1.leftShift(32*n);
             a12.subtract(b1);
             r = a12;
 
-            // d = quotient*b2
+            // step 4: d=quotient*b2
             d = new MutableBigInteger(b2);
             d.leftShift(32 * n);
             d.subtract(new MutableBigInteger(b2));
         }
 
-        // r = r*beta^n + a3 - d (paper says a4) where a3=the low n ints of a
+        // step 5: r = r*beta^n + a3 - d (paper says a4)
         // However, don't subtract d until after the while loop so r doesn't become negative
         r.leftShift(32 * n);
         r.addLower(this, n);
 
-        // add b until r>=d
+        // step 6: add b until r>=d
         while (r.compare(d) < 0) {
             r.add(b);
             quotient.subtract(MutableBigInteger.ONE);
