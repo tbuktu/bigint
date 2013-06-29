@@ -129,7 +129,7 @@ class MutableBigInteger {
      * @param n number of ints in the <code>value</code> array
      * @return a number equal to <code>((1<<(32*n)))-1</code>
      */
-    void ones(int n) {
+    private void ones(int n) {
         if (n > value.length)
             value = new int[n];
         Arrays.fill(value, -1);
@@ -263,7 +263,7 @@ class MutableBigInteger {
      * Returns a value equal to what <code>b.leftShift(32*ints); return compare(b);</code>
      * would return, but doesn't change the value of <code>b</code>.
      */
-    final int compareShifted(MutableBigInteger b, int ints) {
+    private int compareShifted(MutableBigInteger b, int ints) {
         int blen = b.intLen;
         int alen = intLen - ints;
         if (alen < blen)
@@ -684,7 +684,7 @@ class MutableBigInteger {
      * Returns a <code>BigInteger</code> equal to the <code>n</code>
      * low ints of this number.
      */
-    BigInteger getLower(int n) {
+    private BigInteger getLower(int n) {
         if (isZero())
             return BigInteger.ZERO;
         else if (intLen < n)
@@ -702,7 +702,7 @@ class MutableBigInteger {
     /**
      * Discards all ints whose index is greater than <code>n</code>.
      */
-    void keepLower(int n) {
+    private void keepLower(int n) {
         if (intLen >= n) {
             offset += intLen - n;
             intLen = n;
@@ -1346,7 +1346,7 @@ class MutableBigInteger {
      * @param blockLength length of one block in units of 32 bits
      * @return
      */
-    MutableBigInteger getBlock(int index, int numBlocks, int blockLength) {
+    private MutableBigInteger getBlock(int index, int numBlocks, int blockLength) {
         int blockStart = index * blockLength;
         if (blockStart >= intLen)
             return new MutableBigInteger();
