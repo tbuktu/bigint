@@ -2862,7 +2862,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     public BigInteger divide(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return divideKnuth(val);
-        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+        else if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length))
             return divideBurnikelZiegler(val);
         else
             return divideBarrett(val);
@@ -2899,7 +2899,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     public BigInteger[] divideAndRemainder(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return divideAndRemainderKnuth(val);
-        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+        else if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length))
             return divideAndRemainderBurnikelZiegler(val);
         else
             return divideAndRemainderBarrett(val);
@@ -2908,23 +2908,23 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Estimates whether Barrett Division will be more efficient than Burnikel-Ziegler when
      * dividing two numbers of a given length in bits.
-     * @param bitLength the number of bits in each of the two inputs
+     * @param length the number of ints in each of the two inputs
      * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
      */
-    static boolean shouldDivideBarrett(int bitLength) {
-        if (bitLength < 3300000)
+    static boolean shouldDivideBarrett(int length) {
+        if (length < 103125)
             return false;
-        if (bitLength < 4100000)
+        if (length < 131072)   // 2^17
             return true;
-        if (bitLength < 5900000)
+        if (length < 184375)
             return false;
-        if (bitLength < 8300000)
+        if (length < 262144)   // 2^18
             return true;
-        if (bitLength < 9700000)
+        if (length < 303125)
             return false;
-        if (bitLength < 16000000)
+        if (length < 524288)   // 2^19
             return true;
-        if (bitLength < 19000000)
+        if (length < 593750)
             return false;
         return true;
     }
@@ -2952,7 +2952,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     public BigInteger remainder(BigInteger val) {
         if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
             return remainderKnuth(val);
-        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
+        else if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length))
             return remainderBurnikelZiegler(val);
         else
             return remainderBarrett(val);
