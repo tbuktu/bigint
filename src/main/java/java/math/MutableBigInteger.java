@@ -124,7 +124,8 @@ class MutableBigInteger {
     }
 
     /**
-     * Makes this number an <code>n</code>-int number all of whose bits are ones
+     * Makes this number an <code>n</code>-int number all of whose bits are ones.
+     * Used by Burnikel-Ziegler division.
      * @param n number of ints in the <code>value</code> array
      * @return a number equal to <code>((1<<(32*n)))-1</code>
      */
@@ -1138,6 +1139,9 @@ class MutableBigInteger {
         }
     }
 
+    /**
+     * @see #divideKnuth(MutableBigInteger, MutableBigInteger, boolean)
+     */
     MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient) {
         return divideKnuth(b,quotient,true);
     }

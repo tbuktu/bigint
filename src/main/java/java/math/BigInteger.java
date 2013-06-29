@@ -1754,8 +1754,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns a new BigInteger representing n lower ints of the number.
-     * This is used by Karatsuba multiplication, Karatsuba squaring,
-     * and Burnikel-Ziegler division.
+     * This is used by Karatsuba multiplication and Karatsuba squaring.
      */
     private BigInteger getLower(int n) {
         int len = mag.length;
@@ -1771,8 +1770,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns a new BigInteger representing mag.length-n upper
-     * ints of the number.  This is used by Karatsuba multiplication,
-     * Karatsuba squaring, and Burnikel-Ziegler division.
+     * ints of the number.  This is used by Karatsuba multiplication and
+     * Karatsuba squaring.
      */
     private BigInteger getUpper(int n) {
         int len = mag.length;
