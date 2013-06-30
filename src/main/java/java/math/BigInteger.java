@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,10 +29,15 @@
 
 package java.math;
 
-import java.util.Random;
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectStreamField;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Random;
+import sun.misc.DoubleConsts;
+import sun.misc.FloatConsts;
 
 /**
  * Immutable arbitrary-precision integers.  All operations behave as if
@@ -187,9 +192,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * The threshold value for using 3-way Toom-Cook multiplication.
-     * If the number of ints in both mag arrays are greater than this number,
-     * then Toom-Cook multiplication will be used.   This value is found
-     * experimentally to work well.
+     * If the number of ints in each mag array is greater than the
+     * Karatsuba threshold, and the number of ints in at least one of
+     * the mag arrays is greater than this threshold, then Toom-Cook
+     * multiplication will be used.
      */
     private static final int TOOM_COOK_THRESHOLD = 75;
 
@@ -1083,7 +1089,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             negConst[i] = new BigInteger(magnitude, -1);
         }
 
-        /**
+        /*
          * Initialize the cache of radix^(2^x) values used for base conversion
          * with just the very first value.  Additional values will be created
          * on demand.
@@ -1408,7 +1414,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         {
             int resultSign = signum == val.signum ? 1 : -1;
             if (val.mag.length == 1) {
-                return  multiplyByInt(mag,val.mag[0], resultSign);
+                return multiplyByInt(mag,val.mag[0], resultSign);
             }
             if(mag.length == 1) {
                 return multiplyByInt(val.mag,mag[0], resultSign);
@@ -1661,17 +1667,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
 
-    /** Returns a slice of a BigInteger for use in Toom-Cook multiplication.
-        @param lowerSize The size of the lower-order bit slices.
-        @param upperSize The size of the higher-order bit slices.
-        @param slice The index of which slice is requested, which must be a
-            number from 0 to size-1.  Slice 0 is the highest-order bits,
-            and slice size-1 are the lowest-order bits.
-            Slice 0 may be of different size than the other slices.
-        @param fullsize The size of the larger integer array, used to align
-            slices to the appropriate position when multiplying different-sized
-            numbers.
-    */
+    /**
+     * Returns a slice of a BigInteger for use in Toom-Cook multiplication.
+     *
+     * @param lowerSize The size of the lower-order bit slices.
+     * @param upperSize The size of the higher-order bit slices.
+     * @param slice The index of which slice is requested, which must be a
+     * number from 0 to size-1. Slice 0 is the highest-order bits, and slice
+     * size-1 are the lowest-order bits. Slice 0 may be of different size than
+     * the other slices.
+     * @param fullsize The size of the larger integer array, used to align
+     * slices to the appropriate position when multiplying different-sized
+     * numbers.
+     */
     private BigInteger getToomSlice(int lowerSize, int upperSize, int slice,
                                     int fullsize)
     {
@@ -1712,12 +1720,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(trustedStripLeadingZeroInts(intSlice), 1);
     }
 
-    /** Does an exact division (that is, the remainder is known to be zero)
-        of the specified number by 3.  This is used in Toom-Cook
-        multiplication.  This is an efficient algorithm that runs in linear
-        time.  If the argument is not exactly divisible by 3, results are
-        undefined.  Note that this is expected to be called with positive
-        arguments only. */
+    /**
+     * Does an exact division (that is, the remainder is known to be zero)
+     * of the specified number by 3.  This is used in Toom-Cook
+     * multiplication.  This is an efficient algorithm that runs in linear
+     * time.  If the argument is not exactly divisible by 3, results are
+     * undefined.  Note that this is expected to be called with positive
+     * arguments only.
+     */
     private BigInteger exactDivideBy3()
     {
         int len = mag.length;
@@ -4787,8 +4797,72 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return this BigInteger converted to a {@code float}.
      */
     public float floatValue() {
-        // Somewhat inefficient, but guaranteed to work.
-        return Float.parseFloat(this.toString());
+        if (signum == 0) {
+            return 0.0f;
+        }
+
+        int exponent = ((mag.length - 1) << 5) + bitLengthForInt(mag[0]) - 1;
+
+        // exponent == floor(log2(abs(this)))
+        if (exponent < Long.SIZE - 1) {
+            return longValue();
+        } else if (exponent > Float.MAX_EXPONENT) {
+            return signum > 0 ? Float.POSITIVE_INFINITY : Float.NEGATIVE_INFINITY;
+        }
+
+        /*
+         * We need the top SIGNIFICAND_WIDTH bits, including the "implicit"
+         * one bit. To make rounding easier, we pick out the top
+         * SIGNIFICAND_WIDTH + 1 bits, so we have one to help us round up or
+         * down. twiceSignifFloor will contain the top SIGNIFICAND_WIDTH + 1
+         * bits, and signifFloor the top SIGNIFICAND_WIDTH.
+         *
+         * It helps to consider the real number signif = abs(this) *
+         * 2^(SIGNIFICAND_WIDTH - 1 - exponent).
+         */
+        int shift = exponent - FloatConsts.SIGNIFICAND_WIDTH;
+
+        int twiceSignifFloor;
+        // twiceSignifFloor will be == abs().shiftRight(shift).intValue()
+        // We do the shift into an int directly to improve performance.
+
+        int nBits = shift & 0x1f;
+        int nBits2 = 32 - nBits;
+
+        if (nBits == 0) {
+            twiceSignifFloor = mag[0];
+        } else {
+            twiceSignifFloor = mag[0] >>> nBits;
+            if (twiceSignifFloor == 0) {
+                twiceSignifFloor = (mag[0] << nBits2) | (mag[1] >>> nBits);
+            }
+        }
+
+        int signifFloor = twiceSignifFloor >> 1;
+        signifFloor &= FloatConsts.SIGNIF_BIT_MASK; // remove the implied bit
+
+        /*
+         * We round up if either the fractional part of signif is strictly
+         * greater than 0.5 (which is true if the 0.5 bit is set and any lower
+         * bit is set), or if the fractional part of signif is >= 0.5 and
+         * signifFloor is odd (which is true if both the 0.5 bit and the 1 bit
+         * are set). This is equivalent to the desired HALF_EVEN rounding.
+         */
+        boolean increment = (twiceSignifFloor & 1) != 0
+                && ((signifFloor & 1) != 0 || abs().getLowestSetBit() < shift);
+        int signifRounded = increment ? signifFloor + 1 : signifFloor;
+        int bits = ((exponent + FloatConsts.EXP_BIAS))
+                << (FloatConsts.SIGNIFICAND_WIDTH - 1);
+        bits += signifRounded;
+        /*
+         * If signifRounded == 2^24, we'd need to set all of the significand
+         * bits to zero and add 1 to the exponent. This is exactly the behavior
+         * we get from just adding signifRounded to bits directly. If the
+         * exponent is Float.MAX_EXPONENT, we round up (correctly) to
+         * Float.POSITIVE_INFINITY.
+         */
+        bits |= signum & FloatConsts.SIGN_BIT_MASK;
+        return Float.intBitsToFloat(bits);
     }
 
     /**
@@ -4807,8 +4881,80 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return this BigInteger converted to a {@code double}.
      */
     public double doubleValue() {
-        // Somewhat inefficient, but guaranteed to work.
-        return Double.parseDouble(this.toString());
+        if (signum == 0) {
+            return 0.0;
+        }
+
+        int exponent = ((mag.length - 1) << 5) + bitLengthForInt(mag[0]) - 1;
+
+        // exponent == floor(log2(abs(this))Double)
+        if (exponent < Long.SIZE - 1) {
+            return longValue();
+        } else if (exponent > Double.MAX_EXPONENT) {
+            return signum > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+        }
+
+        /*
+         * We need the top SIGNIFICAND_WIDTH bits, including the "implicit"
+         * one bit. To make rounding easier, we pick out the top
+         * SIGNIFICAND_WIDTH + 1 bits, so we have one to help us round up or
+         * down. twiceSignifFloor will contain the top SIGNIFICAND_WIDTH + 1
+         * bits, and signifFloor the top SIGNIFICAND_WIDTH.
+         *
+         * It helps to consider the real number signif = abs(this) *
+         * 2^(SIGNIFICAND_WIDTH - 1 - exponent).
+         */
+        int shift = exponent - DoubleConsts.SIGNIFICAND_WIDTH;
+
+        long twiceSignifFloor;
+        // twiceSignifFloor will be == abs().shiftRight(shift).longValue()
+        // We do the shift into a long directly to improve performance.
+
+        int nBits = shift & 0x1f;
+        int nBits2 = 32 - nBits;
+
+        int highBits;
+        int lowBits;
+        if (nBits == 0) {
+            highBits = mag[0];
+            lowBits = mag[1];
+        } else {
+            highBits = mag[0] >>> nBits;
+            lowBits = (mag[0] << nBits2) | (mag[1] >>> nBits);
+            if (highBits == 0) {
+                highBits = lowBits;
+                lowBits = (mag[1] << nBits2) | (mag[2] >>> nBits);
+            }
+        }
+
+        twiceSignifFloor = ((highBits & LONG_MASK) << 32)
+                | (lowBits & LONG_MASK);
+
+        long signifFloor = twiceSignifFloor >> 1;
+        signifFloor &= DoubleConsts.SIGNIF_BIT_MASK; // remove the implied bit
+
+        /*
+         * We round up if either the fractional part of signif is strictly
+         * greater than 0.5 (which is true if the 0.5 bit is set and any lower
+         * bit is set), or if the fractional part of signif is >= 0.5 and
+         * signifFloor is odd (which is true if both the 0.5 bit and the 1 bit
+         * are set). This is equivalent to the desired HALF_EVEN rounding.
+         */
+        boolean increment = (twiceSignifFloor & 1) != 0
+                && ((signifFloor & 1) != 0 || abs().getLowestSetBit() < shift);
+        long signifRounded = increment ? signifFloor + 1 : signifFloor;
+        long bits = (long) ((exponent + DoubleConsts.EXP_BIAS))
+                << (DoubleConsts.SIGNIFICAND_WIDTH - 1);
+        bits += signifRounded;
+        /*
+         * If signifRounded == 2^53, we'd need to set all of the significand
+         * bits to zero and add 1 to the exponent. This is exactly the behavior
+         * we get from just adding signifRounded to bits directly. If the
+         * exponent is Double.MAX_EXPONENT, we round up (correctly) to
+         * Double.POSITIVE_INFINITY.
+         */
+        bits |= signum & DoubleConsts.SIGN_BIT_MASK;
+        return Double.longBitsToDouble(bits);
     }
 
     /**
