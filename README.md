@@ -156,10 +156,10 @@ Benchmark results for division of a 2n-digit number by a n-digit number (Intel i
     <td align="right">1000000</td><td align="right">36s</td><td align="right">1.5s</td><td align="right">24</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">2500000</td><td align="right">224s</td><td align="right">3.5s</td><td align="right">64</td><td align="right">BZ</td>
+    <td align="right">2500000</td><td align="right">224s</td><td align="right">3.5s</td><td align="right">64</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">5000000</td><td align="right">933s</td><td align="right">8.1s</td><td align="right">115</td><td align="right">BZ</td>
+    <td align="right">5000000</td><td align="right">933s</td><td align="right">8.1s</td><td align="right">115</td><td align="right">Barr</td>
   </tr>
   <tr>
     <td align="right">7500000</td><td align="right">2122s</td><td align="right">16s</td><td align="right">133</td><td align="right">Barr</td>

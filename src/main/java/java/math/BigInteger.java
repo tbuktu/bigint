@@ -2912,21 +2912,34 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
      */
     static boolean shouldDivideBarrett(int length) {
-        if (length < 103125)
-            return false;
-        if (length < 131072)   // 2^17
+        if (IS64BIT) {
+            // The following values were determined experimentally on a 64-bit JVM.
+            if (length < 123000)
+                return false;
+            if (length < 131072)   // 2^17
+                return true;
+            if (length < 206000)
+                return false;
+            if (length < 262144)   // 2^18
+                return true;
+            if (length < 345000)
+                return false;
+            if (length < 524288)   // 2^19
+                return true;
+            if (length < 595000)
+                return false;
             return true;
-        if (length < 184375)
-            return false;
-        if (length < 262144)   // 2^18
+        }
+        else {
+            // The following values were determined experimentally on a 32-bit JVM.
+            if (length < 101000)
+                return false;
+            if (length < 131072)   // 2^17
+                return true;
+            if (length < 177000)
+                return false;
             return true;
-        if (length < 303125)
-            return false;
-        if (length < 524288)   // 2^19
-            return true;
-        if (length < 593750)
-            return false;
-        return true;
+        }
     }
 
     /** Long division */
