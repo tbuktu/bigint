@@ -1192,6 +1192,7 @@ class MutableBigInteger {
                 return null;
             }
         }
+
         return divideMagnitude(b, quotient, needReminder);
     }
 
@@ -1220,8 +1221,8 @@ class MutableBigInteger {
             int n = j * m;            // step 2b: block length in 32-bit units
             int n32 = 32 * n;         // block length in bits
             int sigma = Math.max(0, n32 - b.bitLength());   // step 3: sigma = max{T | (2^T)*B < beta^n}
-            MutableBigInteger bMutable = new MutableBigInteger(b);
-            bMutable.safeLeftShift(sigma);   // step 4a: shift b so its length is a multiple of n
+            MutableBigInteger bShifted = new MutableBigInteger(b);
+            bShifted.safeLeftShift(sigma);   // step 4a: shift b so its length is a multiple of n
             safeLeftShift(sigma);     // step 4b: shift this by the same amount
 
             // step 5: t is the number of blocks needed to accommodate this plus one additional bit
@@ -1242,7 +1243,7 @@ class MutableBigInteger {
             quotient.offset = quotient.intLen = 0;
             for (int i=t-2; i>0; i--) {
                 // step 8a: compute (qi,ri) such that z=b*qi+ri
-                ri = z.divide2n1n(bMutable, qi);
+                ri = z.divide2n1n(bShifted, qi);
 
                 // step 8b: z = [ri, a[i-1]]
                 z = getBlock(i-1, t, n);   // a[i-1]
@@ -1250,7 +1251,7 @@ class MutableBigInteger {
                 quotient.addShifted(qi, i*n);   // update q (part of step 9)
             }
             // final iteration of step 8: do the loop one more time for i=0 but leave z unchanged
-            ri = z.divide2n1n(bMutable, qi);
+            ri = z.divide2n1n(bShifted, qi);
             quotient.add(qi);
 
             ri.rightShift(sigma);   // step 9: this and b were shifted, so shift back
