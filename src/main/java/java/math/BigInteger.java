@@ -1048,17 +1048,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return (val[0]>0 ? new BigInteger(val, 1) : new BigInteger(val));
     }
 
-    /**
-     * Returns an <code>n</code>-int number all of whose bits are ones
-     * @param n number of ints in the <code>mag</code> array
-     * @return a number equal to <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
-     */
-    private static BigInteger ones(int n) {
-        int[] mag = new int[n];
-        Arrays.fill(mag, -1);
-        return new BigInteger(mag, 1);
-    }
-
     // Constants
 
     /**
@@ -4035,28 +4024,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             val[0] = 1;
         }
         return val;
-    }
-
-    /**
-     * Shifts a number to the left by a multiple of 32. Used by Burnikel-Ziegler division.
-     * @param n a non-negative number
-     * @return <code>this.shiftLeft(32*n)</code>
-     */
-    private BigInteger shiftLeftInts(int n) {
-        int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOf(mag, mag.length+n));
-        return new BigInteger(newMag, signum);
-    }
-
-    /**
-     * Shifts a number to the right by a multiple of 32. Used by Burnikel-Ziegler division.
-     * @param n a non-negative number
-     * @return <code>this.shiftRight(32*n)</code>
-     */
-    private BigInteger shiftRightInts(int n) {
-        if (n >= mag.length)
-            return ZERO;
-        else
-            return new BigInteger(Arrays.copyOf(mag, mag.length-n), signum);
     }
 
     // Bitwise Operations
