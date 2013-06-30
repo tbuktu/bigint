@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,18 +23,25 @@
 
 /*
  * @test
- * @bug 4181191 4161971 4227146 4194389 4823171 4624738 4812225
+ * @bug 4181191 4161971 4227146 4194389 4823171 4624738 4812225 4837946
  * @summary tests methods in BigInteger
  * @run main/timeout=400 BigIntegerTest
  * @author madbot
  */
 
-import java.util.Random;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.math.BigInteger;
-import java.io.*;
+import java.util.Random;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * This is a simple test class created to ensure that the results
@@ -51,6 +58,36 @@ import java.util.*;
  *
  */
 public class BigIntegerTest {
+    //
+    // Bit large number thresholds based on the int thresholds
+    // defined in BigInteger itself:
+    //
+    // KARATSUBA_THRESHOLD        = 50  ints = 1600 bits
+    // TOOM_COOK_THRESHOLD        = 75  ints = 2400 bits
+    // KARATSUBA_SQUARE_THRESHOLD = 90  ints = 2880 bits
+    // TOOM_COOK_SQUARE_THRESHOLD = 140 ints = 4480 bits
+    //
+    // SCHOENHAGE_BASE_CONVERSION_THRESHOLD = 8 ints = 256 bits
+    //
+    static final int BITS_KARATSUBA = 1600;
+    static final int BITS_TOOM_COOK = 2400;
+    static final int BITS_KARATSUBA_SQUARE = 2880;
+    static final int BITS_TOOM_COOK_SQUARE = 4480;
+    static final int BITS_SCHOENHAGE_BASE = 256;
+
+    static final int ORDER_SMALL = 60;
+    static final int ORDER_MEDIUM = 100;
+    // #bits for testing Karatsuba and Burnikel-Ziegler
+    static final int ORDER_KARATSUBA = 1800;
+    // #bits for testing Toom-Cook
+    static final int ORDER_TOOM_COOK = 3000;
+    // #bits for testing Schoenhage-Strassen and Barrett
+    static final int ORDER_SS_BARRETT = 4000000;
+    // #bits for testing Karatsuba squaring
+    static final int ORDER_KARATSUBA_SQUARE = 3200;
+    // #bits for testing Toom-Cook squaring
+    static final int ORDER_TOOM_COOK_SQUARE = 4600;
+
     static Random rnd = new Random();
     static int size = 1000; // numbers per batch
     static int reducedSize = 10;   // numbers per batch in the Schoenhage-Strassen/Barrett range
@@ -60,7 +97,8 @@ public class BigIntegerTest {
         int failCount1 = 0;
 
         for (int i=0; i<size; i++) {
-            int power = rnd.nextInt(6) +2;
+            // Test identity x^power == x*x*x ... *x
+            int power = rnd.nextInt(6) + 2;
             BigInteger x = fetchNumber(order);
             BigInteger y = x.pow(power);
             BigInteger z = x;
@@ -71,13 +109,29 @@ public class BigIntegerTest {
             if (!y.equals(z))
                 failCount1++;
         }
-        report("pow", failCount1);
+        report("pow for " + order + " bits", failCount1);
+    }
+
+    public static void square(int order) {
+        int failCount1 = 0;
+
+        int iterations = order<ORDER_SS_BARRETT ? size : reducedSize;
+        for (int i=0; i<iterations; i++) {
+            // Test identity x^2 == x*x
+            BigInteger x  = fetchNumber(order);
+            BigInteger xx = x.multiply(x);
+            BigInteger x2 = x.pow(2);
+
+            if (!x2.equals(xx))
+                failCount1++;
+        }
+        report("square for " + order + " bits", failCount1);
     }
 
     public static void arithmetic(int order) {
         int failCount = 0;
 
-        int iterations = order<100000 ? size : reducedSize;
+        int iterations = order<ORDER_SS_BARRETT ? size : reducedSize;
         for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order);
             while(x.compareTo(BigInteger.ZERO) != 1)
@@ -88,6 +142,8 @@ public class BigIntegerTest {
             if (y.equals(BigInteger.ZERO))
                 y = y.add(BigInteger.ONE);
 
+            // Test identity ((x/y))*y + x%y - x == 0
+            // using separate divide() and remainder()
             BigInteger baz = x.divide(y);
             baz = baz.multiply(y);
             baz = baz.add(x.remainder(y));
@@ -108,6 +164,8 @@ public class BigIntegerTest {
             if (y.equals(BigInteger.ZERO))
                 y = y.add(BigInteger.ONE);
 
+            // Test identity ((x/y))*y + x%y - x == 0
+            // using divideAndRemainder()
             BigInteger baz[] = x.divideAndRemainder(y);
             baz[0] = baz[0].multiply(y);
             baz[0] = baz[0].add(baz[1]);
@@ -116,6 +174,117 @@ public class BigIntegerTest {
                 failCount++;
         }
         report("Arithmetic II for " + order + " bits", failCount);
+    }
+
+    /**
+     * Sanity test for Karatsuba and 3-way Toom-Cook multiplication.
+     * For each of the Karatsuba and 3-way Toom-Cook multiplication thresholds,
+     * construct two factors each with a mag array one element shorter than the
+     * threshold, and with the most significant bit set and the rest of the bits
+     * random. Each of these numbers will therefore be below the threshold but
+     * if shifted left be above the threshold. Call the numbers 'u' and 'v' and
+     * define random shifts 'a' and 'b' in the range [1,32]. Then we have the
+     * identity
+     * <pre>
+     * (u << a)*(v << b) = (u*v) << (a + b)
+     * </pre>
+     * For Karatsuba multiplication, the right hand expression will be evaluated
+     * using the standard naive algorithm, and the left hand expression using
+     * the Karatsuba algorithm. For 3-way Toom-Cook multiplication, the right
+     * hand expression will be evaluated using Karatsuba multiplication, and the
+     * left hand expression using 3-way Toom-Cook multiplication.
+     */
+    public static void multiplyLarge() {
+        int failCount = 0;
+
+        BigInteger base = BigInteger.ONE.shiftLeft(BITS_KARATSUBA - 32 - 1);
+        for (int i=0; i<size; i++) {
+            BigInteger x = fetchNumber(BITS_KARATSUBA - 32 - 1);
+            BigInteger u = base.add(x);
+            int a = 1 + rnd.nextInt(31);
+            BigInteger w = u.shiftLeft(a);
+
+            BigInteger y = fetchNumber(BITS_KARATSUBA - 32 - 1);
+            BigInteger v = base.add(y);
+            int b = 1 + rnd.nextInt(32);
+            BigInteger z = v.shiftLeft(b);
+
+            BigInteger multiplyResult = u.multiply(v).shiftLeft(a + b);
+            BigInteger karatsubaMultiplyResult = w.multiply(z);
+
+            if (!multiplyResult.equals(karatsubaMultiplyResult)) {
+                failCount++;
+            }
+        }
+
+        report("multiplyLarge Karatsuba", failCount);
+
+        failCount = 0;
+        base = base.shiftLeft(BITS_TOOM_COOK - BITS_KARATSUBA);
+        for (int i=0; i<size; i++) {
+            BigInteger x = fetchNumber(BITS_TOOM_COOK - 32 - 1);
+            BigInteger u = base.add(x);
+            BigInteger u2 = u.shiftLeft(1);
+            BigInteger y = fetchNumber(BITS_TOOM_COOK - 32 - 1);
+            BigInteger v = base.add(y);
+            BigInteger v2 = v.shiftLeft(1);
+
+            BigInteger multiplyResult = u.multiply(v).shiftLeft(2);
+            BigInteger toomCookMultiplyResult = u2.multiply(v2);
+
+            if (!multiplyResult.equals(toomCookMultiplyResult)) {
+                failCount++;
+            }
+        }
+
+        report("multiplyLarge Toom-Cook", failCount);
+    }
+
+    /**
+     * Sanity test for Karatsuba and 3-way Toom-Cook squaring.
+     * This test is analogous to {@link AbstractMethodError#multiplyLarge}
+     * with both factors being equal. The squaring methods will not be tested
+     * unless the <code>bigInteger.multiply(bigInteger)</code> tests whether
+     * the parameter is the same instance on which the method is being invoked
+     * and calls <code>square()</code> accordingly.
+     */
+    public static void squareLarge() {
+        int failCount = 0;
+
+        BigInteger base = BigInteger.ONE.shiftLeft(BITS_KARATSUBA_SQUARE - 32 - 1);
+        for (int i=0; i<size; i++) {
+            BigInteger x = fetchNumber(BITS_KARATSUBA_SQUARE - 32 - 1);
+            BigInteger u = base.add(x);
+            int a = 1 + rnd.nextInt(31);
+            BigInteger w = u.shiftLeft(a);
+
+            BigInteger squareResult = u.multiply(u).shiftLeft(2*a);
+            BigInteger karatsubaSquareResult = w.multiply(w);
+
+            if (!squareResult.equals(karatsubaSquareResult)) {
+                failCount++;
+            }
+        }
+
+        report("squareLarge Karatsuba", failCount);
+
+        failCount = 0;
+        base = base.shiftLeft(BITS_TOOM_COOK_SQUARE - BITS_KARATSUBA_SQUARE);
+        for (int i=0; i<size; i++) {
+            BigInteger x = fetchNumber(BITS_TOOM_COOK_SQUARE - 32 - 1);
+            BigInteger u = base.add(x);
+            int a = 1 + rnd.nextInt(31);
+            BigInteger w = u.shiftLeft(a);
+
+            BigInteger squareResult = u.multiply(u).shiftLeft(2*a);
+            BigInteger toomCookSquareResult = w.multiply(w);
+
+            if (!squareResult.equals(toomCookSquareResult)) {
+                failCount++;
+            }
+        }
+
+        report("squareLarge Toom-Cook", failCount);
     }
 
     public static void schoenhageStrassen(int order) throws Exception {
@@ -454,31 +623,6 @@ public class BigIntegerTest {
         return a;
     }
 
-    public static void square(int order) {
-        int failCount = 0;
-
-        int iterations = order<100000 ? size : reducedSize;
-        for (int i=0; i<iterations; i++) {
-            BigInteger x = fetchNumber(order);
-
-            try {
-                Method squareMethod = BigInteger.class.getDeclaredMethod("square");
-                squareMethod.setAccessible(true);
-                BigInteger square = (BigInteger)squareMethod.invoke(x);
-                BigInteger expected = x.multiply(x);
-
-                if (!square.equals(expected)) {
-                    failCount++;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                failCount++;
-            }
-        }
-
-        report("Square for " + order + " bits", failCount);
-    }
-
     public static void bitCount() {
         int failCount = 0;
 
@@ -528,7 +672,7 @@ public class BigIntegerTest {
             BigInteger x = fetchNumber(order);
             BigInteger y;
 
-            /* Test setBit and clearBit (and testBit) */
+            // Test setBit and clearBit (and testBit)
             if (x.signum() < 0) {
                 y = BigInteger.valueOf(-1);
                 for (int j=0; j<x.bitLength(); j++)
@@ -543,7 +687,7 @@ public class BigIntegerTest {
             if (!x.equals(y))
                 failCount1++;
 
-            /* Test flipBit (and testBit) */
+            // Test flipBit (and testBit)
             y = BigInteger.valueOf(x.signum()<0 ? -1 : 0);
             for (int j=0; j<x.bitLength(); j++)
                 if (x.signum()<0  ^  x.testBit(j))
@@ -551,13 +695,13 @@ public class BigIntegerTest {
             if (!x.equals(y))
                 failCount2++;
         }
-        report("clearBit/testBit", failCount1);
-        report("flipBit/testBit", failCount2);
+        report("clearBit/testBit for " + order + " bits", failCount1);
+        report("flipBit/testBit for " + order + " bits", failCount2);
 
         for (int i=0; i<size*5; i++) {
             BigInteger x = fetchNumber(order);
 
-            /* Test getLowestSetBit() */
+            // Test getLowestSetBit()
             int k = x.getLowestSetBit();
             if (x.signum() == 0) {
                 if (k != -1)
@@ -571,12 +715,12 @@ public class BigIntegerTest {
                     failCount3++;
             }
         }
-        report("getLowestSetBit", failCount3);
+        report("getLowestSetBit for " + order + " bits", failCount3);
     }
 
     public static void bitwise(int order) {
 
-        /* Test identity x^y == x|y &~ x&y */
+        // Test identity x^y == x|y &~ x&y
         int failCount = 0;
         for (int i=0; i<size; i++) {
             BigInteger x = fetchNumber(order);
@@ -586,9 +730,9 @@ public class BigIntegerTest {
             if (!z.equals(w))
                 failCount++;
         }
-        report("Logic (^ | & ~)", failCount);
+        report("Logic (^ | & ~) for " + order + " bits", failCount);
 
-        /* Test identity x &~ y == ~(~x | y) */
+        // Test identity x &~ y == ~(~x | y)
         failCount = 0;
         for (int i=0; i<size; i++) {
             BigInteger x = fetchNumber(order);
@@ -598,7 +742,7 @@ public class BigIntegerTest {
             if (!z.equals(w))
                 failCount++;
         }
-        report("Logic (&~ | ~)", failCount);
+        report("Logic (&~ | ~) for " + order + " bits", failCount);
     }
 
     public static void shift(int order) {
@@ -635,15 +779,15 @@ public class BigIntegerTest {
             if (!x.shiftLeft(n).shiftRight(n).equals(x))
                 failCount3++;
         }
-        report("baz shiftLeft", failCount1);
-        report("baz shiftRight", failCount2);
-        report("baz shiftLeft/Right", failCount3);
+        report("baz shiftLeft for " + order + " bits", failCount1);
+        report("baz shiftRight for " + order + " bits", failCount2);
+        report("baz shiftLeft/Right for " + order + " bits", failCount3);
     }
 
     public static void divideAndRemainder(int order) {
         int failCount1 = 0;
 
-        int iterations = order<100000 ? size : reducedSize;
+        int iterations = order<ORDER_SS_BARRETT ? size : reducedSize;
         for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order).abs();
             while(x.compareTo(BigInteger.valueOf(3L)) != 1)
@@ -674,12 +818,13 @@ public class BigIntegerTest {
     public static void stringConv() {
         int failCount = 0;
 
+        // Generic string conversion.
         for (int i=0; i<100; i++) {
             byte xBytes[] = new byte[Math.abs(rnd.nextInt())%100+1];
             rnd.nextBytes(xBytes);
             BigInteger x = new BigInteger(xBytes);
 
-            for (int radix=2; radix < 37; radix++) {
+            for (int radix=Character.MIN_RADIX; radix < Character.MAX_RADIX; radix++) {
                 String result = x.toString(radix);
                 BigInteger test = new BigInteger(result, radix);
                 if (!test.equals(x)) {
@@ -690,6 +835,32 @@ public class BigIntegerTest {
                 }
             }
         }
+
+        // String conversion straddling the Schoenhage algorithm crossover
+        // threshold, and at twice and four times the threshold.
+        for (int k = 0; k <= 2; k++) {
+            int factor = 1 << k;
+            int upper = factor * BITS_SCHOENHAGE_BASE + 33;
+            int lower = upper - 35;
+
+            for (int bits = upper; bits >= lower; bits--) {
+                for (int i = 0; i < 50; i++) {
+                    BigInteger x = BigInteger.ONE.shiftLeft(bits - 1).or(new BigInteger(bits - 2, rnd));
+
+                    for (int radix = Character.MIN_RADIX; radix < Character.MAX_RADIX; radix++) {
+                        String result = x.toString(radix);
+                        BigInteger test = new BigInteger(result, radix);
+                        if (!test.equals(x)) {
+                            failCount++;
+                            System.err.println("BigInteger toString: " + x);
+                            System.err.println("Test: " + test);
+                            System.err.println(radix);
+                        }
+                    }
+                }
+            }
+        }
+
         report("String Conversion", failCount);
     }
 
@@ -707,13 +878,13 @@ public class BigIntegerTest {
                 System.err.println("new is "+y);
             }
         }
-        report("Array Conversion", failCount);
+        report("Array Conversion for " + order + " bits", failCount);
     }
 
     public static void modInv(int order) {
         int failCount = 0, successCount = 0, nonInvCount = 0;
 
-        int iterations = order<100000 ? size : reducedSize;
+        int iterations = order<ORDER_SS_BARRETT ? size : reducedSize;
         for (int i=0; i<iterations; i++) {
             BigInteger x = fetchNumber(order);
             while(x.equals(BigInteger.ZERO))
@@ -761,7 +932,8 @@ public class BigIntegerTest {
                 failCount++;
             }
         }
-        report("Exponentiation I", failCount);
+        report("Exponentiation I for " + order1 + " and " +
+               order2 + " bits", failCount);
     }
 
     // This test is based on Fermat's theorem
@@ -789,7 +961,7 @@ public class BigIntegerTest {
                 failCount++;
             }
         }
-        report("Exponentiation II", failCount);
+        report("Exponentiation II for " + order + " bits", failCount);
     }
 
     private static final int[] mersenne_powers = {
@@ -1066,12 +1238,13 @@ public class BigIntegerTest {
      *
      */
     public static void main(String[] args) throws Exception {
+
         // Some variables for sizing test numbers in bits
-        int order1 = 100;
-        int order2 = 60;
-        int order3 = 3600;   // #bits for testing Karatsuba and Burnikel-Ziegler
-        int order4 = 6000;   // #bits for testing Toom-Cook
-        int order5 = 4000000; // #bits for testing Schoenhage-Strassen and Barrett
+        int order1 = ORDER_MEDIUM;
+        int order2 = ORDER_SMALL;
+        int order3 = ORDER_KARATSUBA;
+        int order4 = ORDER_TOOM_COOK;
+        int order5 = ORDER_SS_BARRETT;
 
         if (args.length >0)
             order1 = (int)((Integer.parseInt(args[0]))* 3.333);
@@ -1105,6 +1278,12 @@ public class BigIntegerTest {
         divideAndRemainder(order5);   // SS/Barrett range
 
         pow(order1);
+        pow(order3);
+        pow(order4);
+
+        square(ORDER_MEDIUM);
+        square(ORDER_KARATSUBA_SQUARE);
+        square(ORDER_TOOM_COOK_SQUARE);
 
         bitCount();
         bitLength();
@@ -1124,6 +1303,9 @@ public class BigIntegerTest {
 
         stringConv();
         serialize();
+
+        multiplyLarge();
+        squareLarge();
 
         if (failure)
             throw new RuntimeException("Failure in BigIntegerTest.");
