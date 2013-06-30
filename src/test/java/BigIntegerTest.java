@@ -1071,7 +1071,7 @@ public class BigIntegerTest {
         int order2 = 60;
         int order3 = 3600;   // #bits for testing Karatsuba and Burnikel-Ziegler
         int order4 = 6000;   // #bits for testing Toom-Cook
-        int order5 = 3500000; // #bits for testing Schoenhage-Strassen and Barrett
+        int order5 = 4000000; // #bits for testing Schoenhage-Strassen and Barrett
 
         if (args.length >0)
             order1 = (int)((Integer.parseInt(args[0]))* 3.333);
