@@ -502,7 +502,7 @@ class MutableBigInteger {
     }
 
     /**
-     * Like {@link #rightShift(int)} but <code>n</code> can be grater than the length of the number.
+     * Like {@link #rightShift(int)} but <code>n</code> can be greater than the length of the number.
      */
     void safeRightShift(int n) {
         if (n/32 >= intLen)
