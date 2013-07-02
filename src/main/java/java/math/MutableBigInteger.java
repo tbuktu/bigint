@@ -1125,9 +1125,9 @@ class MutableBigInteger {
         return divide(b,quotient,true);
     }
 
-    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
+    MutableBigInteger divide(MutableBigInteger b, MutableBigInteger quotient, boolean needRemainder) {
         if (intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD || b.intLen<BigInteger.BURNIKEL_ZIEGLER_THRESHOLD)
-            return divideKnuth(b, quotient, needReminder);
+            return divideKnuth(b, quotient, needRemainder);
         else if (!BigInteger.shouldDivideBarrett(Math.min(intLen, b.intLen)))
             return divideAndRemainderBurnikelZiegler(b, quotient);
         else {
@@ -1157,34 +1157,34 @@ class MutableBigInteger {
      * changed.
      *
      */
-    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient, boolean needReminder) {
+    MutableBigInteger divideKnuth(MutableBigInteger b, MutableBigInteger quotient, boolean needRemainder) {
         if (b.intLen == 0)
             throw new ArithmeticException("BigInteger divide by zero");
 
         // Dividend is zero
         if (intLen == 0) {
             quotient.intLen = quotient.offset = 0;
-            return needReminder ? new MutableBigInteger() : null;
+            return needRemainder ? new MutableBigInteger() : null;
         }
 
         int cmp = compare(b);
         // Dividend less than divisor
         if (cmp < 0) {
             quotient.intLen = quotient.offset = 0;
-            return needReminder ? new MutableBigInteger(this) : null;
+            return needRemainder ? new MutableBigInteger(this) : null;
         }
         // Dividend equal to divisor
         if (cmp == 0) {
             quotient.value[0] = quotient.intLen = 1;
             quotient.offset = 0;
-            return needReminder ? new MutableBigInteger() : null;
+            return needRemainder ? new MutableBigInteger() : null;
         }
 
         quotient.clear();
         // Special case one word divisor
         if (b.intLen == 1) {
             int r = divideOneWord(b.value[b.offset], quotient);
-            if(needReminder) {
+            if(needRemainder) {
                 if (r == 0)
                     return new MutableBigInteger();
                 return new MutableBigInteger(r);
@@ -1193,7 +1193,7 @@ class MutableBigInteger {
             }
         }
 
-        return divideMagnitude(b, quotient, needReminder);
+        return divideMagnitude(b, quotient, needRemainder);
     }
 
     /**
@@ -1433,7 +1433,7 @@ class MutableBigInteger {
      */
     private MutableBigInteger divideMagnitude(MutableBigInteger div,
                                               MutableBigInteger quotient,
-                                              boolean needReminder ) {
+                                              boolean needRemainder ) {
         // assert div.intLen > 1
         // D1 normalize the divisor
         int shift = Integer.numberOfLeadingZeros(div.value[div.offset]);
@@ -1603,7 +1603,7 @@ class MutableBigInteger {
             // D4 Multiply and subtract
             int borrow;
             rem.value[limit - 1 + rem.offset] = 0;
-            if(needReminder)
+            if(needRemainder)
                 borrow = mulsub(rem.value, divisor, qhat, dlen, limit - 1 + rem.offset);
             else
                 borrow = mulsubBorrow(rem.value, divisor, qhat, dlen, limit - 1 + rem.offset);
@@ -1611,7 +1611,7 @@ class MutableBigInteger {
             // D5 Test remainder
             if (borrow + 0x80000000 > nh2) {
                 // D6 Add back
-                if(needReminder)
+                if(needRemainder)
                     divadd(divisor, rem.value, limit - 1 + 1 + rem.offset);
                 qhat--;
             }
@@ -1621,14 +1621,14 @@ class MutableBigInteger {
         }
 
 
-        if(needReminder) {
+        if(needRemainder) {
             // D8 Unnormalize
             if (shift > 0)
                 rem.rightShift(shift);
             rem.normalize();
         }
         quotient.normalize();
-        return needReminder ? rem : null;
+        return needRemainder ? rem : null;
     }
 
     /**
@@ -1794,7 +1794,7 @@ class MutableBigInteger {
      * This method divides a long quantity by an int to estimate
      * qhat for two multi precision numbers. It is used when
      * the signed value of n is less than zero.
-     * Returns long value where high 32 bits contain reminder value and
+     * Returns long value where high 32 bits contain remainder value and
      * low 32 bits contain quotient value.
      */
     static long divWord(long n, int d) {
