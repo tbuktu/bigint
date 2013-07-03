@@ -75,6 +75,24 @@ class MutableBigInteger {
      */
     static final MutableBigInteger ONE = new MutableBigInteger(1);
 
+    /**
+     * The minimum <code>intLen</code> for cancelling powers of two before
+     * dividing.
+     * If the number of ints is less than this threshold,
+     * <code>divideKnuth</code> does not eliminate common powers of two from
+     * the dividend and divisor.
+     */
+    static final int KNUTH_POW2_THRESH_LEN = 6;
+
+    /**
+     * The minimum number of trailing zero ints for cancelling powers of two
+     * before dividing.
+     * If the dividend and divisor don't share at least this many zero ints
+     * at the end, <code>divideKnuth</code> does not eliminate common powers
+     * of two from the dividend and divisor.
+     */
+    static final int KNUTH_POW2_THRESH_ZEROS = 3;
+
     // Constructors
 
     /**
@@ -1193,6 +1211,20 @@ class MutableBigInteger {
             }
         }
 
+        // Cancel common powers of two if we're above the KNUTH_POW2_* thresholds
+        if (intLen >= KNUTH_POW2_THRESH_LEN) {
+            int trailingZeroBits = Math.min(getLowestSetBit(), b.getLowestSetBit());
+            if (trailingZeroBits >= KNUTH_POW2_THRESH_ZEROS*32) {
+                MutableBigInteger a = new MutableBigInteger(this);
+                b = new MutableBigInteger(b);
+                a.rightShift(trailingZeroBits);
+                b.rightShift(trailingZeroBits);
+                MutableBigInteger r = a.divideKnuth(b, quotient);
+                r.leftShift(trailingZeroBits);
+                return r;
+            }
+        }
+
         return divideMagnitude(b, quotient, needRemainder);
     }
 
@@ -1214,6 +1246,10 @@ class MutableBigInteger {
         if (r < s)
             return this;
         else {
+            // Unlike Knuth and Barrett division, we don't check for common powers of two here because
+            // BZ already runs faster if both numbers contain powers of two and cancelling them has no
+            // additional benefit.
+
             // step 1: let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
             int m = 1 << (32-Integer.numberOfLeadingZeros(s/BigInteger.BURNIKEL_ZIEGLER_THRESHOLD));
 

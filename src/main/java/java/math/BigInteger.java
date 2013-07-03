@@ -3044,29 +3044,40 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         if (m < n)
             return new BigInteger[] {ZERO, this};
-        else if (m <= 2*n) {
-            // this case is handled by Barrett directly
-            BigInteger mu = val.inverse(m-n);
-            return barrettBase(val, mu);
-        }
         else {
-            // treat each n-bit piece of a as a digit and do long division by val
-            // (which is also n bits), reusing the inverse
-            BigInteger mu2n = val.inverse(n);
-            int startBit = m / n * n;   // the bit at which the current n-bit piece starts
-            BigInteger quotient = ZERO;
-            BigInteger remainder = shiftRight(startBit);
-            BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
-            while (startBit > 0) {
-                startBit -= n;
-                BigInteger ai = shiftRight(startBit).and(mask);
-                remainder = remainder.shiftLeft(n).add(ai);
-                BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
-                BigInteger[] c = remainder.barrettBase(val, mu);
-                quotient = quotient.shiftLeft(n).add(c[0]);
-                remainder = c[1];
+            int lowestSetBit = Math.min(getLowestSetBit(), val.getLowestSetBit());
+            // Cancel common powers of two if it will speed up division, which is
+            // the case iff it reduces bitLength() below the next lower power of two.
+            if (Integer.numberOfLeadingZeros(n) < Integer.numberOfLeadingZeros(n-lowestSetBit)) {
+                BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit));
+                result[1].shiftLeft(lowestSetBit);
+                return result;
             }
-            return new BigInteger[] {quotient, remainder};
+
+            if (m <= 2*n) {
+                // this case is handled by Barrett directly
+                BigInteger mu = val.inverse(m-n);
+                return barrettBase(val, mu);
+            }
+            else {
+                // treat each n-bit piece of a as a digit and do long division by val
+                // (which is also n bits), reusing the inverse
+                BigInteger mu2n = val.inverse(n);
+                int startBit = m / n * n;   // the bit at which the current n-bit piece starts
+                BigInteger quotient = ZERO;
+                BigInteger remainder = shiftRight(startBit);
+                BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
+                while (startBit > 0) {
+                    startBit -= n;
+                    BigInteger ai = shiftRight(startBit).and(mask);
+                    remainder = remainder.shiftLeft(n).add(ai);
+                    BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
+                    BigInteger[] c = remainder.barrettBase(val, mu);
+                    quotient = quotient.shiftLeft(n).add(c[0]);
+                    remainder = c[1];
+                }
+                return new BigInteger[] {quotient, remainder};
+            }
         }
     }
 
