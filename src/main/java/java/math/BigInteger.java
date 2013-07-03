@@ -2038,19 +2038,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // SS is slower than Toom-Cook below ~15,500 ints (~149,000 decimal digits)
             // and faster above ~73,200 ints (~705,000 decimal digits).
             // Between those values, it changes several times.
-            if (length < 15500)
+            if (length <= 15500)
                 return false;
-            if (length < 16384)   // 2^14
+            if (length <= 16384)   // 2^14
                 return true;
-            if (length < 26300)
+            if (length <= 26300)
                 return false;
-            if (length < 32768)   // 2^15
+            if (length <= 32768)   // 2^15
                 return true;
-            if (length < 44000)
+            if (length <= 44000)
                 return false;
-            if (length < 65536)   // 2^16
+            if (length <= 65536)   // 2^16
                 return true;
-            if (length < 73200)
+            if (length <= 73200)
                 return false;
             return true;
         } else {
@@ -2058,15 +2058,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // SS is slower than Toom-Cook below ~6,300 ints (~60,700 decimal digits)
             // and faster above ~34,000 ints (~327,500 decimal digits).
             // Between those values, it changes several times.
-            if (length < 6300)
+            if (length <= 6300)
                 return false;
-            if (length < 16384)   // 2^14
+            if (length <= 16384)   // 2^14
                 return true;
-            if (length < 19300)
+            if (length <= 19300)
                 return false;
-            if (length < 32768)   // 2^15
+            if (length <= 32768)   // 2^15
                 return true;
-            if (length < 34000)
+            if (length <= 34000)
                 return false;
             return true;
         }
@@ -2081,43 +2081,43 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private boolean shouldSquareSchoenhageStrassen(int length) {
         if (IS64BIT) {
-            if (length < 15000)
+            if (length <= 15000)
                 return false;
-            if (length < 16384)   // 2^14
+            if (length <= 16384)   // 2^14
                 return true;
-            if (length < 27100)
+            if (length <= 27100)
                 return false;
-            if (length < 32768)   // 2^15
+            if (length <= 32768)   // 2^15
                 return true;
-            if (length < 43600)
+            if (length <= 43600)
                 return false;
-            if (length < 65536)   // 2^16
+            if (length <= 65536)   // 2^16
                 return true;
-            if (length < 76300)
+            if (length <= 76300)
                 return false;
-            if (length < 131072)   // 2^17
+            if (length <= 131072)   // 2^17
                 return true;
-            if (length < 133800)
+            if (length <= 133800)
                 return false;
             return true;
         } else {
-            if (length < 7100)
+            if (length <= 7100)
                 return false;
-            if (length < 8192)   // 2^13
+            if (length <= 8192)   // 2^13
                 return true;
-            if (length < 14200)
+            if (length <= 14200)
                 return false;
-            if (length < 16384)   // 2^14
+            if (length <= 16384)   // 2^14
                 return true;
-            if (length < 24100)
+            if (length <= 24100)
                 return false;
-            if (length < 32768)   // 2^15
+            if (length <= 32768)   // 2^15
                 return true;
-            if (length < 42800)
+            if (length <= 42800)
                 return false;
-            if (length < 65536)   // 2^16
+            if (length <= 65536)   // 2^16
                 return true;
-            if (length < 73000)
+            if (length <= 73000)
                 return false;
             return true;
         }
@@ -2910,29 +2910,29 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     static boolean shouldDivideBarrett(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
-            if (length < 123000)
+            if (length <= 123000)
                 return false;
-            if (length < 131072)   // 2^17
+            if (length <= 131072)   // 2^17
                 return true;
-            if (length < 206000)
+            if (length <= 206000)
                 return false;
-            if (length < 262144)   // 2^18
+            if (length <= 262144)   // 2^18
                 return true;
-            if (length < 345000)
+            if (length <= 345000)
                 return false;
-            if (length < 524288)   // 2^19
+            if (length <= 524288)   // 2^19
                 return true;
-            if (length < 595000)
+            if (length <= 595000)
                 return false;
             return true;
         }
         else {
             // The following values were determined experimentally on a 32-bit JVM.
-            if (length < 101000)
+            if (length <= 101000)
                 return false;
-            if (length < 131072)   // 2^17
+            if (length <= 131072)   // 2^17
                 return true;
-            if (length < 177000)
+            if (length <= 177000)
                 return false;
             return true;
         }
