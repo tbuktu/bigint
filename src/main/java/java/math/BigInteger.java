@@ -2165,18 +2165,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
      * doubles the exponent so omega can be assumed always to be 2 in a DFT.
      * @param n
-     * @param v
-     * @param idx
-     * @param even
+     * @param v butterfly depth
+     * @param idx index of the array element to be computed
+     * @param even whether m is an even number
      * @return
      */
     private static int getDftExponent(int n, int v, int idx, boolean even) {
-        // take bits n-v..n-1 of idx, reverse them, shift left by n-v-1
-        int x = Integer.reverse(idx) << (n-v) >>> (31-n);
-
-        // if m is even, divide by two
-        if (even)
-            x >>>= 1;
+        int x;
+        if (even) {
+            // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
+            x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
+            x <<= n - v - 1;
+            // even=true means omega=4 (rather than 2), so double the shift amount
+            x *= 2;
+        }
+        else {
+            // x = 2^(n-v) * s, where s are the v (out of n) high bits of idx in reverse order
+            x = Integer.reverse(idx >>> (n+1-v)) >>> (32-v);
+            x <<= n - v;
+        }
 
         return x;
     }
@@ -2205,7 +2212,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<len; j+=2*slen) {
                 int idx = j;
                 int idx2 = idx + slen;   // idx2 is always idx+slen
-                int x = getIdftExponent(n, v, idx, even);
+                int x = getIdftExponent(n, v, idx+len, even);
 
                 for (int k=slen-1; k>=0; k--) {
                     System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
@@ -2228,14 +2235,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
      * doubles the exponent so omega can be assumed always to be 2 in a IDFT.
      * @param n
-     * @param v
-     * @param idx
-     * @param even
+     * @param v butterfly depth
+     * @param idx index of the array element to be computed
+     * @param even whether m is an even number
      * @return
      */
     private static int getIdftExponent(int n, int v, int idx, boolean even) {
-        int x = Integer.reverse(idx) << (n-v) >>> (32-n);
-        x += even ? 1<<(n-v) : 1<<(n-1-v);
+        int x;
+        if (even) {
+            // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
+            x = (Integer.reverse((idx)>>>(n-v)) + 1) >>> (32-v);
+            x <<= n - v - 1;
+            // even=true means omega=4 (rather than 2), so double the shift amount
+            x *= 2;
+        }
+        else {
+            // x = 2^(n-1-v) * s, where s is the v+1 (out of n) high bits of idx in reverse order
+            x = (Integer.reverse((idx)>>>(n-v)) + 1) >>> (32-v-1);
+            x <<= n - v - 1;
+        }
         return x + 1;
     }
 
