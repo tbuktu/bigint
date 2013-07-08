@@ -38,6 +38,7 @@ package java.math;
  *
  * @see     BigInteger
  * @author  Michael McCloskey
+ * @author  Timothy Buktu
  * @since   1.3
  */
 
