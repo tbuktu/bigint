@@ -332,9 +332,9 @@ public class BigIntegerTest {
         // verify that idft(dft(a)) = a
         Method modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[][].class);
         modFnMethod.setAccessible(true);
-        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class, int.class);
+        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class);
         dftMethod.setAccessible(true);
-        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class, int.class);
+        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class);
         idftMethod.setAccessible(true);
         for (int k=0; k<100; k++) {
             int m = 8 + rnd.nextInt(8);
@@ -344,8 +344,9 @@ public class BigIntegerTest {
             int[][] aOrig = new int[a.length][];
             for (int i=0; i<a.length; i++)
                 aOrig[i] = a[i].clone();
-            dftMethod.invoke(null, a, m, n);
-            idftMethod.invoke(null, a, m, n);
+            int omega = m%2==0 ? 4 : 2;
+            dftMethod.invoke(null, a, omega);
+            idftMethod.invoke(null, a, omega);
             modFnMethod.invoke(null, new Object[] {a});
             for (int j=0; j<aOrig.length; j++)
                 if (!Arrays.equals(a[j], aOrig[j]))
