@@ -380,8 +380,6 @@ public class BigIntegerTest {
         }
 
         // test squareModFn
-        modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[].class);   // this is the other modFn method
-        modFnMethod.setAccessible(true);
         Method squareModFnMethod = BigInteger.class.getDeclaredMethod("squareModFn", int[].class);
         squareModFnMethod.setAccessible(true);
         for (int i=0; i<100; i++) {
