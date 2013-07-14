@@ -2128,6 +2128,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
      * Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.<br/>
      * The modification is that the first step is omitted because only the lower half of the result is needed.<br/>
+     * This implementation uses the radix-4 technique which combines two levels of butterflies.<br/>
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
@@ -2140,24 +2141,68 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         boolean even = m%2 == 0;
         int len = A.length;
         int v = 1;
-        int[] d = new int[A[0].length];
+        int intLen = A[0].length;
+        int[] d = new int[intLen];
 
-        for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+        int slen = len / 2;
+        while (slen > 1) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+            for (int j=0; j<len; j+=2*slen) {
+                int idx0 = j;
+                int idx1 = j + slen/2;
+                int idx2 = j + slen;
+                int idx3 = j + slen + slen/2;
+
+                int x1 = getDftExponent(n, v+1, idx0+len, even);   // for level v+2
+                int x2 = getDftExponent(n, v, idx0+len, even);     // for level v+1
+                int x3 = getDftExponent(n, v+1, idx2+len, even);   // for level v+2
+
+                for (int k=slen-1; k>=0; k-=2) {
+                    // do level v+1
+                    cyclicShiftLeftBits(A[idx2], x2, d);
+                    System.arraycopy(A[idx0], 0, A[idx2], 0, intLen);
+                    addModFn(A[idx0], d);
+                    subModFn(A[idx2], d);
+
+                    cyclicShiftLeftBits(A[idx3], x2, d);
+                    System.arraycopy(A[idx1], 0, A[idx3], 0, intLen);
+                    addModFn(A[idx1], d);
+                    subModFn(A[idx3], d);
+
+                    // do level v+2
+                    cyclicShiftLeftBits(A[idx1], x1, d);
+                    System.arraycopy(A[idx0], 0, A[idx1], 0, intLen);
+                    addModFn(A[idx0], d);
+                    subModFn(A[idx1], d);
+
+                    cyclicShiftLeftBits(A[idx3], x3, d);
+                    System.arraycopy(A[idx2], 0, A[idx3], 0, intLen);
+                    addModFn(A[idx2], d);
+                    subModFn(A[idx3], d);
+
+                    idx0++;
+                    idx1++;
+                    idx2++;
+                    idx3++;
+                }
+            }
+            v += 2;
+            slen /= 4;
+        }
+
+        // if there is an odd number of levels, do the remaining one now
+        if (slen > 0)
             for (int j=0; j<len; j+=2*slen) {
                 int idx = j;
                 int x = getDftExponent(n, v, idx+len, even);
 
                 for (int k=slen-1; k>=0; k--) {
                     cyclicShiftLeftBits(A[idx+slen], x, d);
-                    System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);   // copy A[idx] into A[idx+slen]
+                    System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);
                     addModFn(A[idx], d);
                     subModFn(A[idx+slen], d);
                     idx++;
                 }
             }
-
-            v++;
-        }
     }
 
     /**
@@ -2194,6 +2239,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Inverse Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.
      * The modification is that the last step (the one where the upper half is subtracted from the lower half)
      * is omitted.<br/>
+     * This implementation uses the radix-4 technique which combines two levels of butterflies.<br/>
      * <code>A</code> is assumed to be the upper half of the full array and the upper half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
@@ -2207,15 +2253,65 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int len = A.length;
         int v = n - 1;
         int[] c = new int[A[0].length];
-        
-        for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+
+        int slen = 1;
+        while (slen <= len/4) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+            for (int j=0; j<len; j+=4*slen) {
+                int idx0 = j;
+                int idx1 = j + slen;
+                int idx2 = j + slen*2;
+                int idx3 = j + slen*3;
+
+                int x1 = getIdftExponent(n, v, idx0+len, even);     // for level v
+                int x2 = getIdftExponent(n, v-1, idx0+len, even);   // for level v-1
+                int x3 = getIdftExponent(n, v, idx2+len, even);     // for level v
+
+                for (int k=slen-1; k>=0; k--) {
+                    // do level v
+                    System.arraycopy(A[idx0], 0, c, 0, c.length);
+                    addModFn(A[idx0], A[idx1]);
+                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
+                    subModFn(c, A[idx1]);
+                    cyclicShiftRightBits(c, x1, A[idx1]);
+
+                    System.arraycopy(A[idx2], 0, c, 0, c.length);
+                    addModFn(A[idx2], A[idx3]);
+                    cyclicShiftRightBits(A[idx2], 1, A[idx2]);
+                    subModFn(c, A[idx3]);
+                    cyclicShiftRightBits(c, x3, A[idx3]);
+
+                    // do level v-1
+                    System.arraycopy(A[idx0], 0, c, 0, c.length);
+                    addModFn(A[idx0], A[idx2]);
+                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
+                    subModFn(c, A[idx2]);
+                    cyclicShiftRightBits(c, x2, A[idx2]);
+
+                    System.arraycopy(A[idx1], 0, c, 0, c.length);
+                    addModFn(A[idx1], A[idx3]);
+                    cyclicShiftRightBits(A[idx1], 1, A[idx1]);
+                    subModFn(c, A[idx3]);
+                    cyclicShiftRightBits(c, x2, A[idx3]);
+
+                    idx0++;
+                    idx1++;
+                    idx2++;
+                    idx3++;
+                }
+            }
+            v -= 2;
+            slen *= 4;
+        }
+
+        // if there is an odd number of levels, do the remaining one now
+        if (slen <= len/2)
             for (int j=0; j<len; j+=2*slen) {
                 int idx = j;
                 int idx2 = idx + slen;   // idx2 is always idx+slen
                 int x = getIdftExponent(n, v, idx+len, even);
 
                 for (int k=slen-1; k>=0; k--) {
-                    System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
+                    System.arraycopy(A[idx], 0, c, 0, c.length);
                     addModFn(A[idx], A[idx2]);
                     cyclicShiftRightBits(A[idx], 1, A[idx]);
 
@@ -2225,9 +2321,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     idx2++;
                 }
             }
-
-            v--;
-        }
     }
 
     /**
