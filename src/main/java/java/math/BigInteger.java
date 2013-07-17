@@ -2995,25 +2995,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Calculates <code>this / val</code> using the Burnikel-Ziegler algorithm.
+     * Calculates {@code this / val} using the Burnikel-Ziegler algorithm.
      * @param  val the divisor
-     * @return <code>this / val</code>
+     * @return {@code this / val}
      */
     private BigInteger divideBurnikelZiegler(BigInteger val) {
         return divideAndRemainderBurnikelZiegler(val)[0];
     }
 
     /**
-     * Calculates <code>this % val</code> using the Burnikel-Ziegler algorithm.
+     * Calculates {@code this % val} using the Burnikel-Ziegler algorithm.
      * @param val the divisor
-     * @return <code>this % val</code>
+     * @return {@code this % val}
      */
     private BigInteger remainderBurnikelZiegler(BigInteger val) {
         return divideAndRemainderBurnikelZiegler(val)[1];
     }
 
     /**
-     * Computes <code>this / val</code> and <code>this % val</code> using the
+     * Computes {@code this / val} and {@code this % val} using the
      * Burnikel-Ziegler algorithm.
      * @param val the divisor
      * @return an array containing the quotient and remainder
@@ -4603,7 +4603,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Converts the specified BigInteger to a string and appends to
-     * <code>sb</code>.  This implements the recursive Schoenhage algorithm
+     * {@code sb}.  This implements the recursive Schoenhage algorithm
      * for base conversions.
      * <p/>
      * See Knuth, Donald,  _The Art of Computer Programming_, Vol. 2,
@@ -4654,7 +4654,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * If this value doesn't already exist in the cache, it is added.
      * <p/>
      * This could be changed to a more complicated caching method using
-     * <code>Future</code>.
+     * {@code Future}.
      */
     private static BigInteger getRadixConversionCache(int radix, int exponent) {
         BigInteger[] cacheLine = powerCache[radix]; // volatile read
