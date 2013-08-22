@@ -2168,29 +2168,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param colIdx index of the column to transform
      */
     private static void dftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
-        int len = rows;
-        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
-        int v = 1;   // v starts at 1 rather than 0 for the same reason
-        int[] d = new int[A[0].length];
-
-        for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
-            for (int j=0; j<len; j+=2*slen) {
-                int x = getDftExponent(n, v, j+len, omega) * cols;
-                int idx = cols*j + colIdx;
-                int idx2 = idx + cols*slen;   // stride length = cols*slen subarrays
-
-                for (int k=slen-1; k>=0; k--) {
-                    cyclicShiftLeftBits(A[idx2], x, d);
-                    System.arraycopy(A[idx], 0, A[idx2], 0, A[idx].length);
-                    addModFn(A[idx], d);
-                    subModFn(A[idx2], d);
-                    idx += cols;
-                    idx2 += cols;
-                }
-            }
-
-            v++;
-        }
+        dftDirect(A, omega, rows, cols, rows, colIdx, cols);
     }
 
     /**
@@ -2203,24 +2181,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param rowIdx index of the row to transform
      */
     private static void dftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
-        int len = cols;
-        int n = 31 - Integer.numberOfLeadingZeros(2*len);
-        int v = 1;
+        dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
+    }
+
+    private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
+        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
+        int v = 1;   // v starts at 1 rather than 0 for the same reason
         int[] d = new int[A[0].length];
 
         for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
             for (int j=0; j<len; j+=2*slen) {
-                int idx = rowIdx*cols + j;
-                int idx2 = idx + slen;
-                int x = getDftExponent(n, v, j, omega) * rows;
+                int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
+                int idx = stride*j + idxOffset;
+                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
 
                 for (int k=slen-1; k>=0; k--) {
                     cyclicShiftLeftBits(A[idx2], x, d);
                     System.arraycopy(A[idx], 0, A[idx2], 0, A[idx].length);
                     addModFn(A[idx], d);
                     subModFn(A[idx2], d);
-                    idx++;
-                    idx2++;
+                    idx += stride;
+                    idx2 += stride;
                 }
             }
 
@@ -2314,16 +2295,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param colIdx index of the column to transform
      */
     private static void idftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
-        int len = rows;
+        idftDirect1(A, omega, rows, rows, cols, colIdx, cols);
+    }
+
+    private static void idftDirect1(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 31 - Integer.numberOfLeadingZeros(len);
         int[] c = new int[A[0].length];
 
         for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
             for (int j=0; j<len; j+=2*slen) {
-                int x = getDftExponent(n, v, j+len, omega)*cols + 1;
-                int idx = cols*j + colIdx;
-                int idx2 = idx + cols*slen;   // stride length = cols*slen subarrays
+                int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
+                int idx = stride*j + idxOffset;
+                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
 
                 for (int k=slen-1; k>=0; k--) {
                     System.arraycopy(A[idx], 0, c, 0, c.length);
@@ -2332,8 +2316,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
                     subModFn(c, A[idx2]);
                     cyclicShiftRightBits(c, x, A[idx2]);
-                    idx += cols;
-                    idx2 += cols;
+                    idx += stride;
+                    idx2 += stride;
                 }
             }
 
@@ -2351,31 +2335,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param rowIdx index of the row to transform
      */
     private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
-        int len = cols;
-        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
-        int v = 31 - Integer.numberOfLeadingZeros(len);
-        int[] c = new int[A[0].length];
-
-        for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
-            for (int j=0; j<len; j+=2*slen) {
-                int idx = rowIdx*cols + j;
-                int idx2 = idx + slen;
-                int x = getDftExponent(n, v, j, omega)*rows + 1;
-
-                for (int k=slen-1; k>=0; k--) {
-                    System.arraycopy(A[idx], 0, c, 0, c.length);
-                    addModFn(A[idx], A[idx2]);
-                    cyclicShiftRightBits(A[idx], 1, A[idx]);
-
-                    subModFn(c, A[idx2]);
-                    cyclicShiftRightBits(c, x, A[idx2]);
-                    idx++;
-                    idx2++;
-                }
-            }
-
-            v--;
-        }
+        idftDirect1(A, omega, cols, 0, rows, rowIdx*cols, 1);
     }
 
     /** Divides vector elements by powers of omega (aka twiddle factors) */
