@@ -1923,14 +1923,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // zr mod Fn
         int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
         int[][] bi = splitInts(b, halfNumPcs, pieceSize, 1<<(n+1-5));
-        dft(ai, m, n);
-        dft(bi, m, n);
+        int omega = even ? 4 : 2;
+        dft(ai, omega);
+        dft(bi, omega);
         modFn(ai);
         modFn(bi);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
             c[i] = multModFn(ai[i], bi[i]);
-        idft(c, m, n);
+        idft(c, omega);
         modFn(c);
 
         int[] z = new int[1<<(m+1-5)];
@@ -1999,12 +2000,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // zr mod Fn
         int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
-        dft(ai, m, n);
+        int omega = even ? 4 : 2;
+        dft(ai, omega);
         modFn(ai);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
             c[i] = squareModFn(ai[i]);
-        idft(c, m, n);
+        idft(c, omega);
         modFn(c);
 
         int[] z = new int[1<<(m+1-5)];
@@ -2127,32 +2129,79 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Performs a modified
      * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
      * Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.<br/>
-     * The modification is that the first step is omitted because only the lower half of the result is needed.<br/>
+     * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.<br/>
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
      * n must be equal to m/2-1.
      * @param A
-     * @param m
-     * @param n
+     * @param omega 2 or 4
      */
-    private static void dft(int[][] A, int m, int n) {
-        boolean even = m%2 == 0;
-        int len = A.length;
-        int v = 1;
+    private static void dft(int[][] A, int omega) {
+        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
+        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
+        int cols = A.length / rows;   // number of columns
+
+        // step 1: perform an DFT on each column
+        for (int i=0; i<cols; i++)
+            dftBailey1(A, omega, rows, cols, i);
+
+        // step 2: multiply by powers of omega
+        applyDftWeights(A, omega, rows, cols);
+
+        // step 3 is built into step 1 by making the stride length a multiple of the row length
+
+        // step 4: perform an DFT on each row
+        for (int i=0; i<rows; i++)
+            dftBailey2(A, omega, rows, cols, i);
+    }
+
+    /**
+     * Performs an DFT on column {@code colIdx}.<br/>
+     * <code>A</code> is assumed to be the lower half of the full array.
+     * @param A an array of length rows*cols
+     * @param omega root of unity
+     * @param rows number of rows in A
+     * @param cols number of columns in A
+     * @param colIdx index of the column to transform
+     */
+    private static void dftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
+        dftDirect(A, omega, rows, cols, rows, colIdx, cols);
+    }
+
+    /**
+     * Performs an DFT on row {@code rowIdx}.<br/>
+     * <code>A</code> is assumed to be the lower half of the full array.
+     * @param A an array of length rows*cols
+     * @param omega root of unity
+     * @param rows number of rows in A
+     * @param cols number of columns in A
+     * @param rowIdx index of the row to transform
+     */
+    private static void dftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
+        dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
+    }
+
+    private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
+        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
+        int v = 1;   // v starts at 1 rather than 0 for the same reason
         int[] d = new int[A[0].length];
 
         for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
             for (int j=0; j<len; j+=2*slen) {
-                int idx = j;
-                int x = getDftExponent(n, v, idx+len, even);
+                int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
+                int idx = stride*j + idxOffset;
+                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
 
                 for (int k=slen-1; k>=0; k--) {
-                    cyclicShiftLeftBits(A[idx+slen], x, d);
-                    System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);   // copy A[idx] into A[idx+slen]
+                    cyclicShiftLeftBits(A[idx2], x, d);
+                    System.arraycopy(A[idx], 0, A[idx2], 0, A[idx].length);
                     addModFn(A[idx], d);
-                    subModFn(A[idx+slen], d);
-                    idx++;
+                    subModFn(A[idx2], d);
+                    idx += stride;
+                    idx2 += stride;
                 }
             }
 
@@ -2162,30 +2211,45 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns the power to which to raise omega in a DFT.<br/>
-     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-     * doubles the exponent so omega can be assumed always to be 2 in a DFT.
-     * @param n
+     * When <code>omega</code>=4, this method doubles the exponent so
+     * <code>omega</code> can be assumed always to be 2 in {@link #dft(int[][], int)}.
+     * @param n the log of the DFT length
      * @param v butterfly depth
      * @param idx index of the array element to be computed
-     * @param even whether m is an even number
+     * @param omega 2 or 4
      * @return
      */
-    private static int getDftExponent(int n, int v, int idx, boolean even) {
-        int x;
-        if (even) {
-            // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
-            x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
-            x <<= n - v - 1;
-            // even=true means omega=4 (rather than 2), so double the shift amount
+    private static int getDftExponent(int n, int v, int idx, int omega) {
+        // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
+        int x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
+        x <<= n - v - 1;
+
+        // if omega=4, double the shift amount
+        if (omega == 4)
             x *= 2;
-        }
-        else {
-            // x = 2^(n-v) * s, where s are the v (out of n) high bits of idx in reverse order
-            x = Integer.reverse(idx >>> (n+1-v)) >>> (32-v);
-            x <<= n - v;
-        }
 
         return x;
+    }
+
+    /** Multiplies vector elements by powers of omega (aka twiddle factors) */
+    private static void applyDftWeights(int[][] A, int omega, int rows, int cols) {
+        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
+
+        for (int i=0; i<rows; i++)
+            for (int j=0; j<cols; j++) {
+                int idx = i*cols + j;
+                int[] temp = new int[A[idx].length];
+                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
+                if (omega == 4)
+                    shiftAmt *= 2;
+                cyclicShiftLeftBits(A[idx], shiftAmt, temp);
+                System.arraycopy(temp, 0, A[idx], 0, temp.length);
+            }
+    }
+
+    private static int getBaileyShiftAmount(int i, int j, int rows, int cols, int v) {
+        int iRev = Integer.reverse(i+rows) >>> (32-v);
+        return iRev * j;
     }
 
     /**
@@ -2194,35 +2258,66 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Inverse Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.
      * The modification is that the last step (the one where the upper half is subtracted from the lower half)
      * is omitted.<br/>
-     * <code>A</code> is assumed to be the upper half of the full array and the upper half is assumed to be all zeros.
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.<br/>
+     * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
      * n must be equal to m/2-1.
      * @param A
-     * @param m
-     * @param n
+     * @param omega 2 or 4
      */
-    private static void idft(int[][] A, int m, int n) {
-        boolean even = m%2 == 0;
-        int len = A.length;
-        int v = n - 1;
+    private static void idft(int[][] A, int omega) {
+        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
+        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
+        int cols = A.length / rows;   // number of columns
+
+        // step 1: perform an IDFT on each row
+        for (int i=0; i<rows; i++)
+            idftBailey2(A, omega, rows, cols, i);
+
+        // step 2: multiply by powers of omega
+        applyIdftWeights(A, omega, rows, cols);
+
+        // step 3 is built into step 4 by making the stride length a multiple of the row length
+        // step 4: perform an IDFT on each column
+        for (int i=0; i<cols; i++)
+            idftBailey1(A, omega, rows, cols, i);
+    }
+
+    /**
+     * Performs an IDFT on column {@code colIdx}.<br/>
+     * <code>A</code> is assumed to be the upper half of the full array.
+     * @param A an array of length rows*cols
+     * @param omega root of unity
+     * @param rows number of rows in A
+     * @param cols number of columns in A
+     * @param colIdx index of the column to transform
+     */
+    private static void idftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
+        idftDirect1(A, omega, rows, rows, cols, colIdx, cols);
+    }
+
+    private static void idftDirect1(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
+        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
+        int v = 31 - Integer.numberOfLeadingZeros(len);
         int[] c = new int[A[0].length];
-        
+
         for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
             for (int j=0; j<len; j+=2*slen) {
-                int idx = j;
-                int idx2 = idx + slen;   // idx2 is always idx+slen
-                int x = getIdftExponent(n, v, idx+len, even);
+                int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
+                int idx = stride*j + idxOffset;
+                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
 
                 for (int k=slen-1; k>=0; k--) {
-                    System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
+                    System.arraycopy(A[idx], 0, c, 0, c.length);
                     addModFn(A[idx], A[idx2]);
                     cyclicShiftRightBits(A[idx], 1, A[idx]);
 
                     subModFn(c, A[idx2]);
                     cyclicShiftRightBits(c, x, A[idx2]);
-                    idx++;
-                    idx2++;
+                    idx += stride;
+                    idx2 += stride;
                 }
             }
 
@@ -2231,30 +2326,32 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Returns the power to which to raise omega in an IDFT.<br/>
-     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-     * doubles the exponent so omega can be assumed always to be 2 in a IDFT.
-     * @param n
-     * @param v butterfly depth
-     * @param idx index of the array element to be computed
-     * @param even whether m is an even number
-     * @return
+     * Performs an IDFT on row {@code rowIdx}.<br/>
+     * <code>A</code> is assumed to be the upper half of the full array.
+     * @param A an array of length rows*cols
+     * @param omega root of unity
+     * @param rows number of rows in A
+     * @param cols number of columns in A
+     * @param rowIdx index of the row to transform
      */
-    private static int getIdftExponent(int n, int v, int idx, boolean even) {
-        int x;
-        if (even) {
-            // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
-            x = (Integer.reverse((idx)>>>(n-v)) + 1) >>> (32-v);
-            x <<= n - v - 1;
-            // even=true means omega=4 (rather than 2), so double the shift amount
-            x *= 2;
-        }
-        else {
-            // x = 2^(n-1-v) * s, where s is the v+1 (out of n) high bits of idx in reverse order
-            x = (Integer.reverse((idx)>>>(n-v)) + 1) >>> (32-v-1);
-            x <<= n - v - 1;
-        }
-        return x + 1;
+    private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
+        idftDirect1(A, omega, cols, 0, rows, rowIdx*cols, 1);
+    }
+
+    /** Divides vector elements by powers of omega (aka twiddle factors) */
+    private static void applyIdftWeights(int[][] A, int omega, int rows, int cols) {
+        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
+
+        for (int i=0; i<rows; i++)
+            for (int j=0; j<cols; j++) {
+                int idx = i*cols + j;
+                int[] temp = new int[A[idx].length];
+                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
+                if (omega == 4)
+                    shiftAmt *= 2;
+                cyclicShiftRightBits(A[idx], shiftAmt, temp);
+                System.arraycopy(temp, 0, A[idx], 0, temp.length);
+            }
     }
 
     /**
