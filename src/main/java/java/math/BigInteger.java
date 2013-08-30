@@ -1923,14 +1923,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // zr mod Fn
         int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
         int[][] bi = splitInts(b, halfNumPcs, pieceSize, 1<<(n+1-5));
-        dft(ai, m, n);
-        dft(bi, m, n);
+        int omega = even ? 4 : 2;
+        dft(ai, omega);
+        dft(bi, omega);
         modFn(ai);
         modFn(bi);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
             c[i] = multModFn(ai[i], bi[i]);
-        idft(c, m, n);
+        idft(c, omega);
         modFn(c);
 
         int[] z = new int[1<<(m+1-5)];
@@ -1999,12 +2000,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // zr mod Fn
         int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
-        dft(ai, m, n);
+        int omega = even ? 4 : 2;
+        dft(ai, omega);
         modFn(ai);
         int[][] c = new int[halfNumPcs][];
         for (int i=0; i<c.length; i++)
             c[i] = squareModFn(ai[i]);
-        idft(c, m, n);
+        idft(c, omega);
         modFn(c);
 
         int[] z = new int[1<<(m+1-5)];
@@ -2134,12 +2136,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
      * n must be equal to m/2-1.
      * @param A
-     * @param m
-     * @param n
+     * @param omega 2 or 4
      */
-    private static void dft(int[][] A, int m, int n) {
-        boolean even = m%2 == 0;
+    private static void dft(int[][] A, int omega) {
         int len = A.length;
+        int n = 31 - Integer.numberOfLeadingZeros(A[0].length) + 5 - 1;
         int v = 1;
         int intLen = A[0].length;
         int[] d = new int[intLen];
@@ -2152,9 +2153,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 int idx2 = j + slen;
                 int idx3 = j + slen + slen/2;
 
-                int x1 = getDftExponent(n, v+1, idx0+len, even);   // for level v+2
-                int x2 = getDftExponent(n, v, idx0+len, even);     // for level v+1
-                int x3 = getDftExponent(n, v+1, idx2+len, even);   // for level v+2
+                int x1 = getDftExponent(n, v+1, idx0+len, omega);   // for level v+2
+                int x2 = getDftExponent(n, v, idx0+len, omega);     // for level v+1
+                int x3 = getDftExponent(n, v+1, idx2+len, omega);   // for level v+2
 
                 for (int k=slen-1; k>=0; k-=2) {
                     // do level v+1
@@ -2193,7 +2194,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (slen > 0)
             for (int j=0; j<len; j+=2*slen) {
                 int idx = j;
-                int x = getDftExponent(n, v, idx+len, even);
+                int x = getDftExponent(n, v, idx+len, omega);
 
                 for (int k=slen-1; k>=0; k--) {
                     cyclicShiftLeftBits(A[idx+slen], x, d);
@@ -2207,21 +2208,21 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns the power to which to raise omega in a DFT.<br/>
-     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-     * doubles the exponent so omega can be assumed always to be 2 in a DFT.
+     * When <code>omega</code>=4, this method doubles the exponent so
+     * <code>omega</code> can be assumed always to be 2 in {@link #dft(int[][], int)}.
      * @param n
      * @param v butterfly depth
      * @param idx index of the array element to be computed
-     * @param even whether m is an even number
+     * @param omega 2 or 4
      * @return
      */
-    private static int getDftExponent(int n, int v, int idx, boolean even) {
+    private static int getDftExponent(int n, int v, int idx, int omega) {
         int x;
-        if (even) {
+        if (omega == 4) {
             // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
             x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
             x <<= n - v - 1;
-            // even=true means omega=4 (rather than 2), so double the shift amount
+            // if omega=4, double the shift amount
             x *= 2;
         }
         else {
@@ -2245,12 +2246,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
      * n must be equal to m/2-1.
      * @param A
-     * @param m
-     * @param n
+     * @param omega 2 or 4
      */
-    private static void idft(int[][] A, int m, int n) {
-        boolean even = m%2 == 0;
+    private static void idft(int[][] A, int omega) {
         int len = A.length;
+        int n = 31 - Integer.numberOfLeadingZeros(A[0].length) + 5 - 1;
         int v = n - 1;
         int[] c = new int[A[0].length];
 
@@ -2262,9 +2262,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 int idx2 = j + slen*2;
                 int idx3 = j + slen*3;
 
-                int x1 = getIdftExponent(n, v, idx0+len, even);     // for level v
-                int x2 = getIdftExponent(n, v-1, idx0+len, even);   // for level v-1
-                int x3 = getIdftExponent(n, v, idx2+len, even);     // for level v
+                int x1 = getIdftExponent(n, v, idx0+len, omega);     // for level v
+                int x2 = getIdftExponent(n, v-1, idx0+len, omega);   // for level v-1
+                int x3 = getIdftExponent(n, v, idx2+len, omega);     // for level v
 
                 for (int k=slen-1; k>=0; k--) {
                     // do level v
@@ -2308,7 +2308,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<len; j+=2*slen) {
                 int idx = j;
                 int idx2 = idx + slen;   // idx2 is always idx+slen
-                int x = getIdftExponent(n, v, idx+len, even);
+                int x = getIdftExponent(n, v, idx+len, omega);
 
                 for (int k=slen-1; k>=0; k--) {
                     System.arraycopy(A[idx], 0, c, 0, c.length);
@@ -2325,21 +2325,21 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns the power to which to raise omega in an IDFT.<br/>
-     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-     * doubles the exponent so omega can be assumed always to be 2 in a IDFT.
+     * When <code>omega</code>=4, this method doubles the exponent so
+     * <code>omega</code> can be assumed always to be 2 in {@link #idft(int[][], int, int)}.
      * @param n
      * @param v butterfly depth
      * @param idx index of the array element to be computed
-     * @param even whether m is an even number
+     * @param omega 2 or 4
      * @return
      */
-    private static int getIdftExponent(int n, int v, int idx, boolean even) {
+    private static int getIdftExponent(int n, int v, int idx, int omega) {
         int x;
-        if (even) {
+        if (omega == 4) {
             // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
             x = (Integer.reverse((idx)>>>(n-v)) + 1) >>> (32-v);
             x <<= n - v - 1;
-            // even=true means omega=4 (rather than 2), so double the shift amount
+            // if omega=4, double the shift amount
             x *= 2;
         }
         else {
