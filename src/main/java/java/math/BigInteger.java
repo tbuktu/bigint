@@ -2184,12 +2184,62 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
     }
 
+    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
     private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 1;   // v starts at 1 rather than 0 for the same reason
+        int intLen = A[0].length;
         int[] d = new int[A[0].length];
 
-        for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+        int slen = len / 2;
+        while (slen > 1) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+            for (int j=0; j<len; j+=2*slen) {
+                int x1 = getDftExponent(n, v+1, j+expOffset, omega) * expScale;        // for level v+2
+                int x2 = getDftExponent(n, v, j+expOffset, omega) * expScale;          // for level v+1
+                int x3 = getDftExponent(n, v+1, j+slen+expOffset, omega) * expScale;   // for level v+2
+
+                // stride length = stride*slen subarrays
+                int idx0 = stride*j + idxOffset;
+                int idx1 = stride*j + stride*slen/2 + idxOffset;
+                int idx2 = idx0 + stride*slen;
+                int idx3 = idx1 + stride*slen;
+
+                for (int k=slen-1; k>=0; k-=2) {
+                    // do level v+1
+                    cyclicShiftLeftBits(A[idx2], x2, d);
+                    System.arraycopy(A[idx0], 0, A[idx2], 0, intLen);
+                    addModFn(A[idx0], d);
+                    subModFn(A[idx2], d);
+
+                    cyclicShiftLeftBits(A[idx3], x2, d);
+                    System.arraycopy(A[idx1], 0, A[idx3], 0, intLen);
+                    addModFn(A[idx1], d);
+                    subModFn(A[idx3], d);
+
+                    // do level v+2
+                    cyclicShiftLeftBits(A[idx1], x1, d);
+                    System.arraycopy(A[idx0], 0, A[idx1], 0, intLen);
+                    addModFn(A[idx0], d);
+                    subModFn(A[idx1], d);
+
+                    cyclicShiftLeftBits(A[idx3], x3, d);
+                    System.arraycopy(A[idx2], 0, A[idx3], 0, intLen);
+                    addModFn(A[idx2], d);
+                    subModFn(A[idx3], d);
+
+                    idx0 += stride;
+                    idx1 += stride;
+                    idx2 += stride;
+                    idx3 += stride;
+                }
+            }
+
+            v += 2;
+            slen /= 4;
+        }
+
+        // if there is an odd number of levels, do the remaining one now
+        if (slen > 0)
             for (int j=0; j<len; j+=2*slen) {
                 int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
                 int idx = stride*j + idxOffset;
@@ -2197,16 +2247,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
                 for (int k=slen-1; k>=0; k--) {
                     cyclicShiftLeftBits(A[idx2], x, d);
-                    System.arraycopy(A[idx], 0, A[idx2], 0, A[idx].length);
+                    System.arraycopy(A[idx], 0, A[idx2], 0, intLen);
                     addModFn(A[idx], d);
                     subModFn(A[idx2], d);
                     idx += stride;
                     idx2 += stride;
                 }
             }
-
-            v++;
-        }
     }
 
     /**
@@ -2298,12 +2345,66 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         idftDirect1(A, omega, rows, rows, cols, colIdx, cols);
     }
 
+    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
     private static void idftDirect1(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 31 - Integer.numberOfLeadingZeros(len);
-        int[] c = new int[A[0].length];
+        int intLen = A[0].length;
+        int[] c = new int[intLen];
 
-        for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+        int slen = 1;
+        while (slen <= len/4) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
+            for (int j=0; j<len; j+=4*slen) {
+                int x1 = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;          // for level v
+                int x2 = getDftExponent(n, v-1, j+expOffset, omega)*expScale + 1;        // for level v-1
+                int x3 = getDftExponent(n, v, j+slen*2+expOffset, omega)*expScale + 1;   // for level v
+
+                // stride length = stride*slen subarrays
+                int idx0 = stride*j + idxOffset;
+                int idx1 = stride*j + stride*slen + idxOffset;
+                int idx2 = idx0 + stride*slen*2;
+                int idx3 = idx1 + stride*slen*2;
+
+                for (int k=slen-1; k>=0; k--) {
+                    // do level v
+                    System.arraycopy(A[idx0], 0, c, 0, c.length);
+                    addModFn(A[idx0], A[idx1]);
+                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
+                    subModFn(c, A[idx1]);
+                    cyclicShiftRightBits(c, x1, A[idx1]);
+
+                    System.arraycopy(A[idx2], 0, c, 0, c.length);
+                    addModFn(A[idx2], A[idx3]);
+                    cyclicShiftRightBits(A[idx2], 1, A[idx2]);
+                    subModFn(c, A[idx3]);
+                    cyclicShiftRightBits(c, x3, A[idx3]);
+
+                    // do level v-1
+                    System.arraycopy(A[idx0], 0, c, 0, c.length);
+                    addModFn(A[idx0], A[idx2]);
+                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
+                    subModFn(c, A[idx2]);
+                    cyclicShiftRightBits(c, x2, A[idx2]);
+
+                    System.arraycopy(A[idx1], 0, c, 0, c.length);
+                    addModFn(A[idx1], A[idx3]);
+                    cyclicShiftRightBits(A[idx1], 1, A[idx1]);
+                    subModFn(c, A[idx3]);
+                    cyclicShiftRightBits(c, x2, A[idx3]);
+
+                    idx0 += stride;
+                    idx1 += stride;
+                    idx2 += stride;
+                    idx3 += stride;
+                }
+            }
+
+            v -= 2;
+            slen *= 4;
+        }
+
+        // if there is an odd number of levels, do the remaining one now
+        if (slen <= len/2)
             for (int j=0; j<len; j+=2*slen) {
                 int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
                 int idx = stride*j + idxOffset;
@@ -2320,9 +2421,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     idx2 += stride;
                 }
             }
-
-            v--;
-        }
     }
 
     /**
