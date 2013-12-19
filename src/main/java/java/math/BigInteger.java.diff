@@ -1,529 +1,42 @@
-Copyright (c) 2013, Alan Eliasen
-Copyright (c) 2013, Timothy Buktu
-
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-Redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.
-
-Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation
-and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-
-------------------------------------------------------------------------------
-
---- ./jdk8/jdk/src/share/classes/java/math/BigInteger.java	2013-03-09 11:31:49.000000000 +0100
-+++ src/main/java/java/math/BigInteger.java	2013-05-13 02:34:23.814823493 +0200
-@@ -31,6 +31,7 @@
- 
- import java.util.Random;
- import java.io.*;
-+import java.util.ArrayList;
- import java.util.Arrays;
- 
- /**
-@@ -94,6 +95,8 @@
-  * @see     BigDecimal
-  * @author  Josh Bloch
-  * @author  Michael McCloskey
-+ * @author  Alan Eliasen
-+ * @author  Timothy Buktu
-  * @since JDK1.1
-  */
- 
-@@ -174,6 +177,67 @@
-      */
-     final static long LONG_MASK = 0xffffffffL;
- 
-+    /**
-+     * The threshold value for using Karatsuba multiplication.  If the number
-+     * of ints in both mag arrays are greater than this number, then
-+     * Karatsuba multiplication will be used.   This value is found
-+     * experimentally to work well.
-+     */
+--- ../jdk8/jdk/src/share/classes/java/math/BigInteger.java	2013-12-16 19:30:55.222190028 +0100
++++ src/main/java/java/math/BigInteger.java	2013-12-19 10:53:32.520082203 +0100
+@@ -218 +218 @@
+-    private static final int KARATSUBA_THRESHOLD = 80;
 +    private static final int KARATSUBA_THRESHOLD = 50;
-+
-+    /**
-+     * The threshold value for using 3-way Toom-Cook multiplication.
-+     * If the number of ints in both mag arrays are greater than this number,
-+     * then Toom-Cook multiplication will be used.   This value is found
-+     * experimentally to work well.
-+     */
+@@ -227 +227 @@
+-    private static final int TOOM_COOK_THRESHOLD = 240;
 +    private static final int TOOM_COOK_THRESHOLD = 75;
-+
-+    /**
-+     * The threshold value for using Karatsuba squaring.  If the number
-+     * of ints in the number are larger than this value,
-+     * Karatsuba squaring will be used.   This value is found
-+     * experimentally to work well.
-+     */
+@@ -235 +235 @@
+-    private static final int KARATSUBA_SQUARE_THRESHOLD = 128;
 +    private static final int KARATSUBA_SQUARE_THRESHOLD = 90;
-+
-+    /**
-+     * The threshold value for using Toom-Cook squaring.  If the number
-+     * of ints in the number are larger than this value,
-+     * Toom-Cook squaring will be used.   This value is found
-+     * experimentally to work well.
-+     */
+@@ -243 +243 @@
+-    private static final int TOOM_COOK_SQUARE_THRESHOLD = 216;
 +    private static final int TOOM_COOK_SQUARE_THRESHOLD = 140;
-+
-+    /**
-+     * The threshold value for using Burnikel-Ziegler division.  If the number
-+     * of ints in the number are larger than this value,
-+     * Burnikel-Ziegler division will be used.   This value is found
-+     * experimentally to work well.
-+     */
+@@ -250 +250 @@
+-    static final int BURNIKEL_ZIEGLER_THRESHOLD = 80;
 +    static final int BURNIKEL_ZIEGLER_THRESHOLD = 50;
-+
-+    /**
+@@ -261,0 +262,6 @@
 +     * The threshold value, in bits, for using Newton iteration when
 +     * computing the reciprocal of a number.
 +     */
 +    private static final int NEWTON_THRESHOLD = 100;
 +
 +    /**
-+     * The threshold value for using Schoenhage recursive base conversion. If
-+     * the number of ints in the number are larger than this value,
-+     * the Schoenhage algorithm will be used.  In practice, it appears that the
-+     * Schoenhage routine is faster for any threshold down to 2, and is
-+     * relatively flat for thresholds between 2-25, so this choice may be
-+     * varied within this range for very small effect.
-+     */
+@@ -269 +275,6 @@
+-    private static final int SCHOENHAGE_BASE_CONVERSION_THRESHOLD = 20;
 +    private static final int SCHOENHAGE_BASE_CONVERSION_THRESHOLD = 8;
 +
 +    /**
 +     * Whether we're running on a 64-bit JVM.
 +     */
 +    private static final boolean IS64BIT = "64".equals(System.getProperty("sun.arch.data.model"));
-+
-     //Constructors
- 
-     /**
-@@ -522,15 +586,16 @@
- 
-         if (bitLength < 2)
-             throw new ArithmeticException("bitLength < 2");
--        // The cutoff of 95 was chosen empirically for best performance
--        prime = (bitLength < 95 ? smallPrime(bitLength, certainty, rnd)
-+        prime = (bitLength < SMALL_PRIME_THRESHOLD
-+                                ? smallPrime(bitLength, certainty, rnd)
-                                 : largePrime(bitLength, certainty, rnd));
-         signum = 1;
-         mag = prime.mag;
-     }
- 
-     // Minimum size in bits that the requested prime number has
--    // before we use the large prime number generating algorithms
-+    // before we use the large prime number generating algorithms.
-+    // The cutoff of 95 was chosen empirically for best performance.
-     private static final int SMALL_PRIME_THRESHOLD = 95;
- 
-     // Certainty required to meet the spec of probablePrime
-@@ -553,7 +618,6 @@
-         if (bitLength < 2)
-             throw new ArithmeticException("bitLength < 2");
- 
--        // The cutoff of 95 was chosen empirically for best performance
-         return (bitLength < SMALL_PRIME_THRESHOLD ?
-                 smallPrime(bitLength, DEFAULT_PRIME_CERTAINTY, rnd) :
-                 largePrime(bitLength, DEFAULT_PRIME_CERTAINTY, rnd));
-@@ -978,6 +1042,17 @@
-         return (val[0]>0 ? new BigInteger(val, 1) : new BigInteger(val));
-     }
- 
-+    /**
-+     * Returns an <code>n</code>-int number all of whose bits are ones
-+     * @param n number of ints in the <code>mag</code> array
-+     * @return a number equal to <code>ONE.shiftLeft(32*n).subtract(ONE)</code>
-+     */
-+    private static BigInteger ones(int n) {
-+        int[] mag = new int[n];
-+        Arrays.fill(mag, -1);
-+        return new BigInteger(mag, 1);
-+    }
-+
-     // Constants
- 
-     /**
-@@ -986,6 +1061,20 @@
-     private final static int MAX_CONSTANT = 16;
-     private static BigInteger posConst[] = new BigInteger[MAX_CONSTANT+1];
-     private static BigInteger negConst[] = new BigInteger[MAX_CONSTANT+1];
-+
-+    /**
-+     * The cache of powers of each radix.  This allows us to not have to
-+     * recalculate powers of radix^(2^n) more than once.  This speeds
-+     * Schoenhage recursive base conversion significantly.
-+     */
-+    private static ArrayList<BigInteger>[] powerCache;
-+
-+    /** The cache of logarithms of radices for base conversion. */
-+    private static final double[] logCache;
-+
-+    /** The natural log of 2.  This is used in computing cache indices. */
-+    private static final double LOG_TWO = Math.log(2.0);
-+
-     static {
-         for (int i = 1; i <= MAX_CONSTANT; i++) {
-             int[] magnitude = new int[1];
-@@ -993,6 +1082,22 @@
-             posConst[i] = new BigInteger(magnitude,  1);
-             negConst[i] = new BigInteger(magnitude, -1);
-         }
-+
-+        /**
-+         * Initialize the cache of radix^(2^x) values used for base conversion
-+         * with just the very first value.  Additional values will be created
-+         * on demand.
-+         */
-+        powerCache = (ArrayList<BigInteger>[])
-+            new ArrayList[Character.MAX_RADIX+1];
-+        logCache = new double[Character.MAX_RADIX+1];
-+
-+        for (int i=Character.MIN_RADIX; i<=Character.MAX_RADIX; i++)
-+        {
-+            powerCache[i] = new ArrayList<BigInteger>(1);
-+            powerCache[i].add(BigInteger.valueOf(i));
-+            logCache[i] = Math.log(i);
-+        }
-     }
- 
-     /**
-@@ -1015,6 +1120,11 @@
-     private static final BigInteger TWO = valueOf(2);
- 
-     /**
-+     * The BigInteger constant -1.  (Not exported.)
-+     */
-+    private static final BigInteger NEGATIVE_ONE = valueOf(-1);
-+
-+    /**
-      * The BigInteger constant ten.
-      *
-      * @since   1.5
-@@ -1290,17 +1400,32 @@
-     public BigInteger multiply(BigInteger val) {
-         if (val.signum == 0 || signum == 0)
-             return ZERO;
--        int resultSign = signum == val.signum ? 1 : -1;
--        if (val.mag.length == 1) {
--            return  multiplyByInt(mag,val.mag[0], resultSign);
--        }
--        if(mag.length == 1) {
--            return multiplyByInt(val.mag,mag[0], resultSign);
--        }
--        int[] result = multiplyToLen(mag, mag.length,
--                                     val.mag, val.mag.length, null);
--        result = trustedStripLeadingZeroInts(result);
--        return new BigInteger(result, resultSign);
-+
-+        int xlen = mag.length;
-+        int ylen = val.mag.length;
-+
-+        if ((xlen < KARATSUBA_THRESHOLD) || (ylen < KARATSUBA_THRESHOLD))
-+        {
-+            int resultSign = signum == val.signum ? 1 : -1;
-+            if (val.mag.length == 1) {
-+                return  multiplyByInt(mag,val.mag[0], resultSign);
-+            }
-+            if(mag.length == 1) {
-+                return multiplyByInt(val.mag,mag[0], resultSign);
-+            }
-+            int[] result = multiplyToLen(mag, xlen,
-+                                         val.mag, ylen, null);
-+            result = trustedStripLeadingZeroInts(result);
-+            return new BigInteger(result, resultSign);
-+        }
-+        else
-+            if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD))
-+                return multiplyKaratsuba(this, val);
-+            else
-+                if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen))
-+                    return multiplyToomCook3(this, val);
-+                else
-+                    return multiplySchoenhageStrassen(this, val);
-     }
- 
-     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
-@@ -1402,6 +1527,1148 @@
-     }
- 
-     /**
-+     * Multiplies two BigIntegers using the Karatsuba multiplication
-+     * algorithm.  This is a recursive divide-and-conquer algorithm which is
-+     * more efficient for large numbers than what is commonly called the
-+     * "grade-school" algorithm used in multiplyToLen.  If the numbers to be
-+     * multiplied have length n, the "grade-school" algorithm has an
-+     * asymptotic complexity of O(n^2).  In contrast, the Karatsuba algorithm
-+     * has complexity of O(n^(log2(3))), or O(n^1.585).  It achieves this
-+     * increased performance by doing 3 multiplies instead of 4 when
-+     * evaluating the product.  As it has some overhead, should be used when
-+     * both numbers are larger than a certain threshold (found
-+     * experimentally).
-+     *
-+     * See:  http://en.wikipedia.org/wiki/Karatsuba_algorithm
-+     */
-+    private static BigInteger multiplyKaratsuba(BigInteger x, BigInteger y)
-+    {
-+        int xlen = x.mag.length;
-+        int ylen = y.mag.length;
-+
-+        // The number of ints in each half of the number.
-+        int half = (Math.max(xlen, ylen)+1) / 2;
-+
-+        // xl and yl are the lower halves of x and y respectively,
-+        // xh and yh are the upper halves.
-+        BigInteger xl = x.getLower(half);
-+        BigInteger xh = x.getUpper(half);
-+        BigInteger yl = y.getLower(half);
-+        BigInteger yh = y.getUpper(half);
-+
-+        BigInteger p1 = xh.multiply(yh);  // p1 = xh*yh
-+        BigInteger p2 = xl.multiply(yl);  // p2 = xl*yl
-+
-+        // p3=(xh+xl)*(yh+yl)
-+        BigInteger p3 = xh.add(xl).multiply(yh.add(yl));
-+
-+        // result = p1 * 2^(32*2*half) + (p3 - p1 - p2) * 2^(32*half) + p2
-+        BigInteger result = p1.shiftLeft(32*half).add(p3.subtract(p1).subtract(p2)).shiftLeft(32*half).add(p2);
-+
-+        if (x.signum != y.signum)
-+            return result.negate();
-+        else
-+            return result;
-+    }
-+
-+    /**
-+     * Multiplies two BigIntegers using a 3-way Toom-Cook multiplication
-+     * algorithm.  This is a recursive divide-and-conquer algorithm which is
-+     * more efficient for large numbers than what is commonly called the
-+     * "grade-school" algorithm used in multiplyToLen.  If the numbers to be
-+     * multiplied have length n, the "grade-school" algorithm has an
-+     * asymptotic complexity of O(n^2).  In contrast, 3-way Toom-Cook has a
-+     * complexity of about O(n^1.465).  It achieves this increased asymptotic
-+     * performance by breaking each number into three parts and by doing 5
-+     * multiplies instead of 9 when evaluating the product.  Due to overhead
-+     * (additions, shifts, and one division) in the Toom-Cook algorithm, it
-+     * should only be used when both numbers are larger than a certain
-+     * threshold (found experimentally).  This threshold is generally larger
-+     * than that for Karatsuba multiplication, so this algorithm is generally
-+     * only used when numbers become significantly larger.
-+     *
-+     * The algorithm used is the "optimal" 3-way Toom-Cook algorithm outlined
-+     * by Marco Bodrato.
-+     *
-+     *  See: http://bodrato.it/toom-cook/
-+     *       http://bodrato.it/papers/#WAIFI2007
-+     *
-+     * "Towards Optimal Toom-Cook Multiplication for Univariate and
-+     * Multivariate Polynomials in Characteristic 2 and 0." by Marco BODRATO;
-+     * In C.Carlet and B.Sunar, Eds., "WAIFI'07 proceedings", p. 116-133,
-+     * LNCS #4547. Springer, Madrid, Spain, June 21-22, 2007.
-+     *
-+     */
-+    private static BigInteger multiplyToomCook3(BigInteger a, BigInteger b)
-+    {
-+        int alen = a.mag.length;
-+        int blen = b.mag.length;
-+
-+        int largest = Math.max(alen, blen);
-+
-+        // k is the size (in ints) of the lower-order slices.
-+        int k = (largest+2)/3;   // Equal to ceil(largest/3)
-+
-+        // r is the size (in ints) of the highest-order slice.
-+        int r = largest - 2*k;
-+
-+        // Obtain slices of the numbers. a2 and b2 are the most significant
-+        // bits of the numbers a and b, and a0 and b0 the least significant.
-+        BigInteger a0, a1, a2, b0, b1, b2;
-+        a2 = a.getToomSlice(k, r, 0, largest);
-+        a1 = a.getToomSlice(k, r, 1, largest);
-+        a0 = a.getToomSlice(k, r, 2, largest);
-+        b2 = b.getToomSlice(k, r, 0, largest);
-+        b1 = b.getToomSlice(k, r, 1, largest);
-+        b0 = b.getToomSlice(k, r, 2, largest);
-+
-+        BigInteger v0, v1, v2, vm1, vinf, t1, t2, tm1, da1, db1;
-+
-+        v0 = a0.multiply(b0);
-+        da1 = a2.add(a0);
-+        db1 = b2.add(b0);
-+        vm1 = da1.subtract(a1).multiply(db1.subtract(b1));
-+        da1 = da1.add(a1);
-+        db1 = db1.add(b1);
-+        v1 = da1.multiply(db1);
-+        v2 = da1.add(a2).shiftLeft(1).subtract(a0).multiply(
-+             db1.add(b2).shiftLeft(1).subtract(b0));
-+        vinf = a2.multiply(b2);
-+
-+        /* The algorithm requires two divisions by 2 and one by 3.
-+           All divisions are known to be exact, that is, they do not produce
-+           remainders, and all results are positive.  The divisions by 2 are
-+           implemented as right shifts which are relatively efficient, leaving
-+           only an exact division by 3, which is done by a specialized
-+           linear-time algorithm. */
-+        t2 = v2.subtract(vm1).exactDivideBy3();
-+        tm1 = v1.subtract(vm1).shiftRight(1);
-+        t1 = v1.subtract(v0);
-+        t2 = t2.subtract(t1).shiftRight(1);
-+        t1 = t1.subtract(tm1).subtract(vinf);
-+        t2 = t2.subtract(vinf.shiftLeft(1));
-+        tm1 = tm1.subtract(t2);
-+
-+        // Number of bits to shift left.
-+        int ss = k*32;
-+
-+        BigInteger result = vinf.shiftLeft(ss).add(t2).shiftLeft(ss).add(t1).shiftLeft(ss).add(tm1).shiftLeft(ss).add(v0);
-+
-+        if (a.signum != b.signum)
-+            return result.negate();
-+        else
-+            return result;
-+    }
-+
-+
-+    /** Returns a slice of a BigInteger for use in Toom-Cook multiplication.
-+        @param lowerSize The size of the lower-order bit slices.
-+        @param upperSize The size of the higher-order bit slices.
-+        @param slice The index of which slice is requested, which must be a
-+            number from 0 to size-1.  Slice 0 is the highest-order bits,
-+            and slice size-1 are the lowest-order bits.
-+            Slice 0 may be of different size than the other slices.
-+        @param fullsize The size of the larger integer array, used to align
-+            slices to the appropriate position when multiplying different-sized
-+            numbers.
-+    */
-+    private BigInteger getToomSlice(int lowerSize, int upperSize, int slice,
-+                                    int fullsize)
-+    {
-+        int start, end, sliceSize, len, offset;
-+
-+        len = mag.length;
-+        offset = fullsize - len;
-+
-+        if (slice == 0)
-+        {
-+            start = 0 - offset;
-+            end = upperSize - 1 - offset;
-+        }
-+        else
-+        {
-+            start = upperSize + (slice-1)*lowerSize - offset;
-+            end = start + lowerSize - 1;
-+        }
-+
-+        if (start < 0)
-+            start = 0;
-+        if (end < 0)
-+           return ZERO;
-+
-+        sliceSize = (end-start) + 1;
-+
-+        if (sliceSize <= 0)
-+            return ZERO;
-+
-+        // While performing Toom-Cook, all slices are positive and
-+        // the sign is adjusted when the final number is composed.
-+        if (start==0 && sliceSize >= len)
-+            return this.abs();
-+
-+        int intSlice[] = new int[sliceSize];
-+        System.arraycopy(mag, start, intSlice, 0, sliceSize);
-+
-+        return new BigInteger(trustedStripLeadingZeroInts(intSlice), 1);
-+    }
-+
-+    /** Does an exact division (that is, the remainder is known to be zero)
-+        of the specified number by 3.  This is used in Toom-Cook
-+        multiplication.  This is an efficient algorithm that runs in linear
-+        time.  If the argument is not exactly divisible by 3, results are
-+        undefined.  Note that this is expected to be called with positive
-+        arguments only. */
-+    private BigInteger exactDivideBy3()
-+    {
-+        int len = mag.length;
-+        int[] result = new int[len];
-+        long x, w, q, borrow;
-+        borrow = 0L;
-+        for (int i=len-1; i>=0; i--)
-+        {
-+            x = (mag[i] & LONG_MASK);
-+            w = x - borrow;
-+            if (borrow > x)       // Did we make the number go negative?
-+                borrow = 1L;
-+            else
-+                borrow = 0L;
-+
-+            // 0xAAAAAAAB is the modular inverse of 3 (mod 2^32).  Thus,
-+            // the effect of this is to divide by 3 (mod 2^32).
-+            // This is much faster than division on most architectures.
-+            q = (w * 0xAAAAAAABL) & LONG_MASK;
-+            result[i] = (int) q;
-+
-+            // Now check the borrow. The second check can of course be
-+            // eliminated if the first fails.
-+            if (q >= 0x55555556L)
-+            {
-+                borrow++;
-+                if (q >= 0xAAAAAAABL)
-+                    borrow++;
-+            }
-+        }
-+        result = trustedStripLeadingZeroInts(result);
-+        return new BigInteger(result, signum);
-+    }
-+
-+    /**
-+     * Returns a new BigInteger representing n lower ints of the number.
-+     * This is used by Karatsuba multiplication, Karatsuba squaring,
-+     * and Burnikel-Ziegler division.
-+     */
-+    private BigInteger getLower(int n) {
-+        int len = mag.length;
-+
-+        if (len <= n)
-+            return this;
-+
-+        int lowerInts[] = new int[n];
-+        System.arraycopy(mag, len-n, lowerInts, 0, n);
-+
-+        return new BigInteger(trustedStripLeadingZeroInts(lowerInts), 1);
-+    }
-+
-+    /**
-+     * Returns a new BigInteger representing mag.length-n upper
-+     * ints of the number.  This is used by Karatsuba multiplication,
-+     * Karatsuba squaring, and Burnikel-Ziegler division.
-+     */
-+    private BigInteger getUpper(int n) {
-+        int len = mag.length;
-+
-+        if (len <= n)
-+            return ZERO;
-+
-+        int upperLen = len - n;
-+        int upperInts[] = new int[upperLen];
-+        System.arraycopy(mag, 0, upperInts, 0, upperLen);
-+
-+        return new BigInteger(trustedStripLeadingZeroInts(upperInts), 1);
-+    }
-+
+@@ -1486 +1497 @@
+-            } else {
++            } else if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen)) {
+@@ -1487,0 +1499,2 @@
++            } else {
++                return multiplySchoenhageStrassen(this, val);
+@@ -1853,0 +1867,1108 @@
 +    // Schoenhage-Strassen
 +
 +    /**
@@ -542,7 +55,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +        if (b.signum() < 0)
 +            b = b.negate();
 +
-+        int[] cArr = multiplySchoenhageStrassen(a.mag, a.bitLength(), b.mag, b.bitLength());
++        int[] cArr = multiplySchoenhageStrassen(a.mag, b.mag);
 +
 +        BigInteger c = new BigInteger(1, cArr);
 +        if (signum < 0)
@@ -561,7 +74,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +        // remove any minus sign
 +        int[] aArr = signum()>=0 ? mag : negate().mag;
 +
-+        int[] cArr = squareSchoenhageStrassen(aArr, bitLength());
++        int[] cArr = squareSchoenhageStrassen(aArr);
 +        BigInteger c = new BigInteger(1, cArr);
 +
 +        return c;
@@ -577,25 +90,31 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * <p/>
 +     * The Schoenhage-Strassen algorithm algorithm works as follows:
 +     * <ol>
-+     *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.</li>
++     *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.
++     *       See the code for how n is calculated.</li>
 +     *   <li>Take the low n+2 bits of each piece of a, zero-pad them to 3n+5 bits,
 +     *       and concatenate them to a new number u.</li>
 +     *   <li>Do the same for b to obtain v.</li>
-+     *   <li>Calculate all pieces of z' by multiplying u and v (using Schoenhage-Strassen or another
-+     *       algorithm). The product will contain all pieces of a*b mod n+2.</li>
++     *   <li>Calculate all pieces of gamma by multiplying u and v (using Schoenhage-Strassen or another
++     *       algorithm).</li>
++     *   <li>Split gamma into pieces of 3n+5 bits.</li>
++     *   <li>Calculate z'<sub>i</sub> = gamma<sub>i</sub> + gamma<sub>i+2*2<sup>n</sup></sub> -
++     *       gamma<sub>i+2<sup>n</sup></sub> - gamma<sub>i+3*2<sup>n</sup></sub> and reduce modulo
++     *       2<sup>n+2</sup>.<br/>
++     *       z'<sub>i</sub> will be the i-th piece of a*b mod 2<sup>n+2</sup>.</li>
 +     *   <li>Pad the pieces of a and b from step 1 to 2<sup>n+1</sup> bits.</li>
 +     *   <li>Perform a
 +     *       <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
 +     *       Discrete Fourier Transform</a> (DFT) on the padded pieces.</li>
 +     *   <li>Calculate all pieces of z" by multiplying the i-th piece of a by the i-th piece of b.</li>
 +     *   <li>Perform an Inverse Discrete Fourier Transform (IDFT) on z". z" will contain all pieces of
-+     *       a*b mod Fn where Fn=2<sup>2<sup>n+1</sup></sup>.</li>
++     *       a*b mod F<sub>n</sub> where F<sub>n</sub>=2<sup>2<sup>n</sup></sup>+1.</li>
 +     *   <li>Calculate all pieces of z such that each piece is congruent to z' modulo n+2 and congruent to
-+     *       z" modulo Fn. This is done using the
++     *       z" modulo F<sub>n</sub>. This is done using the
 +     *       <a href="http://en.wikipedia.org/wiki/Chinese_remainder_theorem">Chinese remainder theorem</a>.</li>
 +     *   <li>Calculate c by adding z<sub>i</sub> * 2<sup>i*2<sup>n-1</sup></sup> for all i, where z<sub>i</sub> is the
 +     *       i-th piece of z.</li>
-+     *   <li>Return c reduced modulo 2<sup>2<sup>m+1</sup></sup>.</li>
++     *   <li>Return c reduced modulo 2<sup>2<sup>m</sup></sup>+1. See the code for how m is calculated.</li>
 +     * </ol>
 +     *
 +     * References:
@@ -609,14 +128,12 @@ POSSIBILITY OF SUCH DAMAGE.
 +     *       Schoenhage-Strassen-Algorithmus</a></li>
 +     * </ol>
 +     * @param a
-+     * @param aBitLen
 +     * @param b
-+     * @param bBitLen
 +     * @return a*b
 +     */
-+    private static int[] multiplySchoenhageStrassen(int[] a, int aBitLen, int[] b, int bBitLen) {
++    private static int[] multiplySchoenhageStrassen(int[] a, int[] b) {
 +        // set M to the number of binary digits in a or b, whichever is greater
-+        int M = Math.max(aBitLen, bBitLen);
++        int M = Math.max(a.length*32, b.length*32);
 +
 +        // find the lowest m such that m>=log2(2M)
 +        int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
@@ -661,14 +178,15 @@ POSSIBILITY OF SUCH DAMAGE.
 +        // zr mod Fn
 +        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
 +        int[][] bi = splitInts(b, halfNumPcs, pieceSize, 1<<(n+1-5));
-+        dft(ai, m, n);
-+        dft(bi, m, n);
++        int omega = even ? 4 : 2;
++        dft(ai, omega);
++        dft(bi, omega);
 +        modFn(ai);
 +        modFn(bi);
 +        int[][] c = new int[halfNumPcs][];
 +        for (int i=0; i<c.length; i++)
 +            c[i] = multModFn(ai[i], bi[i]);
-+        idft(c, m, n);
++        idft(c, omega);
 +        modFn(c);
 +
 +        int[] z = new int[1<<(m+1-5)];
@@ -694,13 +212,12 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * Squares a <b>positive</b> number of length <code>aBitLen</code> that is represented as an int
 +     * array, i.e. in base 2<sup>32</sup>.
 +     * @param a
-+     * @param aBitLen
 +     * @return a<sup>2</sup>
 +     * @see #multiplySchoenhageStrassen(int[], int, int[], int)
 +     */
-+    private int[] squareSchoenhageStrassen(int[] a, int aBitLen) {
++    private int[] squareSchoenhageStrassen(int[] a) {
 +        // set M to the number of binary digits in a
-+        int M = aBitLen;
++        int M = a.length * 32;
 +
 +        // find the lowest m such that m>=log2(2M)
 +        int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
@@ -738,12 +255,13 @@ POSSIBILITY OF SUCH DAMAGE.
 +
 +        // zr mod Fn
 +        int[][] ai = splitInts(a, halfNumPcs, pieceSize, 1<<(n+1-5));
-+        dft(ai, m, n);
++        int omega = even ? 4 : 2;
++        dft(ai, omega);
 +        modFn(ai);
 +        int[][] c = new int[halfNumPcs][];
 +        for (int i=0; i<c.length; i++)
 +            c[i] = squareModFn(ai[i]);
-+        idft(c, m, n);
++        idft(c, omega);
 +        modFn(c);
 +
 +        int[] z = new int[1<<(m+1-5)];
@@ -777,19 +295,19 @@ POSSIBILITY OF SUCH DAMAGE.
 +            // SS is slower than Toom-Cook below ~15,500 ints (~149,000 decimal digits)
 +            // and faster above ~73,200 ints (~705,000 decimal digits).
 +            // Between those values, it changes several times.
-+            if (length < 15500)
++            if (length <= 15500)
 +                return false;
-+            if (length < 16384)   // 2^14
++            if (length <= 16384)   // 2^14
 +                return true;
-+            if (length < 26300)
++            if (length <= 26300)
 +                return false;
-+            if (length < 32768)   // 2^15
++            if (length <= 32768)   // 2^15
 +                return true;
-+            if (length < 44000)
++            if (length <= 44000)
 +                return false;
-+            if (length < 65536)   // 2^16
++            if (length <= 65536)   // 2^16
 +                return true;
-+            if (length < 73200)
++            if (length <= 73200)
 +                return false;
 +            return true;
 +        } else {
@@ -797,15 +315,15 @@ POSSIBILITY OF SUCH DAMAGE.
 +            // SS is slower than Toom-Cook below ~6,300 ints (~60,700 decimal digits)
 +            // and faster above ~34,000 ints (~327,500 decimal digits).
 +            // Between those values, it changes several times.
-+            if (length < 6300)
++            if (length <= 6300)
 +                return false;
-+            if (length < 16384)   // 2^14
++            if (length <= 16384)   // 2^14
 +                return true;
-+            if (length < 19300)
++            if (length <= 19300)
 +                return false;
-+            if (length < 32768)   // 2^15
++            if (length <= 32768)   // 2^15
 +                return true;
-+            if (length < 34000)
++            if (length <= 34000)
 +                return false;
 +            return true;
 +        }
@@ -820,103 +338,220 @@ POSSIBILITY OF SUCH DAMAGE.
 +     */
 +    private boolean shouldSquareSchoenhageStrassen(int length) {
 +        if (IS64BIT) {
-+            if (length < 15000)
++            if (length <= 15000)
 +                return false;
-+            if (length < 16384)   // 2^14
++            if (length <= 16384)   // 2^14
 +                return true;
-+            if (length < 27100)
++            if (length <= 27100)
 +                return false;
-+            if (length < 32768)   // 2^15
++            if (length <= 32768)   // 2^15
 +                return true;
-+            if (length < 43600)
++            if (length <= 43600)
 +                return false;
-+            if (length < 65536)   // 2^16
++            if (length <= 65536)   // 2^16
 +                return true;
-+            if (length < 76300)
++            if (length <= 76300)
 +                return false;
-+            if (length < 131072)   // 2^17
++            if (length <= 131072)   // 2^17
 +                return true;
-+            if (length < 133800)
++            if (length <= 133800)
 +                return false;
 +            return true;
 +        } else {
-+            if (length < 7100)
++            if (length <= 7100)
 +                return false;
-+            if (length < 8192)   // 2^13
++            if (length <= 8192)   // 2^13
 +                return true;
-+            if (length < 14200)
++            if (length <= 14200)
 +                return false;
-+            if (length < 16384)   // 2^14
++            if (length <= 16384)   // 2^14
 +                return true;
-+            if (length < 24100)
++            if (length <= 24100)
 +                return false;
-+            if (length < 32768)   // 2^15
++            if (length <= 32768)   // 2^15
 +                return true;
-+            if (length < 42800)
++            if (length <= 42800)
 +                return false;
-+            if (length < 65536)   // 2^16
++            if (length <= 65536)   // 2^16
 +                return true;
-+            if (length < 73000)
++            if (length <= 73000)
 +                return false;
 +            return true;
 +        }
 +    }
 +
 +    /**
-+     * Performs a
++     * Performs a modified
 +     * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
 +     * Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.<br/>
++     * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
++     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
++     * Bailey's 4-step algorithm</a>.<br/>
 +     * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
 +     * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
 +     * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
 +     * n must be equal to m/2-1.
 +     * @param A
-+     * @param m
-+     * @param n
++     * @param omega 2 or 4
 +     */
-+    private static void dft(int[][] A, int m, int n) {
-+        boolean even = m%2 == 0;
-+        int len = A.length;
-+        int v = 1;
++    private static void dft(int[][] A, int omega) {
++        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
++        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
++        int cols = A.length / rows;   // number of columns
++
++        // step 1: perform an DFT on each column
++        for (int i=0; i<cols; i++)
++            dftBailey1(A, omega, rows, cols, i);
++
++        // step 2: multiply by powers of omega
++        applyDftWeights(A, omega, rows, cols);
++
++        // step 3 is built into step 1 by making the stride length a multiple of the row length
++
++        // step 4: perform an DFT on each row
++        for (int i=0; i<rows; i++)
++            dftBailey2(A, omega, rows, cols, i);
++    }
++
++    /**
++     * Performs an DFT on column {@code colIdx}.<br/>
++     * <code>A</code> is assumed to be the lower half of the full array.
++     * @param A an array of length rows*cols
++     * @param omega root of unity
++     * @param rows number of rows in A
++     * @param cols number of columns in A
++     * @param colIdx index of the column to transform
++     */
++    private static void dftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
++        dftDirect(A, omega, rows, cols, rows, colIdx, cols);
++    }
++
++    /**
++     * Performs an DFT on row {@code rowIdx}.<br/>
++     * <code>A</code> is assumed to be the lower half of the full array.
++     * @param A an array of length rows*cols
++     * @param omega root of unity
++     * @param rows number of rows in A
++     * @param cols number of columns in A
++     * @param rowIdx index of the row to transform
++     */
++    private static void dftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
++        dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
++    }
++
++    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
++    private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
++        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
++        int v = 1;   // v starts at 1 rather than 0 for the same reason
++        int intLen = A[0].length;
 +        int[] d = new int[A[0].length];
 +
-+        for (int slen=len/2; slen>0; slen/=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
++        int slen = len / 2;
++        while (slen > 1) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
 +            for (int j=0; j<len; j+=2*slen) {
-+                int idx = j;
-+                int x = getDftExponent(n, v, idx+len, even);
++                int x1 = getDftExponent(n, v+1, j+expOffset, omega) * expScale;        // for level v+2
++                int x2 = getDftExponent(n, v, j+expOffset, omega) * expScale;          // for level v+1
++                int x3 = getDftExponent(n, v+1, j+slen+expOffset, omega) * expScale;   // for level v+2
 +
-+                for (int k=slen-1; k>=0; k--) {
-+                    cyclicShiftLeftBits(A[idx+slen], x, d);
-+                    System.arraycopy(A[idx], 0, A[idx+slen], 0, A[idx].length);   // copy A[idx] into A[idx+slen]
-+                    addModFn(A[idx], d);
-+                    subModFn(A[idx+slen], d);
-+                    idx++;
++                // stride length = stride*slen subarrays
++                int idx0 = stride*j + idxOffset;
++                int idx1 = stride*j + stride*slen/2 + idxOffset;
++                int idx2 = idx0 + stride*slen;
++                int idx3 = idx1 + stride*slen;
++
++                for (int k=slen-1; k>=0; k-=2) {
++                    // do level v+1
++                    cyclicShiftLeftBits(A[idx2], x2, d);
++                    System.arraycopy(A[idx0], 0, A[idx2], 0, intLen);
++                    addModFn(A[idx0], d);
++                    subModFn(A[idx2], d);
++
++                    cyclicShiftLeftBits(A[idx3], x2, d);
++                    System.arraycopy(A[idx1], 0, A[idx3], 0, intLen);
++                    addModFn(A[idx1], d);
++                    subModFn(A[idx3], d);
++
++                    // do level v+2
++                    cyclicShiftLeftBits(A[idx1], x1, d);
++                    System.arraycopy(A[idx0], 0, A[idx1], 0, intLen);
++                    addModFn(A[idx0], d);
++                    subModFn(A[idx1], d);
++
++                    cyclicShiftLeftBits(A[idx3], x3, d);
++                    System.arraycopy(A[idx2], 0, A[idx3], 0, intLen);
++                    addModFn(A[idx2], d);
++                    subModFn(A[idx3], d);
++
++                    idx0 += stride;
++                    idx1 += stride;
++                    idx2 += stride;
++                    idx3 += stride;
 +                }
 +            }
 +
-+            v++;
++            v += 2;
++            slen /= 4;
 +        }
++
++        // if there is an odd number of levels, do the remaining one now
++        if (slen > 0)
++            for (int j=0; j<len; j+=2*slen) {
++                int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
++                int idx = stride*j + idxOffset;
++                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
++
++                for (int k=slen-1; k>=0; k--) {
++                    cyclicShiftLeftBits(A[idx2], x, d);
++                    System.arraycopy(A[idx], 0, A[idx2], 0, intLen);
++                    addModFn(A[idx], d);
++                    subModFn(A[idx2], d);
++                    idx += stride;
++                    idx2 += stride;
++                }
++            }
 +    }
 +
 +    /**
 +     * Returns the power to which to raise omega in a DFT.<br/>
-+     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-+     * doubles the exponent so omega can be assumed always to be 2 in a DFT.
-+     * @param n
-+     * @param v
-+     * @param idx
-+     * @param even
++     * When <code>omega</code>=4, this method doubles the exponent so
++     * <code>omega</code> can be assumed always to be 2 in {@link #dft(int[][], int)}.
++     * @param n the log of the DFT length
++     * @param v butterfly depth
++     * @param idx index of the array element to be computed
++     * @param omega 2 or 4
 +     * @return
 +     */
-+    private static int getDftExponent(int n, int v, int idx, boolean even) {
-+        // take bits n-v..n-1 of idx, reverse them, shift left by n-v-1
-+        int x = Integer.reverse(idx) << (n-v) >>> (31-n);
++    private static int getDftExponent(int n, int v, int idx, int omega) {
++        // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
++        int x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
++        x <<= n - v - 1;
 +
-+        // if m is even, divide by two
-+        if (even)
-+            x >>>= 1;
++        // if omega=4, double the shift amount
++        if (omega == 4)
++            x *= 2;
 +
 +        return x;
++    }
++
++    /** Multiplies vector elements by powers of omega (aka twiddle factors) */
++    private static void applyDftWeights(int[][] A, int omega, int rows, int cols) {
++        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
++
++        for (int i=0; i<rows; i++)
++            for (int j=0; j<cols; j++) {
++                int idx = i*cols + j;
++                int[] temp = new int[A[idx].length];
++                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
++                if (omega == 4)
++                    shiftAmt *= 2;
++                cyclicShiftLeftBits(A[idx], shiftAmt, temp);
++                System.arraycopy(temp, 0, A[idx], 0, temp.length);
++            }
++    }
++
++    private static int getBaileyShiftAmount(int i, int j, int rows, int cols, int v) {
++        int iRev = Integer.reverse(i+rows) >>> (32-v);
++        return iRev * j;
 +    }
 +
 +    /**
@@ -925,66 +560,161 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * Inverse Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.
 +     * The modification is that the last step (the one where the upper half is subtracted from the lower half)
 +     * is omitted.<br/>
-+     * <code>A</code> is assumed to be the upper half of the full array and the upper half is assumed to be all zeros.
++     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
++     * Bailey's 4-step algorithm</a>.<br/>
++     * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
 +     * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
 +     * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
 +     * n must be equal to m/2-1.
 +     * @param A
-+     * @param m
-+     * @param n
++     * @param omega 2 or 4
 +     */
-+    private static void idft(int[][] A, int m, int n) {
-+        boolean even = m%2 == 0;
-+        int len = A.length;
-+        int v = n - 1;
-+        int[] c = new int[A[0].length];
-+        
-+        for (int slen=1; slen<=len/2; slen*=2) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
-+            for (int j=0; j<len; j+=2*slen) {
-+                int idx = j;
-+                int idx2 = idx + slen;   // idx2 is always idx+slen
-+                int x = getIdftExponent(n, v, idx, even);
++    private static void idft(int[][] A, int omega) {
++        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
++        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
++        int cols = A.length / rows;   // number of columns
++
++        // step 1: perform an IDFT on each row
++        for (int i=0; i<rows; i++)
++            idftBailey2(A, omega, rows, cols, i);
++
++        // step 2: multiply by powers of omega
++        applyIdftWeights(A, omega, rows, cols);
++
++        // step 3 is built into step 4 by making the stride length a multiple of the row length
++        // step 4: perform an IDFT on each column
++        for (int i=0; i<cols; i++)
++            idftBailey1(A, omega, rows, cols, i);
++    }
++
++    /**
++     * Performs an IDFT on column {@code colIdx}.<br/>
++     * <code>A</code> is assumed to be the upper half of the full array.
++     * @param A an array of length rows*cols
++     * @param omega root of unity
++     * @param rows number of rows in A
++     * @param cols number of columns in A
++     * @param colIdx index of the column to transform
++     */
++    private static void idftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
++        idftDirect1(A, omega, rows, rows, cols, colIdx, cols);
++    }
++
++    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
++    private static void idftDirect1(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
++        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
++        int v = 31 - Integer.numberOfLeadingZeros(len);
++        int intLen = A[0].length;
++        int[] c = new int[intLen];
++
++        int slen = 1;
++        while (slen <= len/4) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
++            for (int j=0; j<len; j+=4*slen) {
++                int x1 = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;          // for level v
++                int x2 = getDftExponent(n, v-1, j+expOffset, omega)*expScale + 1;        // for level v-1
++                int x3 = getDftExponent(n, v, j+slen*2+expOffset, omega)*expScale + 1;   // for level v
++
++                // stride length = stride*slen subarrays
++                int idx0 = stride*j + idxOffset;
++                int idx1 = stride*j + stride*slen + idxOffset;
++                int idx2 = idx0 + stride*slen*2;
++                int idx3 = idx1 + stride*slen*2;
 +
 +                for (int k=slen-1; k>=0; k--) {
-+                    System.arraycopy(A[idx], 0, c, 0, c.length);   // copy A[idx] into c
++                    // do level v
++                    System.arraycopy(A[idx0], 0, c, 0, c.length);
++                    addModFn(A[idx0], A[idx1]);
++                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
++                    subModFn(c, A[idx1]);
++                    cyclicShiftRightBits(c, x1, A[idx1]);
++
++                    System.arraycopy(A[idx2], 0, c, 0, c.length);
++                    addModFn(A[idx2], A[idx3]);
++                    cyclicShiftRightBits(A[idx2], 1, A[idx2]);
++                    subModFn(c, A[idx3]);
++                    cyclicShiftRightBits(c, x3, A[idx3]);
++
++                    // do level v-1
++                    System.arraycopy(A[idx0], 0, c, 0, c.length);
++                    addModFn(A[idx0], A[idx2]);
++                    cyclicShiftRightBits(A[idx0], 1, A[idx0]);
++                    subModFn(c, A[idx2]);
++                    cyclicShiftRightBits(c, x2, A[idx2]);
++
++                    System.arraycopy(A[idx1], 0, c, 0, c.length);
++                    addModFn(A[idx1], A[idx3]);
++                    cyclicShiftRightBits(A[idx1], 1, A[idx1]);
++                    subModFn(c, A[idx3]);
++                    cyclicShiftRightBits(c, x2, A[idx3]);
++
++                    idx0 += stride;
++                    idx1 += stride;
++                    idx2 += stride;
++                    idx3 += stride;
++                }
++            }
++
++            v -= 2;
++            slen *= 4;
++        }
++
++        // if there is an odd number of levels, do the remaining one now
++        if (slen <= len/2)
++            for (int j=0; j<len; j+=2*slen) {
++                int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
++                int idx = stride*j + idxOffset;
++                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
++
++                for (int k=slen-1; k>=0; k--) {
++                    System.arraycopy(A[idx], 0, c, 0, c.length);
 +                    addModFn(A[idx], A[idx2]);
 +                    cyclicShiftRightBits(A[idx], 1, A[idx]);
 +
 +                    subModFn(c, A[idx2]);
 +                    cyclicShiftRightBits(c, x, A[idx2]);
-+                    idx++;
-+                    idx2++;
++                    idx += stride;
++                    idx2 += stride;
 +                }
 +            }
-+
-+            v--;
-+        }
 +    }
 +
 +    /**
-+     * Returns the power to which to raise omega in an IDFT.<br/>
-+     * Omega itself is either 2 or 4 depending on m, but when omega=4 this method
-+     * doubles the exponent so omega can be assumed always to be 2 in a IDFT.
-+     * @param n
-+     * @param v
-+     * @param idx
-+     * @param even
-+     * @return
++     * Performs an IDFT on row {@code rowIdx}.<br/>
++     * <code>A</code> is assumed to be the upper half of the full array.
++     * @param A an array of length rows*cols
++     * @param omega root of unity
++     * @param rows number of rows in A
++     * @param cols number of columns in A
++     * @param rowIdx index of the row to transform
 +     */
-+    private static int getIdftExponent(int n, int v, int idx, boolean even) {
-+        int x = Integer.reverse(idx) << (n-v) >>> (32-n);
-+        x += even ? 1<<(n-v) : 1<<(n-1-v);
-+        return x + 1;
++    private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
++        idftDirect1(A, omega, cols, 0, rows, rowIdx*cols, 1);
++    }
++
++    /** Divides vector elements by powers of omega (aka twiddle factors) */
++    private static void applyIdftWeights(int[][] A, int omega, int rows, int cols) {
++        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
++
++        for (int i=0; i<rows; i++)
++            for (int j=0; j<cols; j++) {
++                int idx = i*cols + j;
++                int[] temp = new int[A[idx].length];
++                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
++                if (omega == 4)
++                    shiftAmt *= 2;
++                cyclicShiftRightBits(A[idx], shiftAmt, temp);
++                System.arraycopy(temp, 0, A[idx], 0, temp.length);
++            }
 +    }
 +
 +    /**
-+     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n+1</sup></sup>,
++     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
 +     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
 +     * <code>a</code>.<br/>
 +     * Both input values are given as <code>int</code> arrays; they must be the same length.
 +     * The result is returned in the first argument.
-+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
++     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
 +     */
 +    private static void addModFn(int[] a, int[] b) {
 +        boolean carry = false;
@@ -1010,13 +740,13 @@ POSSIBILITY OF SUCH DAMAGE.
 +    }
 +
 +    /**
-+     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n+1</sup></sup>,
++     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
 +     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
 +     * <code>a</code>.<br/>
 +     * Both input values are given as <code>int</code> arrays; they must be the same length.
 +     * The result is returned in the first argument.
-+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
++     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
 +     */
 +    private static void subModFn(int[] a, int[] b) {
 +        // subtraction works by shifting b by b.length/2, then adding a and b
@@ -1060,8 +790,8 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * and 0&le;b&lt;2<sup>n</sup>+1, where n is <code>a.length*32/2</code>; in other words, n is half the number
 +     * of bits in <code>a</code>.<br/>
 +     * Both input values are given as <code>int</code> arrays; they must be the same length.
-+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
-+     * @param b a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
++     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
 +     */
 +    private static int[] multModFn(int[] a, int[] b) {
 +        int n = a.length / 2;
@@ -1128,7 +858,12 @@ POSSIBILITY OF SUCH DAMAGE.
 +        return cpad;
 +    }
 +
++    /**
++     * Reduces a number modulo F<sub>n</sub>. The value of n is determined from the array's length.
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
++     */
 +    private static void modFn(int[] a) {
++        // Reduction modulo Fn is done by subtracting the upper half from the lower half
 +        int len = a.length;
 +        boolean carry = false;
 +        for (int i=len-1; i>=len/2; i--) {
@@ -1156,7 +891,7 @@ POSSIBILITY OF SUCH DAMAGE.
 +    }
 +
 +    /**
-+     * Reduces all subarrays modulo 2<sup>2<sup>n+1</sup></sup> where n=<code>a[i].length*32/2</code> for all i;
++     * Reduces all subarrays modulo 2<sup>2<sup>n</sup></sup>+1 where n=<code>a[i].length*32/2</code> for all i;
 +     * in other words, n is half the number of bits in the subarray.
 +     * @param a int arrays whose length is a power of 2
 +     */
@@ -1166,12 +901,12 @@ POSSIBILITY OF SUCH DAMAGE.
 +    }
 +
 +    /**
-+     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n+1</sup></sup>, where n is
++     * Cyclicly shifts a number to the right modulo 2<sup>2<sup>n</sup></sup>+1, where n is
 +     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
 +     * "Right" means towards the lower array indices and the lower bits; this is equivalent to
-+     * a multiplication by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
++     * a multiplication by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1.<br/>
 +     * The result is returned in the third argument.
-+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
 +     * @param numBits the shift amount in bits
 +     * @param b the return value; must be at least as long as <code>a</code>
 +     */
@@ -1193,12 +928,12 @@ POSSIBILITY OF SUCH DAMAGE.
 +    }
 +
 +    /**
-+     * Cyclicly shifts a number to the left modulo 2<sup>2<sup>n+1</sup></sup>, where n is
++     * Cyclicly shifts a number to the left modulo 2<sup>2<sup>n</sup></sup>+1, where n is
 +     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.<br/>
 +     * "Left" means towards the lower array indices and the lower bits; this is equivalent to
-+     * a multiplication by 2<sup>numBits</sup> modulo 2<sup>2<sup>n+1</sup></sup>.<br/>
++     * a multiplication by 2<sup>numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1.<br/>
 +     * The result is returned in the third argument.
-+     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the length must be a power of 2
++     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be a power of 2
 +     * @param numBits the shift amount in bits
 +     * @param b the return value; must be at least as long as <code>a</code>
 +     */
@@ -1223,8 +958,8 @@ POSSIBILITY OF SUCH DAMAGE.
 +     * Adds two numbers, <code>a</code> and <code>b</code>, after shifting <code>b</code> by
 +     * <code>numElements</code> elements.<br/>
 +     * Both numbers are given as <code>int</code> arrays and must be <b>positive</b> numbers
-+     * (meaning they are interpreted as unsigned).</br> The result is returned in the first
-+     * argument.
++     * (meaning they are interpreted as unsigned).<br/>
++     * The result is returned in the first argument.
 +     * If any elements of b are shifted outside the valid range for <code>a</code>, they are dropped.
 +     * @param a a number in base 2<sup>32</sup> starting with the highest digit
 +     * @param b a number in base 2<sup>32</sup> starting with the highest digit
@@ -1323,22 +1058,24 @@ POSSIBILITY OF SUCH DAMAGE.
 +        int aIdx = a.length - 1 - aBitLength/32;
 +        int bit32 = aBitLength % 32;
 +
-+        for (int i=bStart+bBitLength/32-1; i>=bStart; i--)
++        int bIdx = b.length - 1 - bStart;
++        int bIdxStop = bIdx - bBitLength/32;
++        while (bIdx > bIdxStop) {
 +            if (bit32 > 0) {
-+                a[aIdx] |= b[i] << bit32;
++                a[aIdx] |= b[bIdx] << bit32;
 +                aIdx--;
-+                a[aIdx] = b[i] >>> (32-bit32);
++                a[aIdx] = b[bIdx] >>> (32-bit32);
 +            }
 +            else {
-+                a[aIdx] = b[i];
++                a[aIdx] = b[bIdx];
 +                aIdx--;
 +            }
++            bIdx--;
++        }
 +
 +        if (bBitLength%32 > 0) {
-+            aIdx = a.length - 1 - (aBitLength/32 + bBitLength/32);
-+            int bIdx = bBitLength / 32;
-+            int bi = b[b.length-1-bStart-bIdx];
-+            bi &= -1 >>> (32-bBitLength);
++            int bi = b[bIdx];
++            bi &= -1 >>> (32-bBitLength%32);
 +            a[aIdx] |= bi << bit32;
 +            if (bit32+(bBitLength%32) > 32)
 +                a[aIdx-1] = bi >>> (32-bit32);
@@ -1397,426 +1134,82 @@ POSSIBILITY OF SUCH DAMAGE.
 +     */
 +    private static int[][] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
 +        int[][] ai = new int[numPieces][targetPieceSize];
-+        for (int i=0; i<a.length/pieceSize; i++)
-+            System.arraycopy(a, a.length-i*pieceSize-pieceSize, ai[i], targetPieceSize-pieceSize, pieceSize);
-+        System.arraycopy(a, a.length-a.length/pieceSize*pieceSize-(a.length%pieceSize), ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
++        int aIdx = a.length - pieceSize;
++        int pieceIdx = 0;
++        while (aIdx >= 0) {
++            System.arraycopy(a, aIdx, ai[pieceIdx], targetPieceSize-pieceSize, pieceSize);
++            aIdx -= pieceSize;
++            pieceIdx++;
++        }
++        System.arraycopy(a, 0, ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
 +        return ai;
 +    }
 +
-+    // Squaring
-+
-+    /**
-      * Returns a BigInteger whose value is {@code (this<sup>2</sup>)}.
-      *
-      * @return {@code this<sup>2</sup>}
-@@ -1409,8 +2676,21 @@
-     private BigInteger square() {
-         if (signum == 0)
-             return ZERO;
--        int[] z = squareToLen(mag, mag.length, null);
--        return new BigInteger(trustedStripLeadingZeroInts(z), 1);
-+        int len = mag.length;
-+
-+        if (len < KARATSUBA_SQUARE_THRESHOLD)
-+        {
-+            int[] z = squareToLen(mag, len, null);
-+            return new BigInteger(trustedStripLeadingZeroInts(z), 1);
-+        }
-+        else
-+            if (len < TOOM_COOK_SQUARE_THRESHOLD)
-+                return squareKaratsuba();
-+            else
+@@ -1874 +2995,4 @@
+-                return squareToomCook3();
 +                if (!shouldSquareSchoenhageStrassen(len))
 +                    return squareToomCook3();
 +                else
 +                    return squareSchoenhageStrassen();
-     }
- 
-     /**
-@@ -1481,6 +2761,83 @@
-     }
- 
-     /**
-+     * Squares a BigInteger using the Karatsuba squaring algorithm.  It should
-+     * be used when both numbers are larger than a certain threshold (found
-+     * experimentally).  It is a recursive divide-and-conquer algorithm that
-+     * has better asymptotic performance than the algorithm used in
-+     * squareToLen.
-+     */
-+    private BigInteger squareKaratsuba()
-+    {
-+        int half = (mag.length+1) / 2;
-+
-+        BigInteger xl = getLower(half);
-+        BigInteger xh = getUpper(half);
-+
-+        BigInteger xhs = xh.square();  // xhs = xh^2
-+        BigInteger xls = xl.square();  // xls = xl^2
-+
-+        // xh^2 << 64  +  (((xl+xh)^2 - (xh^2 + xl^2)) << 32) + xl^2
-+        return xhs.shiftLeft(half*32).add(xl.add(xh).square().subtract(xhs.add(xls))).shiftLeft(half*32).add(xls);
-+    }
-+
-+    /**
-+     * Squares a BigInteger using the 3-way Toom-Cook squaring algorithm.  It
-+     * should be used when both numbers are larger than a certain threshold
-+     * (found experimentally).  It is a recursive divide-and-conquer algorithm
-+     * that has better asymptotic performance than the algorithm used in
-+     * squareToLen or squareKaratsuba.
-+     */
-+    private BigInteger squareToomCook3()
-+    {
-+        int len = mag.length;
-+
-+        // k is the size (in ints) of the lower-order slices.
-+        int k = (len+2)/3;   // Equal to ceil(largest/3)
-+
-+        // r is the size (in ints) of the highest-order slice.
-+        int r = len - 2*k;
-+
-+        // Obtain slices of the numbers. a2 is the most significant
-+        // bits of the number, and a0 the least significant.
-+        BigInteger a0, a1, a2;
-+        a2 = getToomSlice(k, r, 0, len);
-+        a1 = getToomSlice(k, r, 1, len);
-+        a0 = getToomSlice(k, r, 2, len);
-+        BigInteger v0, v1, v2, vm1, vinf, t1, t2, tm1, da1;
-+
-+        v0 = a0.square();
-+        da1 = a2.add(a0);
-+        vm1 = da1.subtract(a1).square();
-+        da1 = da1.add(a1);
-+        v1 = da1.square();
-+        vinf = a2.square();
-+        v2 = da1.add(a2).shiftLeft(1).subtract(a0).square();
-+
-+        /* The algorithm requires two divisions by 2 and one by 3.
-+           All divisions are known to be exact, that is, they do not produce
-+           remainders, and all results are positive.  The divisions by 2 are
-+           implemented as right shifts which are relatively efficient, leaving
-+           only a division by 3.
-+           The division by 3 is done by an optimized algorithm for this case.
-+        */
-+        t2 = v2.subtract(vm1).exactDivideBy3();
-+        tm1 = v1.subtract(vm1).shiftRight(1);
-+        t1 = v1.subtract(v0);
-+        t2 = t2.subtract(t1).shiftRight(1);
-+        t1 = t1.subtract(tm1).subtract(vinf);
-+        t2 = t2.subtract(vinf.shiftLeft(1));
-+        tm1 = tm1.subtract(t2);
-+
-+        // Number of bits to shift left.
-+        int ss = k*32;
-+
-+        return vinf.shiftLeft(ss).add(t2).shiftLeft(ss).add(t1).shiftLeft(ss).add(tm1).shiftLeft(ss).add(v0);
-+    }
-+
-+    // Division
-+
-+    /**
-      * Returns a BigInteger whose value is {@code (this / val)}.
-      *
-      * @param  val value by which this BigInteger is to be divided.
-@@ -1488,11 +2845,28 @@
-      * @throws ArithmeticException if {@code val} is zero.
-      */
-     public BigInteger divide(BigInteger val) {
-+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-+            return divideKnuth(val);
-+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
-+            return divideBurnikelZiegler(val);
-+        else
-+            return divideBarrett(val);
-+    }
-+
-+    /**
-+     * Returns a BigInteger whose value is {@code (this / val)} using an O(n^2) algorithm from Knuth.
-+     *
-+     * @param  val value by which this BigInteger is to be divided.
-+     * @return {@code this / val}
-+     * @throws ArithmeticException if {@code val} is zero.
-+     * @see MutableBigInteger#divideKnuth(MutableBigInteger, MutableBigInteger, boolean)
-+     */
-+    private BigInteger divideKnuth(BigInteger val) {
-         MutableBigInteger q = new MutableBigInteger(),
-                           a = new MutableBigInteger(this.mag),
-                           b = new MutableBigInteger(val.mag);
- 
--        a.divide(b, q, false);
-+        a.divideKnuth(b, q, false);
-         return q.toBigInteger(this.signum * val.signum);
-     }
- 
-@@ -1508,11 +2882,45 @@
-      * @throws ArithmeticException if {@code val} is zero.
-      */
-     public BigInteger[] divideAndRemainder(BigInteger val) {
-+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-+            return divideAndRemainderKnuth(val);
-+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
-+            return divideAndRemainderBurnikelZiegler(val);
-+        else
-+            return divideAndRemainderBarrett(val);
+@@ -2032 +3156,5 @@
+-            return divideBurnikelZiegler(val);
++            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
++                return divideBurnikelZiegler(val);
++            } else {
++                return divideBarrett(val);
++            }
+@@ -2069 +3197,42 @@
+-            return divideAndRemainderBurnikelZiegler(val);
++            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
++                return divideAndRemainderBurnikelZiegler(val);
++            } else {
++                return divideAndRemainderBarrett(val);
++            }
++        }
 +    }
 +
 +    /**
 +     * Estimates whether Barrett Division will be more efficient than Burnikel-Ziegler when
 +     * dividing two numbers of a given length in bits.
-+     * @param bitLength the number of bits in each of the two inputs
++     * @param length the number of ints in each of the two inputs
 +     * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
 +     */
-+    private boolean shouldDivideBarrett(int bitLength) {
-+        if (bitLength < 3300000)
-+            return false;
-+        if (bitLength < 4100000)
++    static boolean shouldDivideBarrett(int length) {
++        if (IS64BIT) {
++            // The following values were determined experimentally on a 64-bit JVM.
++            if (length <= 123000)
++                return false;
++            if (length <= 131072)   // 2^17
++                return true;
++            if (length <= 206000)
++                return false;
++            if (length <= 262144)   // 2^18
++                return true;
++            if (length <= 345000)
++                return false;
++            if (length <= 524288)   // 2^19
++                return true;
++            if (length <= 595000)
++                return false;
 +            return true;
-+        if (bitLength < 5900000)
-+            return false;
-+        if (bitLength < 8300000)
-+            return true;
-+        if (bitLength < 9700000)
-+            return false;
-+        if (bitLength < 16000000)
-+            return true;
-+        if (bitLength < 19000000)
-+            return false;
-+        return true;
-+    }
-+
-+    /** Long division */
-+    private BigInteger[] divideAndRemainderKnuth(BigInteger val) {
-         BigInteger[] result = new BigInteger[2];
-         MutableBigInteger q = new MutableBigInteger(),
-                           a = new MutableBigInteger(this.mag),
-                           b = new MutableBigInteger(val.mag);
--        MutableBigInteger r = a.divide(b, q);
-+        MutableBigInteger r = a.divideKnuth(b, q);
-         result[0] = q.toBigInteger(this.signum == val.signum ? 1 : -1);
-         result[1] = r.toBigInteger(this.signum);
-         return result;
-@@ -1527,11 +2935,373 @@
-      * @throws ArithmeticException if {@code val} is zero.
-      */
-     public BigInteger remainder(BigInteger val) {
-+        if (mag.length<BURNIKEL_ZIEGLER_THRESHOLD || val.mag.length<BURNIKEL_ZIEGLER_THRESHOLD)
-+            return remainderKnuth(val);
-+        else if (!shouldDivideBarrett(mag.length*32) || !shouldDivideBarrett(val.mag.length*32))
-+            return remainderBurnikelZiegler(val);
-+        else
-+            return remainderBarrett(val);
-+    }
-+
-+    /** Long division */
-+    private BigInteger remainderKnuth(BigInteger val) {
-         MutableBigInteger q = new MutableBigInteger(),
-                           a = new MutableBigInteger(this.mag),
-                           b = new MutableBigInteger(val.mag);
- 
--        return a.divide(b, q).toBigInteger(this.signum);
-+        return a.divideKnuth(b, q).toBigInteger(this.signum);
-+    }
-+
-+    /**
-+     * Calculates <code>this / val</code> using the Burnikel-Ziegler algorithm.
-+     * @param  val the divisor
-+     * @return <code>this / val</code>
-+     */
-+    private BigInteger divideBurnikelZiegler(BigInteger val) {
-+        return divideAndRemainderBurnikelZiegler(val)[0];
-+    }
-+
-+    /**
-+     * Calculates <code>this % val</code> using the Burnikel-Ziegler algorithm.
-+     * @param val the divisor
-+     * @return <code>this % val</code>
-+     */
-+    private BigInteger remainderBurnikelZiegler(BigInteger val) {
-+        return divideAndRemainderBurnikelZiegler(val)[1];
-+    }
-+
-+    /**
-+     * Computes <code>this / val</code> and <code>this % val</code> using the
-+     * Burnikel-Ziegler algorithm.
-+     * @param val the divisor
-+     * @return an array containing the quotient and remainder
-+     */
-+    private BigInteger[] divideAndRemainderBurnikelZiegler(BigInteger val) {
-+        BigInteger[] c = divideAndRemainderBurnikelZieglerPositive(abs(), val.abs());
-+
-+        // fix signs
-+        if (signum*val.signum < 0)
-+            c[0] = c[0].negate();
-+        if (signum < 0)
-+            c[1] = c[1].negate();
-+        return c;
-+    }
-+
-+    /**
-+     * Computes <code>a/b</code> and <code>a%b</code> using the
-+     * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
-+     * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
-+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
-+     * <code>a</code> and <code>b</code> must be nonnegative.
-+     * @param a the dividend
-+     * @param b the divisor
-+     * @return an array containing the quotient and remainder
-+     */
-+    private static BigInteger[] divideAndRemainderBurnikelZieglerPositive(BigInteger a, BigInteger b) {
-+        int r = a.mag.length;
-+        int s = b.mag.length;
-+
-+        if (r < s)
-+            return new BigInteger[] {ZERO, a};
++        }
 +        else {
-+            // let m = min{2^k | (2^k)*BURNIKEL_ZIEGLER_THRESHOLD > s}
-+            int m = 1 << (32-Integer.numberOfLeadingZeros(s/BURNIKEL_ZIEGLER_THRESHOLD));
-+
-+            int j = (s+m-1) / m;      // j = ceil(s/m)
-+            int n = j * m;            // block length in 32-bit units
-+            int n32 = 32 * n;         // block length in bits
-+            int sigma = Math.max(0, n32 - b.bitLength());
-+            b = b.shiftLeft(sigma);   // shift b so its length is a multiple of n
-+            a = a.shiftLeft(sigma);   // shift a by the same amount
-+
-+            // t is the number of blocks needed to accommodate 'a' plus one additional bit
-+            int t = (a.bitLength()+n32) / n32;
-+            if (t < 2)
-+                t = 2;
-+            BigInteger a1 = a.getBlock(t-1, t, n);   // the most significant block of a
-+            BigInteger a2 = a.getBlock(t-2, t, n);   // the second to most significant block
-+
-+            // do schoolbook division on blocks, dividing 2-block numbers by 1-block numbers
-+            BigInteger z = a1.shiftLeftInts(n).add(a2);   // Z[t-2]
-+            BigInteger quotient = ZERO;
-+            BigInteger[] c;
-+            for (int i=t-2; i>0; i--) {
-+                c = divide2n1n(z, b);
-+                z = a.getBlock(i-1, t, n);
-+                z = z.add(c[1].shiftLeftInts(n));
-+                quotient = quotient.add(c[0]).shiftLeftInts(n);
++            // The following values were determined experimentally on a 32-bit JVM.
++            if (length <= 101000)
++                return false;
++            if (length <= 131072)   // 2^17
++                return true;
++            if (length <= 177000)
++                return false;
++            return true;
+@@ -2098 +3267,5 @@
+-            return remainderBurnikelZiegler(val);
++            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
++                return remainderBurnikelZiegler(val);
++            } else {
++                return remainderBarrett(val);
 +            }
-+            // do the loop one more time for i=0 but leave z unchanged
-+            c = divide2n1n(z, b);
-+            quotient = quotient.add(c[0]);
-+
-+            BigInteger remainder = c[1].shiftRight(sigma);   // a and b were shifted, so shift back
-+            return new BigInteger[] {quotient, remainder};
-+        }
-+    }
-+
-+    /**
-+     * Returns a <code>BigInteger</code> containing <code>blockLength</code> ints from
-+     * <code>this</code> number, starting at <code>index*blockLength</code>.<br/>
-+     * Used by Burnikel-Ziegler division.
-+     * @param index the block index
-+     * @param numBlocks the total number of blocks in <code>this</code> number
-+     * @param blockLength length of one block in units of 32 bits
-+     * @return
-+     */
-+    private BigInteger getBlock(int index, int numBlocks, int blockLength) {
-+        int blockStart = index * blockLength;
-+        if (blockStart >= mag.length)
-+            return ZERO;
-+
-+        int blockEnd;
-+        if (index == numBlocks-1)
-+            blockEnd = (bitLength()+31) / 32;
-+        else
-+            blockEnd = (index+1) * blockLength;
-+        if (blockEnd > mag.length)
-+            return ZERO;
-+
-+        int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, mag.length-blockEnd, mag.length-blockStart));
-+        return new BigInteger(newMag, signum);
-+    }
-+
-+    /**
-+     * This method implements algorithm 1 from pg. 4 of the Burnikel-Ziegler paper.
-+     * It divides a 2n-digit number by a n-digit number.<br/>
-+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.
-+     * @param a a nonnegative number such that <code>a.bitLength() <= 2*b.bitLength()</code>
-+     * @param b a positive number such that <code>b.bitLength()</code> is even
-+     * @return <code>a/b</code> and <code>a%b</code>
-+     */
-+    private static BigInteger[] divide2n1n(BigInteger a, BigInteger b) {
-+        int n = b.mag.length;
-+        if (n%2!=0 || n<BURNIKEL_ZIEGLER_THRESHOLD)
-+            return a.divideAndRemainderKnuth(b);
-+
-+        // view a as [a1,a2,a3,a4] and divide [a1,a2,a3] by b
-+        BigInteger[] c1 = divide3n2n(a.shiftRightInts(n/2), b);
-+
-+        // divide the concatenation of c1[1] and a4 by b
-+        BigInteger a4 = a.getLower(n/2);
-+        BigInteger[] c2 = divide3n2n(c1[1].shiftLeftInts(n/2).add(a4), b);
-+
-+        // quotient = the concatentation of the two above quotients
-+        return new BigInteger[] {c1[0].shiftLeftInts(n/2).add(c2[0]), c2[1]};
-+    }
-+
-+    /**
-+     * This method implements algorithm 2 from pg. 5 of the Burnikel-Ziegler paper.
-+     * It divides a 3n-digit number by a 2n-digit number.<br/>
-+     * The parameter beta is 2<sup>32</sup> so all shifts are multiples of 32 bits.<br/>
-+     * @param a a nonnegative number such that <code>2*a.bitLength() <= 3*b.bitLength()</code>
-+     * @param b a positive number such that <code>b.bitLength()</code> is even
-+     * @return <code>a/b</code> and <code>a%b</code>
-+     */
-+    private static BigInteger[] divide3n2n(BigInteger a, BigInteger b) {
-+        int n = b.mag.length / 2;   // half the length of b in ints
-+
-+        // split a in 3 parts of length n or less
-+        BigInteger a1 = a.shiftRightInts(2*n);
-+        BigInteger a2 = a.shiftAndTruncate(n);
-+        BigInteger a3 = a.getLower(n);
-+
-+        // split a in 2 parts of length n or less
-+        BigInteger b1 = b.shiftRightInts(n);
-+        BigInteger b2 = b.getLower(n);
-+
-+        BigInteger q, r1;
-+        BigInteger a12 = a1.shiftLeftInts(n).add(a2);   // concatenation of a1 and a2
-+        if (a1.compareTo(b1) < 0) {
-+            // q=a12/b1, r=a12%b1
-+            BigInteger[] c = divide2n1n(a12, b1);
-+            q = c[0];
-+            r1 = c[1];
-+        }
-+        else {
-+            // q=beta^n-1, r=a12-b1*2^n+b1
-+            q = ones(n);
-+            r1 = a12.subtract(b1.shiftLeftInts(n)).add(b1);
-+        }
-+
-+        BigInteger d = q.multiply(b2);
-+        BigInteger r = r1.shiftLeftInts(n).add(a3).subtract(d);   // r = r1*beta^n + a3 - d (paper says a4)
-+
-+        // add b until r>=0
-+        while (r.signum() < 0) {
-+            r = r.add(b);
-+            q = q.subtract(ONE);
-+        }
-+
-+        return new BigInteger[] {q, r};
-+    }
-+
-+    /**
-+     * Returns a number equal to <code>this.shiftRightInts(n).getLower(n)</code>.<br/>
-+     * Used by Burnikel-Ziegler division.
-+     * @param n a non-negative number
-+     * @return <code>n</code> bits of <code>this</code> starting at bit <code>n</code>
-+     */
-+    private BigInteger shiftAndTruncate(int n) {
-+        if (mag.length <= n)
-+            return ZERO;
-+        if (mag.length <= 2*n) {
-+            int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, 0, mag.length-n));
-+            return new BigInteger(newMag, signum);
-+        }
-+        else {
-+            int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOfRange(mag, mag.length-2*n, mag.length-n));
-+            return new BigInteger(newMag, signum);
-+        }
+@@ -2140,0 +3314,160 @@
 +    }
 +
 +    /** Barrett division */
@@ -1855,29 +1248,40 @@ POSSIBILITY OF SUCH DAMAGE.
 +
 +        if (m < n)
 +            return new BigInteger[] {ZERO, this};
-+        else if (m <= 2*n) {
-+            // this case is handled by Barrett directly
-+            BigInteger mu = val.inverse(m-n);
-+            return barrettBase(val, mu);
-+        }
 +        else {
-+            // treat each n-bit piece of a as a digit and do long division by val
-+            // (which is also n bits), reusing the inverse
-+            BigInteger mu2n = val.inverse(n);
-+            int startBit = m / n * n;   // the bit at which the current n-bit piece starts
-+            BigInteger quotient = ZERO;
-+            BigInteger remainder = shiftRight(startBit);
-+            BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
-+            while (startBit > 0) {
-+                startBit -= n;
-+                BigInteger ai = shiftRight(startBit).and(mask);
-+                remainder = remainder.shiftLeft(n).add(ai);
-+                BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
-+                BigInteger[] c = remainder.barrettBase(val, mu);
-+                quotient = quotient.shiftLeft(n).add(c[0]);
-+                remainder = c[1];
++            int lowestSetBit = Math.min(getLowestSetBit(), val.getLowestSetBit());
++            // Cancel common powers of two if it will speed up division, which is
++            // the case iff it reduces bitLength() below the next lower power of two.
++            if (Integer.numberOfLeadingZeros(n) < Integer.numberOfLeadingZeros(n-lowestSetBit)) {
++                BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit));
++                result[1].shiftLeft(lowestSetBit);
++                return result;
 +            }
-+            return new BigInteger[] {quotient, remainder};
++
++            if (m <= 2*n) {
++                // this case is handled by Barrett directly
++                BigInteger mu = val.inverse(m-n);
++                return barrettBase(val, mu);
++            }
++            else {
++                // treat each n-bit piece of a as a digit and do long division by val
++                // (which is also n bits), reusing the inverse
++                BigInteger mu2n = val.inverse(n);
++                int startBit = m / n * n;   // the bit at which the current n-bit piece starts
++                BigInteger quotient = ZERO;
++                BigInteger remainder = shiftRight(startBit);
++                BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
++                while (startBit > 0) {
++                    startBit -= n;
++                    BigInteger ai = shiftRight(startBit).and(mask);
++                    remainder = remainder.shiftLeft(n).add(ai);
++                    BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
++                    BigInteger[] c = remainder.barrettBase(val, mu);
++                    quotient = quotient.shiftLeft(n).add(c[0]);
++                    remainder = c[1];
++                }
++                return new BigInteger[] {quotient, remainder};
++            }
 +        }
 +    }
 +
@@ -1966,306 +1370,3 @@ POSSIBILITY OF SUCH DAMAGE.
 +        if (n>0 && testBit(n-1))
 +            b = b.add(ONE);
 +        return b;
-     }
- 
-     /**
-@@ -1549,23 +3319,100 @@
-         if (signum==0)
-             return (exponent==0 ? ONE : this);
- 
--        // Perform exponentiation using repeated squaring trick
--        int newSign = (signum<0 && (exponent&1)==1 ? -1 : 1);
--        int[] baseToPow2 = this.mag;
--        int[] result = {1};
--
--        while (exponent != 0) {
--            if ((exponent & 1)==1) {
--                result = multiplyToLen(result, result.length,
--                                       baseToPow2, baseToPow2.length, null);
--                result = trustedStripLeadingZeroInts(result);
--            }
--            if ((exponent >>>= 1) != 0) {
--                baseToPow2 = squareToLen(baseToPow2, baseToPow2.length, null);
--                baseToPow2 = trustedStripLeadingZeroInts(baseToPow2);
-+        BigInteger partToSquare = this.abs();
-+
-+        // Factor out powers of two from the base, as the exponentiation of
-+        // these can be done by left shifts only.
-+        // The remaining part can then be exponentiated faster.  The
-+        // powers of two will be multiplied back at the end.
-+        int powersOfTwo = partToSquare.getLowestSetBit();
-+
-+        int remainingBits;
-+
-+        // Factor the powers of two out quickly by shifting right, if needed.
-+        if (powersOfTwo > 0)
-+        {
-+            partToSquare = partToSquare.shiftRight(powersOfTwo);
-+            remainingBits = partToSquare.bitLength();
-+            if (remainingBits == 1)  // Nothing left but +/- 1?
-+                if (signum<0 && (exponent&1)==1)
-+                    return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
-+                else
-+                    return ONE.shiftLeft(powersOfTwo*exponent);
-+        }
-+        else
-+        {
-+            remainingBits = partToSquare.bitLength();
-+            if (remainingBits == 1)  // Nothing left but +/- 1?
-+                if (signum<0 && (exponent&1)==1)
-+                    return NEGATIVE_ONE;
-+                else
-+                    return ONE;
-+        }
-+
-+        // This is a quick way to approximate the size of the result,
-+        // similar to doing log2[n] * exponent.  This will give an upper bound
-+        // of how big the result can be, and which algorithm to use.
-+        int scaleFactor = remainingBits * exponent;
-+
-+        // Use slightly different algorithms for small and large operands.
-+        // See if the result will safely fit into a long. (Largest 2^63-1)
-+        if (partToSquare.mag.length==1 && scaleFactor <= 62)
-+        {
-+            // Small number algorithm.  Everything fits into a long.
-+            int newSign = (signum<0 && (exponent&1)==1 ? -1 : 1);
-+            long result = 1;
-+            long baseToPow2 = partToSquare.mag[0] & LONG_MASK;
-+
-+            int workingExponent = exponent;
-+
-+            // Perform exponentiation using repeated squaring trick
-+            while (workingExponent != 0) {
-+                if ((workingExponent & 1)==1)
-+                    result = result * baseToPow2;
-+
-+                if ((workingExponent >>>= 1) != 0)
-+                    baseToPow2 = baseToPow2 * baseToPow2;
-+            }
-+
-+            // Multiply back the powers of two (quickly, by shifting left)
-+            if (powersOfTwo > 0)
-+            {
-+                int bitsToShift = powersOfTwo*exponent;
-+                if (bitsToShift + scaleFactor <= 62) // Fits in long?
-+                    return valueOf((result << bitsToShift) * newSign);
-+                else
-+                    return valueOf(result*newSign).shiftLeft(bitsToShift);
-             }
-+            else
-+                return valueOf(result*newSign);
-+        }
-+        else
-+        {
-+            // Large number algorithm.  This is basically identical to
-+            // the algorithm above, but calls multiply() and square()
-+            // which may use more efficient algorithms for large numbers.
-+            BigInteger answer = ONE;
-+
-+            int workingExponent = exponent;
-+            // Perform exponentiation using repeated squaring trick
-+            while (workingExponent != 0) {
-+                if ((workingExponent & 1)==1)
-+                    answer = answer.multiply(partToSquare);
-+
-+                if ((workingExponent >>>= 1) != 0)
-+                    partToSquare = partToSquare.square();
-+            }
-+            // Multiply back the (exponentiated) powers of two (quickly,
-+            // by shifting left)
-+            if (powersOfTwo > 0)
-+                answer = answer.shiftLeft(powersOfTwo*exponent);
-+
-+            if (signum<0 && (exponent&1)==1)
-+                return answer.negate();
-+            else
-+                return answer;
-         }
--        return new BigInteger(result, newSign);
-     }
- 
-     /**
-@@ -2117,7 +3964,7 @@
-          * Perform exponentiation using repeated squaring trick, chopping off
-          * high order bits as indicated by modulus.
-          */
--        BigInteger result = valueOf(1);
-+        BigInteger result = ONE;
-         BigInteger baseToPow2 = this.mod2(p);
-         int expOffset = 0;
- 
-@@ -2323,6 +4170,28 @@
-         return val;
-     }
- 
-+    /**
-+     * Shifts a number to the left by a multiple of 32. Used by Burnikel-Ziegler division.
-+     * @param n a non-negative number
-+     * @return <code>this.shiftLeft(32*n)</code>
-+     */
-+    private BigInteger shiftLeftInts(int n) {
-+        int[] newMag = trustedStripLeadingZeroInts(Arrays.copyOf(mag, mag.length+n));
-+        return new BigInteger(newMag, signum);
-+    }
-+
-+    /**
-+     * Shifts a number to the right by a multiple of 32. Used by Burnikel-Ziegler division.
-+     * @param n a non-negative number
-+     * @return <code>this.shiftRight(32*n)</code>
-+     */
-+    private BigInteger shiftRightInts(int n) {
-+        if (n >= mag.length)
-+            return ZERO;
-+        else
-+            return new BigInteger(Arrays.copyOf(mag, mag.length-n), signum);
-+    }
-+
-     // Bitwise Operations
- 
-     /**
-@@ -2812,6 +4681,28 @@
-         if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX)
-             radix = 10;
- 
-+        // If it's small enough, use smallToString.
-+        if (mag.length <= SCHOENHAGE_BASE_CONVERSION_THRESHOLD)
-+           return smallToString(radix);
-+
-+        // Otherwise use recursive toString, which requires positive arguments.
-+        // The results will be concatenated into this StringBuilder
-+        StringBuilder sb = new StringBuilder();
-+        if (signum < 0) {
-+            toString(this.negate(), sb, radix, 0);
-+            sb.insert(0, '-');
-+        }
-+        else
-+            toString(this, sb, radix, 0);
-+
-+        return sb.toString();
-+    }
-+
-+    /** This method is used to perform toString when arguments are small. */
-+    private String smallToString(int radix) {
-+        if (signum == 0)
-+            return "0";
-+
-         // Compute upper bound on number of digit groups and allocate space
-         int maxNumDigitGroups = (4*mag.length + 6)/7;
-         String digitGroup[] = new String[maxNumDigitGroups];
-@@ -2850,6 +4741,79 @@
-         return buf.toString();
-     }
- 
-+    /**
-+     * Converts the specified BigInteger to a string and appends to
-+     * <code>sb</code>.  This implements the recursive Schoenhage algorithm
-+     * for base conversions.
-+     * <p/>
-+     * See Knuth, Donald,  _The Art of Computer Programming_, Vol. 2,
-+     * Answers to Exercises (4.4) Question 14.
-+     *
-+     * @param u      The number to convert to a string.
-+     * @param sb     The StringBuilder that will be appended to in place.
-+     * @param radix  The base to convert to.
-+     * @param digits The minimum number of digits to pad to.
-+     */
-+    private static void toString(BigInteger u, StringBuilder sb, int radix,
-+                                 int digits) {
-+        /* If we're smaller than a certain threshold, use the smallToString
-+           method, padding with leading zeroes when necessary. */
-+        if (u.mag.length <= SCHOENHAGE_BASE_CONVERSION_THRESHOLD) {
-+            String s = u.smallToString(radix);
-+
-+            // Pad with internal zeros if necessary.
-+            // Don't pad if we're at the beginning of the string.
-+            if ((s.length() < digits) && (sb.length() > 0))
-+                for (int i=s.length(); i<digits; i++) // May be a faster way to
-+                    sb.append('0');                    // do this?
-+
-+            sb.append(s);
-+            return;
-+        }
-+
-+        int b, n;
-+        b = u.bitLength();
-+
-+        // Calculate a value for n in the equation radix^(2^n) = u
-+        // and subtract 1 from that value.  This is used to find the
-+        // cache index that contains the best value to divide u.
-+        n = (int) Math.round(Math.log(b * LOG_TWO / logCache[radix]) / LOG_TWO - 1.0);
-+        BigInteger v = getRadixConversionCache(radix, n);
-+        BigInteger[] results;
-+        results = u.divideAndRemainder(v);
-+
-+        int expectedDigits = 1 << n;
-+
-+        // Now recursively build the two halves of each number.
-+        toString(results[0], sb, radix, digits-expectedDigits);
-+        toString(results[1], sb, radix, expectedDigits);
-+    }
-+
-+    /**
-+     * Returns the value radix^(2^exponent) from the cache.
-+     * If this value doesn't already exist in the cache, it is added.
-+     * <p/>
-+     * This could be changed to a more complicated caching method using
-+     * <code>Future</code>.
-+     */
-+    private static synchronized BigInteger getRadixConversionCache(int radix,
-+                                                                   int exponent) {
-+        BigInteger retVal = null;
-+        ArrayList<BigInteger> cacheLine = powerCache[radix];
-+        int oldSize = cacheLine.size();
-+        if (exponent >= oldSize) {
-+            cacheLine.ensureCapacity(exponent+1);
-+            for (int i=oldSize; i<=exponent; i++) {
-+                retVal = cacheLine.get(i-1).square();
-+                cacheLine.add(i, retVal);
-+            }
-+        }
-+        else
-+            retVal = cacheLine.get(exponent);
-+
-+        return retVal;
-+    }
-+
-     /* zero[i] is a string of i consecutive zeros. */
-     private static String zeros[] = new String[64];
-     static {
-@@ -3218,21 +5182,21 @@
-      * little-endian binary representation of the magnitude (int 0 is the
-      * least significant). If the magnitude is zero, return value is undefined.
-      */
--     private int firstNonzeroIntNum() {
--         int fn = firstNonzeroIntNum - 2;
--         if (fn == -2) { // firstNonzeroIntNum not initialized yet
--             fn = 0;
--
--             // Search for the first nonzero int
--             int i;
--             int mlen = mag.length;
--             for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
--                 ;
--             fn = mlen - i - 1;
--             firstNonzeroIntNum = fn + 2; // offset by two to initialize
--         }
--         return fn;
--     }
-+    private int firstNonzeroIntNum() {
-+        int fn = firstNonzeroIntNum - 2;
-+        if (fn == -2) { // firstNonzeroIntNum not initialized yet
-+            fn = 0;
-+
-+            // Search for the first nonzero int
-+            int i;
-+            int mlen = mag.length;
-+            for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
-+                ;
-+            fn = mlen - i - 1;
-+            firstNonzeroIntNum = fn + 2; // offset by two to initialize
-+        }
-+        return fn;
-+    }
- 
-     /** use serialVersionUID from JDK 1.1. for interoperability */
-     private static final long serialVersionUID = -8287574255936472291L;
