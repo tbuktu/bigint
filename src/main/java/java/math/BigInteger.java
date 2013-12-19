@@ -2042,7 +2042,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return a<sup>2</sup>
      * @see #multiplySchoenhageStrassen(int[], int, int[], int)
      */
-    private int[] squareSchoenhageStrassen(int[] a) {
+    private static int[] squareSchoenhageStrassen(int[] a) {
         // set M to the number of binary digits in a
         int M = a.length * 32;
 
@@ -2116,7 +2116,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param length the number of ints in each of the two factors
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      */
-    private boolean shouldMultiplySchoenhageStrassen(int length) {
+    private static boolean shouldMultiplySchoenhageStrassen(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
             // SS is slower than Toom-Cook below ~15,500 ints (~149,000 decimal digits)
@@ -2163,7 +2163,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      * @see #shouldMultiplySchoenhageStrassen(int)
      */
-    private boolean shouldSquareSchoenhageStrassen(int length) {
+    private static boolean shouldSquareSchoenhageStrassen(int length) {
         if (IS64BIT) {
             if (length <= 15000)
                 return false;
