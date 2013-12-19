@@ -2424,11 +2424,24 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param colIdx index of the column to transform
      */
     private static void idftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
-        idftDirect1(A, omega, rows, rows, cols, colIdx, cols);
+        idftDirect(A, omega, rows, rows, cols, colIdx, cols);
+    }
+
+    /**
+     * Performs an IDFT on row {@code rowIdx}.<br/>
+     * <code>A</code> is assumed to be the upper half of the full array.
+     * @param A an array of length rows*cols
+     * @param omega root of unity
+     * @param rows number of rows in A
+     * @param cols number of columns in A
+     * @param rowIdx index of the row to transform
+     */
+    private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
+        idftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
     }
 
     /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
-    private static void idftDirect1(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
+    private static void idftDirect(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 31 - Integer.numberOfLeadingZeros(len);
         int intLen = A[0].length;
@@ -2503,19 +2516,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     idx2 += stride;
                 }
             }
-    }
-
-    /**
-     * Performs an IDFT on row {@code rowIdx}.<br/>
-     * <code>A</code> is assumed to be the upper half of the full array.
-     * @param A an array of length rows*cols
-     * @param omega root of unity
-     * @param rows number of rows in A
-     * @param cols number of columns in A
-     * @param rowIdx index of the row to transform
-     */
-    private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
-        idftDirect1(A, omega, cols, 0, rows, rowIdx*cols, 1);
     }
 
     /** Divides vector elements by powers of omega (aka twiddle factors) */
