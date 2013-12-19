@@ -2368,7 +2368,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<cols; j++) {
                 int idx = i*cols + j;
                 int[] temp = new int[A[idx].length];
-                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
+                int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
                 if (omega == 4)
                     shiftAmt *= 2;
                 cyclicShiftLeftBits(A[idx], shiftAmt, temp);
@@ -2376,7 +2376,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
     }
 
-    private static int getBaileyShiftAmount(int i, int j, int rows, int cols, int v) {
+    private static int getBaileyShiftAmount(int i, int j, int rows, int v) {
         int iRev = Integer.reverse(i+rows) >>> (32-v);
         return iRev * j;
     }
@@ -2526,7 +2526,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<cols; j++) {
                 int idx = i*cols + j;
                 int[] temp = new int[A[idx].length];
-                int shiftAmt = getBaileyShiftAmount(i, j, rows, cols, v);
+                int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
                 if (omega == 4)
                     shiftAmt *= 2;
                 cyclicShiftRightBits(A[idx], shiftAmt, temp);
