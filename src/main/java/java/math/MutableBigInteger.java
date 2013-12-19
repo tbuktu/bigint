@@ -1239,7 +1239,7 @@ class MutableBigInteger {
      * Computes {@code this/b} and {@code this%b} using the
      * <a href="http://cr.yp.to/bib/1998/burnikel.ps"> Burnikel-Ziegler algorithm</a>.
      * This method implements algorithm 3 from pg. 9 of the Burnikel-Ziegler paper.
-     * The parameter beta was chosen to b 2<sup>32</sup> so almost all shifts are
+     * The parameter beta was chosen to be 2<sup>32</sup> so almost all shifts are
      * multiples of 32 bits.<br/>
      * {@code this} and {@code b} must be nonnegative.
      * @param b the divisor

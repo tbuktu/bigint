@@ -1915,7 +1915,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * The arrays must be ordered most significant to least significant, so the most significant digit
      * must be at index 0.
      * <p/>
-     * The Schoenhage-Strassen algorithm algorithm works as follows:
+     * The Schoenhage-Strassen algorithm works as follows:
      * <ol>
      *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.
      *       See the code for how n is calculated.</li>
