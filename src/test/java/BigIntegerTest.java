@@ -416,14 +416,14 @@ public class BigIntegerTest {
         Constructor<BigInteger> ctor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
         ctor.setAccessible(true);
         for (int i=0; i<100; i++) {
-            int length = 1 << (1+rnd.nextInt(10));
-            int[] FnArr = new int[length];
-            FnArr[length/2-1] = 1;
-            FnArr[length-1] = 1;
-            BigInteger Fn = ctor.newInstance(1, FnArr);
-            int[] a = createRandomArray(length);
+            int n = 5 + rnd.nextInt(10);
+            int[] a = createRandomModFn(n);
             modFnMethod.invoke(null, new Object[] {a});
-            int[] b = createRandomArray(length);
+            int[] b = createRandomModFn(n);
+            int[] FnArr = new int[a.length];
+            FnArr[0] = 1;
+            FnArr[FnArr.length-1] = 1;
+            BigInteger Fn = ctor.newInstance(1, FnArr);
             modFnMethod.invoke(null, new Object[] {b});
             int[] c = (int[])multModFnMethod.invoke(null, a, b);
             modFnMethod.invoke(null, new Object[] {c});
@@ -439,12 +439,12 @@ public class BigIntegerTest {
         Method squareModFnMethod = BigInteger.class.getDeclaredMethod("squareModFn", int[].class);
         squareModFnMethod.setAccessible(true);
         for (int i=0; i<100; i++) {
-            int length = 1 << (1+rnd.nextInt(10));
-            int[] FnArr = new int[length];
-            FnArr[length/2-1] = 1;
-            FnArr[length-1] = 1;
+            int n = 5 + rnd.nextInt(10);
+            int[] a = createRandomModFn(n);
+            int[] FnArr = new int[a.length];
+            FnArr[0] = 1;
+            FnArr[FnArr.length-1] = 1;
             BigInteger Fn = ctor.newInstance(1, FnArr);
-            int[] a = createRandomArray(length);
             modFnMethod.invoke(null, new Object[] {a});
             int[] c = (int[])squareModFnMethod.invoke(null, a);
             modFnMethod.invoke(null, new Object[] {c});
@@ -461,17 +461,13 @@ public class BigIntegerTest {
         addModFnMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
-            int len = 1 << (n + 1 - 5);
-            int[] aArr = createRandomArray(len);
-            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            int[] aArr = createRandomModFn(n);
             BigInteger a = ctor.newInstance(1, aArr);
-            int[] bArr = createRandomArray(len);
-            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            int[] bArr = createRandomModFn(n);
             BigInteger b = ctor.newInstance(1, bArr);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
             BigInteger expected = a.add(b).mod(Fn);
             addModFnMethod.invoke(null, aArr, bArr);
-            modFnMethod.invoke(null, aArr);
             BigInteger actual = ctor.newInstance(1, aArr);
             if (!actual.equals(expected))
                 failCount++;
@@ -482,42 +478,75 @@ public class BigIntegerTest {
         subModFnMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
-            int len = 1 << (n + 1 - 5);
-            int[] aArr = createRandomArray(len);
-            aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            int[] aArr = createRandomModFn(n);
             BigInteger a = ctor.newInstance(1, aArr);
-            int[] bArr = createRandomArray(len);
-            bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
+            int[] bArr = createRandomModFn(n);
             BigInteger b = ctor.newInstance(1, bArr);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
             BigInteger expected = a.subtract(b).mod(Fn);
             subModFnMethod.invoke(null, aArr, bArr);
-            modFnMethod.invoke(null, aArr);
             BigInteger actual = ctor.newInstance(1, aArr);
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test cyclicShiftLeftBits / cyclicShiftRightBits
-        Method shiftLeftMethod = BigInteger.class.getDeclaredMethod("cyclicShiftLeftBits", int[].class, int.class, int[].class);
+        // test shiftLeftModFn against BigInteger.shiftLeft().mod(Fn)
+        Method shiftLeftMethod = BigInteger.class.getDeclaredMethod("shiftLeftModFn", int[].class, int.class, int[].class);
         shiftLeftMethod.setAccessible(true);
-        Method shiftRightMethod = BigInteger.class.getDeclaredMethod("cyclicShiftRightBits", int[].class, int.class, int[].class);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(10);
+            int[] aArr = createRandomModFn(n);
+            int[] bArr = new int[aArr.length];
+            int[] FnArr = new int[aArr.length];
+            FnArr[0] = 1;
+            FnArr[FnArr.length-1] = 1;
+            BigInteger Fn = ctor.newInstance(1, FnArr);
+            int shiftDistance = rnd.nextInt(1 << (n+1));
+            BigInteger expected = ctor.newInstance(1, aArr).shiftLeft(shiftDistance).mod(Fn);
+            shiftLeftMethod.invoke(null, aArr, shiftDistance, bArr);
+            BigInteger actual = ctor.newInstance(1, bArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test shiftRightModFn against BigInteger.multiply(2^(-shiftDistance)).mod(Fn)
+        Method shiftRightMethod = BigInteger.class.getDeclaredMethod("shiftRightModFn", int[].class, int.class, int[].class);
         shiftRightMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
-            int n = 1 << rnd.nextInt(20);
-            int[] a = createRandomArray(n);
+            int n = 5 + rnd.nextInt(10);
+            int[] aArr = createRandomModFn(n);
+            int[] bArr = new int[aArr.length];
+            int[] FnArr = new int[aArr.length];
+            FnArr[0] = 1;
+            FnArr[FnArr.length-1] = 1;
+            BigInteger Fn = ctor.newInstance(1, FnArr);
+            int shiftDistance = rnd.nextInt(1 << (n+1));
+            BigInteger inv2 = Fn.add(ONE).divide(TWO);   // 2^(-1) mod Fn
+            BigInteger inv = inv2.modPow(BigInteger.valueOf(shiftDistance), Fn);   // 2^(-shiftDistance) mod Fn
+            BigInteger expected = ctor.newInstance(1, aArr).multiply(inv).mod(Fn);
+            shiftRightMethod.invoke(null, aArr, shiftDistance, bArr);
+            BigInteger actual = ctor.newInstance(1, bArr);
+            if (!actual.equals(expected))
+                failCount++;
+        }
+
+        // test shiftLeftModFn and shiftRightModFn by doing multiple shifts which should cancel each other out
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(10);
+            int bitLen = (1<<n) + 1;
+            int[] a = createRandomModFn(n);
             int[] aOrig = a.clone();
             // pick random shift amounts whose sum is zero
             List<Integer> amounts = new ArrayList<Integer>();
             int count = 1 + rnd.nextInt(20);
             int total = 0;
             for (int i = 0; i < count; i++) {
-                int amount = rnd.nextInt(n);
+                int amount = rnd.nextInt(bitLen);
                 amounts.add(amount);
                 total += amount;
             }
             while (total > 0) {
-                int amount = Math.min(rnd.nextInt(n), total);
+                int amount = Math.min(rnd.nextInt(bitLen), total);
                 amounts.add(-amount);
                 total -= amount;
             }
@@ -530,6 +559,8 @@ public class BigIntegerTest {
                     shiftRightMethod.invoke(null, a, -amount, b);
                 a = b;
             }
+            modFnMethod.invoke(null, new Object[] {a});
+            modFnMethod.invoke(null, new Object[] {aOrig});
             if (!Arrays.equals(a, aOrig))
                 failCount++;
         }
@@ -537,14 +568,16 @@ public class BigIntegerTest {
         // test modFn
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(15);
-            int len = 1 << (n + 1 - 5);
-            int[] a = createRandomArray(len);
+            int[] a = createRandomModFn(n);
+            a[0] = rnd.nextInt();   // test all int values, not just 0 and 1
             int[] aOrig = a.clone();
             modFnMethod.invoke(null, a);
             BigInteger actual = ctor.newInstance(1, a);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
             BigInteger expected = ctor.newInstance(1, aOrig).mod(Fn);
             if (!actual.equals(expected))
+                failCount++;
+            if (actual.compareTo(Fn) >= 0)
                 failCount++;
         }
 
@@ -667,10 +700,28 @@ public class BigIntegerTest {
         return a;
     }
 
+    /**
+     * Returns a random number modulo 2^2^n+1. The results are biased
+     * towards the special case 2^2^n.
+     * @param n must be 5 or greater
+     * @return an array of length ceil((2^n+1) / 32.0)
+     */
+    private static int[] createRandomModFn(int n) {
+        int length = (1<<(n-5)) + 1;
+        int[] a = new int[length];
+        if (rnd.nextInt(5) == 0)
+            a[0] = 1;   // return 2^2^n
+        else
+            // leave a[0] zero, make everything else random
+            for (int i=1; i<a.length; i++)
+                a[i] = rnd.nextInt();
+        return a;
+    }
+
     private static int[][] createRandomDftArray(int m, int n) {
         int numElements = m%2==0 ? 1<<n : 1<<(n+1);
         numElements /= 2;
-        int[][] a = new int[numElements][1<<(n+1-5)];
+        int[][] a = new int[numElements][(1<<(n-5))+1];
         for (int i=0; i<a.length; i++)
             for (int j=0; j<a[i].length; j++)
                 a[i][j] = rnd.nextInt();
