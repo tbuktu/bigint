@@ -114,7 +114,7 @@ public class Tune {
                 System.out.print("infinity");
             else
                 System.out.print(interval[1]);
-            System.out.print(" bits or \t " + interval[0]/32 + "..");
+            System.out.print(" bits or " + interval[0]/32 + "..");
             if (lastInterval)
                 System.out.print("infinity");
             else
