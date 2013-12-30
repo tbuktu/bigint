@@ -2118,38 +2118,42 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static boolean shouldMultiplySchoenhageStrassen(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
-            // SS is slower than Toom-Cook below ~15,500 ints (~149,000 decimal digits)
-            // and faster above ~73,200 ints (~705,000 decimal digits).
+            // SS is slower than Toom-Cook below ~4,000 ints (~38,000 decimal digits)
+            // and faster above ~17,900 ints (~172 decimal digits).
             // Between those values, it changes several times.
-            if (length <= 15500)
+            if (length <= 3952)
+                return false;
+            if (length <= 4096)   // 2^12
+                return true;
+            if (length <= 6256)
+                return false;
+            if (length <= 8192)   // 2^13
+                return true;
+            if (length <= 10832)
                 return false;
             if (length <= 16384)   // 2^14
                 return true;
-            if (length <= 26300)
-                return false;
-            if (length <= 32768)   // 2^15
-                return true;
-            if (length <= 44000)
-                return false;
-            if (length <= 65536)   // 2^16
-                return true;
-            if (length <= 73200)
+            if (length <= 17904)
                 return false;
             return true;
         } else {
             // The following values were determined experimentally on a 32-bit JVM.
-            // SS is slower than Toom-Cook below ~6,300 ints (~60,700 decimal digits)
-            // and faster above ~34,000 ints (~327,500 decimal digits).
+            // SS is slower than Toom-Cook below ~2,000 ints (~19,300 decimal digits)
+            // and faster above ~9,200 ints (~88,900 decimal digits).
             // Between those values, it changes several times.
-            if (length <= 6300)
+            if (length <= 2000)
                 return false;
-            if (length <= 16384)   // 2^14
+            if (length <= 2048)   // 2^11
                 return true;
-            if (length <= 19300)
+            if (length <= 3216)
                 return false;
-            if (length <= 32768)   // 2^15
+            if (length <= 4096)   // 2^12
                 return true;
-            if (length <= 34000)
+            if (length <= 5392)
+                return false;
+            if (length <= 8192)   // 2^13
+                return true;
+            if (length <= 9232)
                 return false;
             return true;
         }
@@ -2164,43 +2168,35 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static boolean shouldSquareSchoenhageStrassen(int length) {
         if (IS64BIT) {
-            if (length <= 15000)
+            if (length <= 3792)
                 return false;
-            if (length <= 16384)   // 2^14
+            if (length <= 4096)   // 2^12
                 return true;
-            if (length <= 27100)
-                return false;
-            if (length <= 32768)   // 2^15
-                return true;
-            if (length <= 43600)
-                return false;
-            if (length <= 65536)   // 2^16
-                return true;
-            if (length <= 76300)
-                return false;
-            if (length <= 131072)   // 2^17
-                return true;
-            if (length <= 133800)
-                return false;
-            return true;
-        } else {
-            if (length <= 7100)
+            if (length <= 6512)
                 return false;
             if (length <= 8192)   // 2^13
                 return true;
-            if (length <= 14200)
+            if (length <= 10608)
                 return false;
             if (length <= 16384)   // 2^14
                 return true;
-            if (length <= 24100)
+            if (length <= 17680)
                 return false;
-            if (length <= 32768)   // 2^15
-                return true;
-            if (length <= 42800)
+            return true;
+        } else {
+            if (length <= 2032)
                 return false;
-            if (length <= 65536)   // 2^16
+            if (length <= 2048)   // 2^11
                 return true;
-            if (length <= 73000)
+            if (length <= 3152)
+                return false;
+            if (length <= 4096)   // 2^12
+                return true;
+            if (length <= 5232)
+                return false;
+            if (length <= 8192)   // 2^13
+                return true;
+            if (length <= 9232)
                 return false;
             return true;
         }
@@ -3344,29 +3340,45 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     static boolean shouldDivideBarrett(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
-            if (length <= 123000)
+            if (length <= 30735)
                 return false;
-            if (length <= 131072)   // 2^17
+            if (length <= 32767)   // 2^15-1
                 return true;
-            if (length <= 206000)
+            if (length <= 55311)
                 return false;
-            if (length <= 262144)   // 2^18
+            if (length <= 65535)   // 2^16-1
                 return true;
-            if (length <= 345000)
+            if (length <= 90127)
                 return false;
-            if (length <= 524288)   // 2^19
+            if (length <= 131071)   // 2^17-1
                 return true;
-            if (length <= 595000)
+            if (length <= 174415)
+                return false;
+            if (length <= 262143)   // 2^18-1
+                return true;
+            if (length <= 278512)
                 return false;
             return true;
         }
         else {
             // The following values were determined experimentally on a 32-bit JVM.
-            if (length <= 101000)
+            if (length <= 14863)
                 return false;
-            if (length <= 131072)   // 2^17
+            if (length <= 16383)    // 2^14-1
                 return true;
-            if (length <= 177000)
+            if (length <= 27663)
+                return false;
+            if (length <= 32767)    // 2^15-1
+                return true;
+            if (length <= 48079)
+                return false;
+            if (length <= 65535)    // 2^16-1
+                return true;
+            if (length <= 85199)
+                return false;
+            if (length <= 131071)   // 2^17-1
+                return true;
+            if (length <= 159791)
                 return false;
             return true;
         }
