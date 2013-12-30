@@ -47,6 +47,10 @@ public class Tune {
         Method fastMethod = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class);
         tune(slowMethod, fastMethod);
 
+        slowMethod = BigInteger.class.getDeclaredMethod("squareToomCook3");
+        fastMethod = BigInteger.class.getDeclaredMethod("squareSchoenhageStrassen");
+        tune(slowMethod, fastMethod);
+
         System.out.println("***** Note: Barrett thresholds are only meaningful if SS thresholds");
         System.out.println("***** have been updated in BigInteger.java");
         slowMethod = BigInteger.class.getDeclaredMethod("divideBurnikelZiegler", BigInteger.class);
