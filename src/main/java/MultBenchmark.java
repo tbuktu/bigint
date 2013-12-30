@@ -36,7 +36,7 @@ import java.util.Random;
  */
 public class MultBenchmark {
     private static int POW10_MIN = 1;   // start with 10^1-digit numbers
-    private static int POW10_MAX = 7;   // go up to 10^7 digits
+    private static int POW10_MAX = 8;   // go up to 7.5*10^8 digits
     private static long MIN_BENCH_DURATION = 2000000000;   // in nanoseconds
 
     /**
@@ -58,7 +58,7 @@ public class MultBenchmark {
      */
     private static void doBench(int mag, int pow10) {
         Random rng = new Random();
-        int numDecimalDigits = TEN.pow(pow10).intValue() * mag / 10;
+        int numDecimalDigits = (int)(TEN.pow(pow10).longValue() * mag / 10);
         int numBinaryDigits = (int)(numDecimalDigits / Math.log10(2));
 
         System.out.print("Warming up... ");
