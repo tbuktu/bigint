@@ -26,10 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-import static java.math.BigInteger.ONE;
 import static java.math.BigInteger.TEN;
 
 import java.math.BigInteger;
+import java.util.Random;
 
 /**
  * Benchmark for {@link BigInteger#multiply(BigInteger)} using different input sizes.
@@ -57,26 +57,32 @@ public class MultBenchmark {
      * @param pow10
      */
     private static void doBench(int mag, int pow10) {
+        Random rng = new Random();
         int numDecimalDigits = TEN.pow(pow10).intValue() * mag / 10;
-        BigInteger a = BigInteger.valueOf(5).pow(numDecimalDigits-1).shiftLeft(numDecimalDigits-1);   // 10^(numDecimalDigits-1)
-        BigInteger b = a.add(ONE);
+        int numBinaryDigits = (int)(numDecimalDigits / Math.log10(2));
 
         System.out.print("Warming up... ");
         int numIterations = 0;
         long tStart = System.nanoTime();
         do {
+            BigInteger a = new BigInteger(numBinaryDigits, rng);
+            BigInteger b = new BigInteger(numBinaryDigits, rng);
             a.multiply(b);
             numIterations++;
         } while (System.nanoTime()-tStart < MIN_BENCH_DURATION);
 
         System.out.print("Benchmarking " + mag/10.0 + "E" + pow10 + " digits... ");
-        a = new BigInteger(a.toByteArray());
-        b = new BigInteger(b.toByteArray());
+        long tTotal = 0;
         tStart = System.nanoTime();
-        for (int i=0; i<numIterations; i++)
+        for (int i=0; i<numIterations; i++) {
+            BigInteger a = new BigInteger(numBinaryDigits, rng);
+            BigInteger b = new BigInteger(numBinaryDigits, rng);
+            tStart = System.nanoTime();
             a.multiply(b);
-        long tEnd = System.nanoTime();
-        long tNano = (tEnd-tStart+(numIterations+1)/2) / numIterations;   // in nanoseconds
+            long tEnd = System.nanoTime();
+            tTotal += tEnd - tStart;
+        }
+        double tNano = ((double)tTotal) / numIterations;   // in nanoseconds
         double tMilli = tNano / 1000000.0;   // in milliseconds
         System.out.printf("Time per mult: %12.5fms", tMilli);
         System.out.println();
