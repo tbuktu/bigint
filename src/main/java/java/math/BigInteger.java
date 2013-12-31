@@ -1494,7 +1494,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         } else {
             if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD)) {
                 return multiplyKaratsuba(this, val);
-            } else if (!shouldMultiplySchoenhageStrassen(xlen) || !shouldMultiplySchoenhageStrassen(ylen)) {
+            } else if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen)) {
                 return multiplyToomCook3(this, val);
             } else {
                 return multiplySchoenhageStrassen(this, val);
@@ -2115,7 +2115,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param length the number of ints in each of the two factors
      * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
      */
-    private static boolean shouldMultiplySchoenhageStrassen(int length) {
+    private static boolean shouldUseSchoenhageStrassen(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
             // SS is slower than Toom-Cook below ~4,000 ints (~38,000 decimal digits)
@@ -2150,49 +2150,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (length <= 4096)   // 2^12
                 return true;
             if (length <= 5392)
-                return false;
-            if (length <= 8192)   // 2^13
-                return true;
-            if (length <= 9232)
-                return false;
-            return true;
-        }
-    }
-
-    /**
-     * Estimates whether SS will be more efficient than the other methods when squaring a number
-     * of a given length in bits.
-     * @param bitLength the number of ints in the number to be squared
-     * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
-     * @see #shouldMultiplySchoenhageStrassen(int)
-     */
-    private static boolean shouldSquareSchoenhageStrassen(int length) {
-        if (IS64BIT) {
-            if (length <= 3792)
-                return false;
-            if (length <= 4096)   // 2^12
-                return true;
-            if (length <= 6512)
-                return false;
-            if (length <= 8192)   // 2^13
-                return true;
-            if (length <= 10608)
-                return false;
-            if (length <= 16384)   // 2^14
-                return true;
-            if (length <= 17680)
-                return false;
-            return true;
-        } else {
-            if (length <= 2032)
-                return false;
-            if (length <= 2048)   // 2^11
-                return true;
-            if (length <= 3152)
-                return false;
-            if (length <= 4096)   // 2^12
-                return true;
-            if (length <= 5232)
                 return false;
             if (length <= 8192)   // 2^13
                 return true;
@@ -3121,7 +3078,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD) {
                 return squareKaratsuba();
             } else {
-                if (!shouldSquareSchoenhageStrassen(len))
+                if (!shouldUseSchoenhageStrassen(len))
                     return squareToomCook3();
                 else
                     return squareSchoenhageStrassen();
