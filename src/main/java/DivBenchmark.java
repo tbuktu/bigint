@@ -31,7 +31,6 @@ import static java.math.BigInteger.TEN;
 import java.math.BigInteger;
 import java.util.Random;
 
-
 /**
  * Benchmark for {@link BigInteger#divide(BigInteger)} using different input sizes.
  */
