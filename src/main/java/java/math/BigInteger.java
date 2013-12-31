@@ -1892,28 +1892,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Squares this number using the
-     * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     * Schoenhage-Strassen algorithm</a>.
-     * @return a <code>BigInteger</code> equal to <code>this.multiply(this)</code>
-     */
-    private BigInteger squareSchoenhageStrassen() {
-        // remove any minus sign
-        int[] aArr = signum()>=0 ? mag : negate().mag;
-
-        int[] cArr = squareSchoenhageStrassen(aArr);
-        BigInteger c = new BigInteger(1, cArr);
-
-        return c;
-    }
-
-    /**
      * This is the core Schoenhage-Strassen method. It multiplies two <b>positive</b> numbers of length
      * <code>aBitLen</code> and </code>bBitLen</code> that are represented as int arrays, i.e. in base
      * 2<sup>32</sup>.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
      * The arrays must be ordered most significant to least significant, so the most significant digit
-     * must be at index 0.
+     * must be at index 0.<br/>
+     * If <code>a==b</code>, the DFT for b is omitted which saves roughly 1/4 of the execution time.
      * <p/>
      * The Schoenhage-Strassen algorithm works as follows:
      * <ol>
@@ -1959,6 +1944,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return a*b
      */
     private static int[] multiplySchoenhageStrassen(int[] a, int[] b) {
+        boolean square = a == b;
+
         // set M to the number of binary digits in a or b, whichever is greater
         int M = Math.max(a.length*32, b.length*32);
 
@@ -1980,15 +1967,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             appendBits(u, uBitLength, a, i*pieceSize, n+2);
             uBitLength += 3*n+5;
         }
-        int numPiecesB = (b.length+pieceSize) / pieceSize;
-        int[] v = new int[(numPiecesB*(3*n+5)+31)/32];
-        int vBitLength = 0;
-        for (int i=0; i<numPiecesB && i*pieceSize<b.length; i++) {
-            appendBits(v, vBitLength, b, i*pieceSize, n+2);
-            vBitLength += 3*n+5;
+        int[] gamma;
+        if (square)
+            gamma = new BigInteger(1, u).square().mag;   // gamma = u * u
+        else {
+            int numPiecesB = (b.length+pieceSize) / pieceSize;
+            int[] v = new int[(numPiecesB*(3*n+5)+31)/32];
+            int vBitLength = 0;
+            for (int i=0; i<numPiecesB && i*pieceSize<b.length; i++) {
+                appendBits(v, vBitLength, b, i*pieceSize, n+2);
+                vBitLength += 3*n+5;
+            }
+            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v)).mag;   // gamma = u * v
         }
-
-        int[] gamma = new BigInteger(1, u).multiply(new BigInteger(1, v)).mag;   // gamma = u * v
         int[][] gammai = splitBits(gamma, 3*n+5);
         int halfNumPcs = numPieces / 2;
 
@@ -2004,91 +1995,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // zr mod Fn
         int[][] ai = splitInts(a, halfNumPcs, pieceSize, (1<<(n-5))+1);
-        int[][] bi = splitInts(b, halfNumPcs, pieceSize, (1<<(n-5))+1);
+        int[][] bi = null;
+        if (!square)
+            bi = splitInts(b, halfNumPcs, pieceSize, (1<<(n-5))+1);
         int omega = even ? 4 : 2;
-        dft(ai, omega);
-        dft(bi, omega);
-        modFn(ai);
-        modFn(bi);
         int[][] c = new int[halfNumPcs][];
-        for (int i=0; i<c.length; i++)
-            c[i] = multModFn(ai[i], bi[i]);
+        if (square) {
+            dft(ai, omega);
+            modFn(ai);
+            for (int i=0; i<c.length; i++)
+                c[i] = squareModFn(ai[i]);
+        }
+        else {
+            dft(ai, omega);
+            dft(bi, omega);
+            modFn(ai);
+            modFn(bi);
+            for (int i=0; i<c.length; i++)
+                c[i] = multModFn(ai[i], bi[i]);
+        }
         idft(c, omega);
         modFn(c);
-
-        int[] z = new int[(1<<(m-5))+1];
-        // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
-        for (int i=0; i<halfNumPcs; i++) {
-            int[] eta = i>=zi.length ? new int[(n+2+31)/32] : zi[i];
-
-            // zi = delta = (zi-c[i]) % 2^(n+2)
-            subModPow2(eta, c[i], n+2);
-
-            // z += zr<<shift = [ci + delta*(2^2^n+1)] << [i*2^(n-1)]
-            int shift = i*(1<<(n-1-5));   // assume n>=6
-            addShifted(z, c[i], shift);
-            addShifted(z, eta, shift);
-            addShifted(z, eta, shift+(1<<(n-5)));
-        }
-
-        modFn(z);   // assume m>=5
-        return z;
-    }
-
-    /**
-     * Squares a <b>positive</b> number of length <code>aBitLen</code> that is represented as an int
-     * array, i.e. in base 2<sup>32</sup>.
-     * @param a
-     * @return a<sup>2</sup>
-     * @see #multiplySchoenhageStrassen(int[], int, int[], int)
-     */
-    private static int[] squareSchoenhageStrassen(int[] a) {
-        // set M to the number of binary digits in a
-        int M = a.length * 32;
-
-        // find the lowest m such that m>=log2(2M)
-        int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
-
-        int n = m/2 + 1;
-
-        // split a into pieces 1<<(n-1) bits long; assume n>=6 so pieces start and end at int boundaries
-        boolean even = m%2 == 0;
-        int numPieces = even ? 1<<n : 1<<(n+1);
-        int pieceSize = 1 << (n-1-5);   // in ints
-
-        // build u from a, allocating 3n+5 bits in u per n+2 bits from a
-        int numPiecesA = (a.length+pieceSize) / pieceSize;
-        int[] u = new int[(numPiecesA*(3*n+5)+31)/32];
-        int uBitLength = 0;
-        for (int i=0; i<numPiecesA && i*pieceSize<a.length; i++) {
-            appendBits(u, uBitLength, a, i*pieceSize, n+2);
-            uBitLength += 3*n+5;
-        }
-
-        int[] gamma = new BigInteger(1, u).square().mag;   // gamma = u * u
-
-        int[][] gammai = splitBits(gamma, 3*n+5);
-        int halfNumPcs = numPieces / 2;
-
-        int[][] zi = new int[gammai.length][];
-        for (int i=0; i<gammai.length; i++)
-            zi[i] = gammai[i];
-        for (int i=0; i<gammai.length-halfNumPcs; i++)
-            subModPow2(zi[i], gammai[i+halfNumPcs], n+2);
-        for (int i=0; i<gammai.length-2*halfNumPcs; i++)
-            addModPow2(zi[i], gammai[i+2*halfNumPcs], n+2);
-        for (int i=0; i<gammai.length-3*halfNumPcs; i++)
-            subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
-
-        // zr mod Fn
-        int[][] ai = splitInts(a, halfNumPcs, pieceSize, (1<<(n-5))+1);
-        int omega = even ? 4 : 2;
-        dft(ai, omega);
-        modFn(ai);
-        int[][] c = new int[halfNumPcs][];
-        for (int i=0; i<c.length; i++)
-            c[i] = squareModFn(ai[i]);
-        idft(c, omega);
 
         int[] z = new int[(1<<(m-5))+1];
         // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
@@ -3081,7 +3008,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 if (!shouldUseSchoenhageStrassen(len))
                     return squareToomCook3();
                 else
-                    return squareSchoenhageStrassen();
+                    return multiplySchoenhageStrassen(this, this);
             }
         }
     }
