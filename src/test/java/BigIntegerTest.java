@@ -581,6 +581,24 @@ public class BigIntegerTest {
                 failCount++;
         }
 
+        // test modFnLong
+        Method modFnLongMethod = BigInteger.class.getDeclaredMethod("modFnLong", int[].class);
+        modFnLongMethod.setAccessible(true);
+        for (int k = 0; k<100; k++) {
+            int n = 5 + rnd.nextInt(15);
+            int len = 1 << (n + 1 - 5);
+            int[] a = createRandomArray(len);
+            int[] aOrig = a.clone();
+            modFnLongMethod.invoke(null, a);
+            BigInteger actual = ctor.newInstance(1, a);
+            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger expected = ctor.newInstance(1, aOrig).mod(Fn);
+            if (!actual.equals(expected))
+                failCount++;
+            if (actual.compareTo(Fn) >= 0)
+                failCount++;
+        }
+
         // test addModPow2
         Method addModPow2Method = BigInteger.class.getDeclaredMethod("addModPow2", int[].class, int[].class, int.class);
         addModPow2Method.setAccessible(true);
@@ -726,6 +744,25 @@ public class BigIntegerTest {
             for (int j=0; j<a[i].length; j++)
                 a[i][j] = rnd.nextInt();
         return a;
+    }
+
+    private static void inverse() throws Exception {
+        int failCount = 0;
+
+        Method inverseMethod = BigInteger.class.getDeclaredMethod("inverse", int.class);
+        inverseMethod.setAccessible(true);
+        for (int i=0; i<REDUCED_SIZE; i++) {
+            BigInteger a;
+            do {
+                a = fetchNumber(ORDER_SS_BARRETT);
+            } while (a.compareTo(ZERO) <= 0);
+            int n = rnd.nextInt(a.bitLength());
+            BigInteger expected = BigInteger.ONE.shiftLeft(a.bitLength()+n).divide(a);
+            BigInteger actual = (BigInteger)inverseMethod.invoke(a, n);
+            if (actual.subtract(expected).abs().compareTo(ONE) > 1)
+                failCount++;
+        }
+        report("Inverse", failCount);
     }
 
     public static void bitCount() {
@@ -1366,6 +1403,8 @@ public class BigIntegerTest {
         nextProbablePrime();
 
         schoenhageStrassen(order5);
+
+        inverse();
 
         arithmetic(order1);   // small numbers
         arithmetic(order3);   // Karatsuba range
