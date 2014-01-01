@@ -3384,7 +3384,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // the case iff it reduces bitLength() below the next lower power of two.
             if (Integer.numberOfLeadingZeros(n) < Integer.numberOfLeadingZeros(n-lowestSetBit)) {
                 BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit));
-                result[1].shiftLeft(lowestSetBit);
+                result[1] = result[1].shiftLeft(lowestSetBit);
                 return result;
             }
 
