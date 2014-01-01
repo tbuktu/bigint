@@ -384,12 +384,24 @@ public class BigIntegerTest {
             }
         }
 
+        // test multithreaded multiplySchoenhageStrassen()
+        Method multiplySchoenhageStrassenMethod = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
+        multiplySchoenhageStrassenMethod.setAccessible(true);
+        for (int i=0; i<5; i++) {
+            BigInteger a = new BigInteger(ORDER_SS_BARRETT, rnd);
+            BigInteger b = new BigInteger(ORDER_SS_BARRETT, rnd);
+            BigInteger c1 = (BigInteger)multiplySchoenhageStrassenMethod.invoke(null, a, b, 4);
+            BigInteger c2 = a.multiply(b);
+            if (!c1.equals(c2))
+                failCount++;
+        }
+
         // verify that idft(dft(a)) = a
         Method modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[][].class);
         modFnMethod.setAccessible(true);
-        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class);
+        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class, int.class);
         dftMethod.setAccessible(true);
-        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class);
+        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class, int.class);
         idftMethod.setAccessible(true);
         for (int k=0; k<100; k++) {
             int m = 8 + rnd.nextInt(8);
@@ -400,8 +412,8 @@ public class BigIntegerTest {
             for (int i=0; i<a.length; i++)
                 aOrig[i] = a[i].clone();
             int omega = m%2==0 ? 4 : 2;
-            dftMethod.invoke(null, a, omega);
-            idftMethod.invoke(null, a, omega);
+            dftMethod.invoke(null, a, omega, 4);
+            idftMethod.invoke(null, a, omega, 4);
             modFnMethod.invoke(null, new Object[] {a});
             for (int j=0; j<aOrig.length; j++)
                 if (!Arrays.equals(a[j], aOrig[j]))
