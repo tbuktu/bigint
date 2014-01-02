@@ -2632,7 +2632,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static void shiftRightModFn(int[] a, int numBits, int[] b) {
         int len = a.length;
-        if (numBits >= 32*(len-1)) {
+        if (numBits > 32*(len-1)) {
             shiftLeftModFn(a, 32*2*(len-1)-numBits, b);
             return;
         }
@@ -2650,12 +2650,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 borrow = diff==-1 && borrow;
             }
 
-            // subtract a[len-1] from a[0] (they overlap unless numElements=len-1)
-            int diff;
-            if (numElements < len-1)
-                diff = a[0] - a[len-1];
-            else   // no overlap
-                diff = 0;
+            // subtract a[len-1] from a[0]
+            int diff = a[0] - a[len-1];
             if (borrow) {
                 diff--;
                 borrow = diff == -1;
