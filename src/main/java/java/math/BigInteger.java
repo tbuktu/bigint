@@ -1892,9 +1892,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * This is the core Schoenhage-Strassen method. It multiplies two <b>positive</b> numbers of length
-     * <code>aBitLen</code> and </code>bBitLen</code> that are represented as int arrays, i.e. in base
-     * 2<sup>32</sup>.
+     * This is the core Schoenhage-Strassen method. It multiplies two <b>positive</b> numbers given as
+     * int arrays, i.e. in base 2<sup>32</sup>.
      * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
      * The arrays must be ordered most significant to least significant, so the most significant digit
      * must be at index 0.<br/>
@@ -2089,7 +2088,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Performs a modified
      * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
-     * Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.<br/>
+     * Discrete Fourier Transform</a> (a Fermat Number Transform, to be more precise) on an array whose elements
+     * are <code>int</code> arrays.<br/>
      * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
      * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
      * Bailey's 4-step algorithm</a>.<br/>
@@ -2120,12 +2120,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Performs an DFT on column {@code colIdx}.<br/>
+     * Performs a DFT on column {@code colIdx}, consisting of
+     * {@code A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols]}.<br/>
      * <code>A</code> is assumed to be the lower half of the full array.
-     * @param A an array of length rows*cols
+     * @param A an array containing {@code rows*cols} subarrays
      * @param omega root of unity
-     * @param rows number of rows in A
-     * @param cols number of columns in A
+     * @param rows number of rows in {@code A}
+     * @param cols number of columns in {@code A}
      * @param colIdx index of the column to transform
      */
     private static void dftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
@@ -2133,19 +2134,30 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Performs an DFT on row {@code rowIdx}.<br/>
+     * Performs a DFT on row {@code rowIdx}, consisting of
+     * {@code A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1]}.<br/>
      * <code>A</code> is assumed to be the lower half of the full array.
-     * @param A an array of length rows*cols
+     * @param A an array containing {@code rows*cols} subarrays
      * @param omega root of unity
-     * @param rows number of rows in A
-     * @param cols number of columns in A
+     * @param rows number of rows in {@code A}
+     * @param cols number of columns in {@code A}
      * @param rowIdx index of the row to transform
      */
     private static void dftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
         dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
     }
 
-    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
+    /**
+     * Performs a DFT on {@code A}.
+     * This implementation uses the radix-4 technique which combines two levels of butterflies.
+     * @param A the vector to transform
+     * @param omega root of unity
+     * @param expOffset value to add to the array index when computing the exponent
+     * @param expScale factor by which to multiply the exponent
+     * @param len number of elements to transform
+     * @param idxOffset value to add to the array index when accessing elements of {@code A}
+     * @param stride stride length
+     */
     private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 1;   // v starts at 1 rather than 0 for the same reason
@@ -2239,7 +2251,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return x;
     }
 
-    /** Multiplies vector elements by powers of omega (aka twiddle factors) */
+    /**
+     * Multiplies vector elements by powers of omega (aka twiddle factors). Used by Bailey's algorithm.
+     * @param A the vector to transform
+     * @param omega root of unity
+     * @param rows number of matrix rows
+     * @param cols number of matrix columns
+     */
     private static void applyDftWeights(int[][] A, int omega, int rows, int cols) {
         int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
 
@@ -2414,9 +2432,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
-     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
+     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo
+     * 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=<code>(a.length-1)*32</code>; in other words,
+     * <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
@@ -2446,9 +2464,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
-     * where n is <code>a.length*32/2</code>; in other words, n is half the number of bits in
-     * <code>a</code>.<br/>
+     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo
+     * 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=<code>(a.length-1)*32</code>; in other words,
+     * <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * Both input values are given as <code>int</code> arrays; they must be the same length.
      * The result is returned in the first argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
@@ -2479,12 +2497,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>n</sup>+1,
+     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
      * and returns the result in a new array.<br/>
-     * <code>a</code> and <code>b</code> are assumed to be reduced mod 2<sup>n</sup>+1, i.e. 0&le;a&lt;2<sup>n</sup>+1
-     * and 0&le;b&lt;2<sup>n</sup>+1, where n is <code>a.length*32/2</code>; in other words, n is half the number
-     * of bits in <code>a</code>.<br/>
-     * Both input values are given as <code>int</code> arrays; they must be the same length.
+     * <code>a</code> and <code>b</code> are assumed to be reduced mod 2<sup>2<sup>n</sup></sup>+1, i.e.
+     * 0&le;a&lt;2<sup>2<sup>n</sup></sup>+1 and 0&le;b&lt;2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
+     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
      * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
      */
@@ -2603,8 +2620,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies a number by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1, where n is
-     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.
+     * Multiplies a number by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
+     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * "Right" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
      * shifting it to the right by <code>numBits</code> bits.<br/>
@@ -2710,8 +2727,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies a number by 2<sup>numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1, where n is
-     * <code>a.length*32/2</code>; in other words, n is half the number of bits in <code>a</code>.
+     * Multiplies a number by 2<sup>numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
+     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * "Left" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
      * shifting it to the left by <code>numBits</code> bits.<br/>
