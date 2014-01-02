@@ -2620,33 +2620,33 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies a number by 2<sup>-numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
+     * Multiplies a number by 2<sup>-shiftAmtBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
      * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * "Right" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
-     * shifting it to the right by <code>numBits</code> bits.<br/>
+     * shifting it to the right by <code>shiftAmt</code> bits.<br/>
      * The result is returned in the third argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param numBits the shift amount in bits; must be less than <code>32*2*(len-1))</code>
+     * @param shiftAmtBits the shift amount in bits; must be less than <code>32*2*(len-1))</code>
      * @param b the return value; must be at least as long as <code>a</code>
      */
-    private static void shiftRightModFn(int[] a, int numBits, int[] b) {
+    private static void shiftRightModFn(int[] a, int shiftAmtBits, int[] b) {
         int len = a.length;
-        if (numBits > 32*(len-1)) {
-            shiftLeftModFn(a, 32*2*(len-1)-numBits, b);
+        if (shiftAmtBits > 32*(len-1)) {
+            shiftLeftModFn(a, 32*2*(len-1)-shiftAmtBits, b);
             return;
         }
 
-        int numElements = numBits / 32;   // number of ints to shift
-        if (numElements > 0) {
+        int shiftAmtInts = shiftAmtBits / 32;   // number of ints to shift
+        if (shiftAmtInts > 0) {
             boolean borrow = false;
 
             // shift the digits that stay positive, except a[len-1] which is special
-            for (int i=1; i<len-numElements; i++) {
+            for (int i=1; i<len-shiftAmtInts; i++) {
                 int diff = a[i];
                 if (borrow)
                     diff--;
-                b[numElements+i] = diff;
+                b[shiftAmtInts+i] = diff;
                 borrow = diff==-1 && borrow;
             }
 
@@ -2658,15 +2658,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
             else
                 borrow = a[0]==0 && a[len-1]!=0;   // a[0] can only be 0 or 1; if a[0]!=0, a[len-1]==0
-            b[numElements] = diff;
+            b[shiftAmtInts] = diff;
 
             // using the fact that adding x*(Fn-1) is the same as subtracting x,
             // subtract digits shifted off the right, except for a[0] which is special
-            for (int i=1; i<numElements; i++) {
-                b[numElements-i] = -a[len-1-i];
+            for (int i=1; i<shiftAmtInts; i++) {
+                b[shiftAmtInts-i] = -a[len-1-i];
                 if (borrow)
-                    b[numElements-i]--;
-                borrow = b[numElements-i]!=0 || borrow;
+                    b[shiftAmtInts-i]--;
+                borrow = b[shiftAmtInts-i]!=0 || borrow;
             }
 
             // if we borrowed from the most significant int, add 1 to the overall number
@@ -2688,15 +2688,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         else
             System.arraycopy(a, 0, b, 0, len);
 
-        int numBitsFrac = numBits % 32;
-        if (numBitsFrac != 0) {
-            int bhi = b[len-1] << (32-numBitsFrac);
+        int shiftAmtFrac = shiftAmtBits % 32;
+        if (shiftAmtFrac != 0) {
+            int bhi = b[len-1] << (32-shiftAmtFrac);
 
             // do remaining digits
-            b[len-1] >>>= numBitsFrac;
+            b[len-1] >>>= shiftAmtFrac;
             for (int i=len-1; i>0; i--) {
-                b[i] |= b[i-1] << (32-numBitsFrac);
-                b[i-1] >>>= numBitsFrac;
+                b[i] |= b[i-1] << (32-shiftAmtFrac);
+                b[i-1] >>>= shiftAmtFrac;
             }
 
             // b[len-1] spills over into b[1]
@@ -2723,31 +2723,31 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Multiplies a number by 2<sup>numBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
+     * Multiplies a number by 2<sup>shiftAmt</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
      * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
      * "Left" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
-     * shifting it to the left by <code>numBits</code> bits.<br/>
+     * shifting it to the left by <code>shiftAmt</code> bits.<br/>
      * The result is returned in the third argument.
      * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param numBits the shift amount in bits
+     * @param shiftAmtBits the shift amount in bits
      * @param b the return value; must be at least as long as <code>a</code>
      */
-    private static void shiftLeftModFn(int[] a, int numBits, int[] b) {
+    private static void shiftLeftModFn(int[] a, int shiftAmtBits, int[] b) {
         int len = a.length;
 
-        if (numBits > 32*(len-1)) {
-            shiftRightModFn(a, 32*2*(len-1)-numBits, b);
+        if (shiftAmtBits > 32*(len-1)) {
+            shiftRightModFn(a, 32*2*(len-1)-shiftAmtBits, b);
             return;
         }
 
-        int numElements = numBits / 32;   // number of ints to shift
-        if (numElements > 0) {
+        int shiftAmtInts = shiftAmtBits / 32;   // number of ints to shift
+        if (shiftAmtInts > 0) {
             boolean borrow = false;
             // using the fact that adding x*(Fn-1) is the same as subtracting x,
             // subtract digits shifted outside the [0..Fn-2] range, except for a[0] which is special
-            for (int i=0; i<numElements; i++) {
-                b[len-1-i] = -a[numElements-i];
+            for (int i=0; i<shiftAmtInts; i++) {
+                b[len-1-i] = -a[shiftAmtInts-i];
                 if (borrow)
                     b[len-1-i]--;
                 borrow = b[len-1-i]!=0 || borrow;
@@ -2755,7 +2755,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
             // subtract a[0] from a[len-1] (they overlap unless numElements=len-1)
             int diff;
-            if (numElements < len-1)
+            if (shiftAmtInts < len-1)
                 diff = a[len-1] - a[0];
             else   // no overlap
                 diff = -a[0];
@@ -2765,14 +2765,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
             else
                 borrow = a[0]==1 && diff==-1;   // a[0] can only be 0 or 1
-            b[len-1-numElements] = diff;
+            b[len-1-shiftAmtInts] = diff;
 
             // finally, shift the digits that stay in the [0..Fn-2] range
-            for (int i=1; i<len-numElements-1; i++) {
+            for (int i=1; i<len-shiftAmtInts-1; i++) {
                 diff = a[len-1-i];
                 if (borrow)
                     diff--;
-                b[len-1-numElements-i] = diff;
+                b[len-1-shiftAmtInts-i] = diff;
                 borrow = diff==-1 && borrow;
             }
 
@@ -2795,12 +2795,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         else
             System.arraycopy(a, 0, b, 0, len);
 
-        int numBitsFrac = numBits % 32;
-        if (numBitsFrac != 0) {
-            b[0] <<= numBitsFrac;   // no spill-over because 0<=a[0]<=1 and numBitsFrac<=31
+        int shiftAmtFrac = shiftAmtBits % 32;
+        if (shiftAmtFrac != 0) {
+            b[0] <<= shiftAmtFrac;   // no spill-over because 0<=a[0]<=1 and shiftAmtFrac<=31
             for (int i=1; i<len; i++) {
-                b[i-1] |= b[i] >>> (32-numBitsFrac);
-                b[i] <<= numBitsFrac;
+                b[i-1] |= b[i] >>> (32-shiftAmtFrac);
+                b[i] <<= shiftAmtFrac;
             }
         }
 
