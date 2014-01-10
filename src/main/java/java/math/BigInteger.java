@@ -2091,8 +2091,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Discrete Fourier Transform</a> (a Fermat Number Transform, to be more precise) on an array whose elements
      * are <code>int</code> arrays.<br/>
      * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.<br/>
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
@@ -2101,50 +2099,35 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param omega 2 or 4
      */
     private static void dft(int[][] A, int omega) {
+        dftBailey(A, omega);
+    }
+
+    /**
+     * Performs a DFT on {@code A}.
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.
+     * @param A the vector to transform
+     * @param omega 2 or 4
+     */
+    private static void dftBailey(int[][] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
 
-        // step 1: perform an DFT on each column
+        // step 1: perform an DFT on each column, that is, on the vector
+        // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
         for (int i=0; i<cols; i++)
-            dftBailey1(A, omega, rows, cols, i);
+            dftDirect(A, omega, rows, cols, rows, i, cols);
 
         // step 2: multiply by powers of omega
         applyDftWeights(A, omega, rows, cols);
 
         // step 3 is built into step 1 by making the stride length a multiple of the row length
 
-        // step 4: perform an DFT on each row
+        // step 4: perform an DFT on each row, that is, on the vector
+        // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
         for (int i=0; i<rows; i++)
-            dftBailey2(A, omega, rows, cols, i);
-    }
-
-    /**
-     * Performs a DFT on column {@code colIdx}, consisting of
-     * {@code A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols]}.<br/>
-     * <code>A</code> is assumed to be the lower half of the full array.
-     * @param A an array containing {@code rows*cols} subarrays
-     * @param omega root of unity
-     * @param rows number of rows in {@code A}
-     * @param cols number of columns in {@code A}
-     * @param colIdx index of the column to transform
-     */
-    private static void dftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
-        dftDirect(A, omega, rows, cols, rows, colIdx, cols);
-    }
-
-    /**
-     * Performs a DFT on row {@code rowIdx}, consisting of
-     * {@code A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1]}.<br/>
-     * <code>A</code> is assumed to be the lower half of the full array.
-     * @param A an array containing {@code rows*cols} subarrays
-     * @param omega root of unity
-     * @param rows number of rows in {@code A}
-     * @param cols number of columns in {@code A}
-     * @param rowIdx index of the row to transform
-     */
-    private static void dftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
-        dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
+            dftDirect(A, omega, 0, rows, cols, i*cols, 1);
     }
 
     /**
@@ -2284,8 +2267,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Inverse Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.
      * The modification is that the last step (the one where the upper half is subtracted from the lower half)
      * is omitted.<br/>
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.<br/>
      * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
      * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
      * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
@@ -2294,47 +2275,35 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param omega 2 or 4
      */
     private static void idft(int[][] A, int omega) {
+        idftBailey(A, omega);
+    }
+
+    /**
+     * Performs an IDFT on {@code A}.
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.
+     * @param A the vector to transform
+     * @param omega 2 or 4
+     */
+    private static void idftBailey(int[][] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
 
-        // step 1: perform an IDFT on each row
+        // step 1: perform an IDFT on each row, that is, on the vector
+        // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
         for (int i=0; i<rows; i++)
-            idftBailey2(A, omega, rows, cols, i);
+            idftDirect(A, omega, cols, 0, rows, i*cols, 1);
 
         // step 2: multiply by powers of omega
         applyIdftWeights(A, omega, rows, cols);
 
         // step 3 is built into step 4 by making the stride length a multiple of the row length
-        // step 4: perform an IDFT on each column
+
+        // step 4: perform an IDFT on each column, that is, on the vector
+        // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
         for (int i=0; i<cols; i++)
-            idftBailey1(A, omega, rows, cols, i);
-    }
-
-    /**
-     * Performs an IDFT on column {@code colIdx}.<br/>
-     * <code>A</code> is assumed to be the upper half of the full array.
-     * @param A an array of length rows*cols
-     * @param omega root of unity
-     * @param rows number of rows in A
-     * @param cols number of columns in A
-     * @param colIdx index of the column to transform
-     */
-    private static void idftBailey1(int[][] A, int omega, int rows, int cols, int colIdx) {
-        idftDirect(A, omega, rows, rows, cols, colIdx, cols);
-    }
-
-    /**
-     * Performs an IDFT on row {@code rowIdx}.<br/>
-     * <code>A</code> is assumed to be the upper half of the full array.
-     * @param A an array of length rows*cols
-     * @param omega root of unity
-     * @param rows number of rows in A
-     * @param cols number of columns in A
-     * @param rowIdx index of the row to transform
-     */
-    private static void idftBailey2(int[][] A, int omega, int rows, int cols, int rowIdx) {
-        idftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
+            idftDirect(A, omega, rows, rows, cols, i, cols);
     }
 
     /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
