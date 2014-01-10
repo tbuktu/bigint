@@ -1870,9 +1870,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Multiplies two {@link BigInteger}s using the
      * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
      * Schoenhage-Strassen algorithm</a> algorithm.
-     * @param a
-     * @param b
-     * @return a <code>BigInteger</code> equal to <code>a.multiply(b)</code>
+     * @param a the first factor
+     * @param b the second factor
+     * @return a*b
      */
     private static BigInteger multiplySchoenhageStrassen(BigInteger a, BigInteger b) {
         // remove any minus signs, multiply, then fix sign
@@ -2092,11 +2092,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * are <code>int</code> arrays.<br/>
      * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
-     * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
-     * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
-     * n must be equal to m/2-1.
-     * @param A
-     * @param omega 2 or 4
+     * @param A the vector to transform
+     * @param omega root of unity, can be 2 or 4
      */
     private static void dft(int[][] A, int omega) {
         dftBailey(A, omega);
@@ -2107,7 +2104,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
      * Bailey's 4-step algorithm</a>.
      * @param A the vector to transform
-     * @param omega 2 or 4
+     * @param omega root of unity, can be 2 or 4
      */
     private static void dftBailey(int[][] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
@@ -2134,7 +2131,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Performs a DFT on {@code A}.
      * This implementation uses the radix-4 technique which combines two levels of butterflies.
      * @param A the vector to transform
-     * @param omega root of unity
+     * @param omega root of unity, can be 2 or 4
      * @param expOffset value to add to the array index when computing the exponent
      * @param expScale factor by which to multiply the exponent
      * @param len number of elements to transform
@@ -2219,7 +2216,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param n the log of the DFT length
      * @param v butterfly depth
      * @param idx index of the array element to be computed
-     * @param omega 2 or 4
+     * @param omega root of unity, can be 2 or 4
      * @return
      */
     private static int getDftExponent(int n, int v, int idx, int omega) {
@@ -2237,7 +2234,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Multiplies vector elements by powers of omega (aka twiddle factors). Used by Bailey's algorithm.
      * @param A the vector to transform
-     * @param omega root of unity
+     * @param omega root of unity, can be 2 or 4
      * @param rows number of matrix rows
      * @param cols number of matrix columns
      */
@@ -2268,11 +2265,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * The modification is that the last step (the one where the upper half is subtracted from the lower half)
      * is omitted.<br/>
      * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
-     * The number of subarrays in <code>A</code> must be 2<sup>n</sup> if m is even and 2<sup>n+1</sup> if m is odd.<br/>
-     * Each subarray must be ceil(2<sup>n-1</sup>) bits in length.<br/>
-     * n must be equal to m/2-1.
-     * @param A
-     * @param omega 2 or 4
+     * @param A the vector to transform
+     * @param omega root of unity, can be 2 or 4
      */
     private static void idft(int[][] A, int omega) {
         idftBailey(A, omega);
@@ -2283,7 +2277,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
      * Bailey's 4-step algorithm</a>.
      * @param A the vector to transform
-     * @param omega 2 or 4
+     * @param omega root of unity, can be 2 or 4
      */
     private static void idftBailey(int[][] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
