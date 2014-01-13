@@ -36,7 +36,9 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.math.BigInteger;
 import java.util.Random;
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -385,58 +387,70 @@ public class BigIntegerTest {
         }
 
         // verify that idft(dft(a)) = a
-        Method modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[][].class);
-        modFnMethod.setAccessible(true);
-        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", int[][].class, int.class);
+        Class<?> mutableModFnClass = Class.forName("java.math.MutableModFn");
+        Constructor<?> mutableModFnCtor = mutableModFnClass.getDeclaredConstructor(int[].class);
+        mutableModFnCtor.setAccessible(true);
+        Field digitsField = mutableModFnClass.getDeclaredField("digits");
+        digitsField.setAccessible(true);
+        Method reduceMethod = BigInteger.class.getDeclaredMethod("reduce", Array.newInstance(mutableModFnClass, 0).getClass());
+        reduceMethod.setAccessible(true);
+        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class);
         dftMethod.setAccessible(true);
-        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", int[][].class, int.class);
+        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class);
         idftMethod.setAccessible(true);
         for (int k=0; k<100; k++) {
             int m = 8 + rnd.nextInt(8);
             int n = m/2 + 1;
             int[][] a = createRandomDftArray(m, n);
-            modFnMethod.invoke(null, new Object[] {a});
             int[][] aOrig = new int[a.length][];
             for (int i=0; i<a.length; i++)
                 aOrig[i] = a[i].clone();
             int omega = m%2==0 ? 4 : 2;
-            dftMethod.invoke(null, a, omega);
-            idftMethod.invoke(null, a, omega);
-            modFnMethod.invoke(null, new Object[] {a});
-            for (int j=0; j<aOrig.length; j++)
-                if (!Arrays.equals(a[j], aOrig[j]))
+            Object vector = Array.newInstance(mutableModFnClass, a.length);
+            for (int i=0; i<a.length; i++)
+                Array.set(vector, i, mutableModFnCtor.newInstance(a[i]));
+            dftMethod.invoke(null, vector, omega);
+            idftMethod.invoke(null, vector, omega);
+            reduceMethod.invoke(null, vector);
+            for (int i=0; i<aOrig.length; i++) {
+                int[] origDigits = (int[])digitsField.get(Array.get(vector, i));
+                if (!Arrays.equals(origDigits, aOrig[i]))
                     failCount++;
+            }
         }
 
-        // test multModFn
-        modFnMethod = BigInteger.class.getDeclaredMethod("modFn", int[].class);   // this is the other modFn method
-        modFnMethod.setAccessible(true);
-        Method multModFnMethod = BigInteger.class.getDeclaredMethod("multModFn", int[].class, int[].class);
-        multModFnMethod.setAccessible(true);
-        Constructor<BigInteger> ctor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
-        ctor.setAccessible(true);
+        // test MutableModFn.multiply()
+        Method multiplyMethod = mutableModFnClass.getDeclaredMethod("multiply", mutableModFnClass);
+        multiplyMethod.setAccessible(true);
+        reduceMethod = mutableModFnClass.getDeclaredMethod("reduce");   // this is the other reduce method
+        reduceMethod.setAccessible(true);
+        Constructor<BigInteger> bigintCtor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
+        bigintCtor.setAccessible(true);
         for (int i=0; i<100; i++) {
             int n = 5 + rnd.nextInt(10);
             int[] a = createRandomModFn(n);
-            modFnMethod.invoke(null, new Object[] {a});
             int[] b = createRandomModFn(n);
             int[] FnArr = new int[a.length];
             FnArr[0] = 1;
             FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = ctor.newInstance(1, FnArr);
-            modFnMethod.invoke(null, new Object[] {b});
-            int[] c = (int[])multModFnMethod.invoke(null, a, b);
-            modFnMethod.invoke(null, new Object[] {c});
-            BigInteger actual = ctor.newInstance(1, c);
-            BigInteger aBigInt = ctor.newInstance(1, a);
-            BigInteger bBigInt = ctor.newInstance(1, b);
+            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
+
+            BigInteger aBigInt = bigintCtor.newInstance(1, a);
+            BigInteger bBigInt = bigintCtor.newInstance(1, b);
             BigInteger expected = aBigInt.multiply(bBigInt).mod(Fn);
+
+            Object aMutable = mutableModFnCtor.newInstance(a);
+            Object bMutable = mutableModFnCtor.newInstance(b);
+            Object cMutable = multiplyMethod.invoke(aMutable, bMutable);
+            int[] c = (int[])digitsField.get(cMutable);
+            BigInteger actual = bigintCtor.newInstance(1, c);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test squareModFn
-        Method squareModFnMethod = BigInteger.class.getDeclaredMethod("squareModFn", int[].class);
+        // test MutableModFn.square()
+        Method squareModFnMethod = mutableModFnClass.getDeclaredMethod("square");
         squareModFnMethod.setAccessible(true);
         for (int i=0; i<100; i++) {
             int n = 5 + rnd.nextInt(10);
@@ -444,98 +458,124 @@ public class BigIntegerTest {
             int[] FnArr = new int[a.length];
             FnArr[0] = 1;
             FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = ctor.newInstance(1, FnArr);
-            modFnMethod.invoke(null, new Object[] {a});
-            int[] c = (int[])squareModFnMethod.invoke(null, a);
-            modFnMethod.invoke(null, new Object[] {c});
-            BigInteger actual = ctor.newInstance(1, c);
-            BigInteger aBigInt = ctor.newInstance(1, a);
-            BigInteger expected = (BigInteger)squareMethod.invoke(aBigInt);
-            expected = expected.mod(Fn);
+            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
+
+            BigInteger aBigInt = bigintCtor.newInstance(1, a);
+            BigInteger expected = aBigInt.multiply(aBigInt).mod(Fn);
+
+            Object aMutable = mutableModFnCtor.newInstance(a);
+            Object cMutable = squareModFnMethod.invoke(aMutable);
+            int[] c = (int[])digitsField.get(cMutable);
+            BigInteger actual = bigintCtor.newInstance(1, c);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test addModFn
-        Method addModFnMethod = BigInteger.class.getDeclaredMethod("addModFn", int[].class, int[].class);
-        addModFnMethod.setAccessible(true);
+        // test MutableModFn.add()
+        Method addMethod = mutableModFnClass.getDeclaredMethod("add", mutableModFnClass);
+        addMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
-            BigInteger a = ctor.newInstance(1, aArr);
             int[] bArr = createRandomModFn(n);
-            BigInteger b = ctor.newInstance(1, bArr);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+
+            BigInteger a = bigintCtor.newInstance(1, aArr);
+            BigInteger b = bigintCtor.newInstance(1, bArr);
             BigInteger expected = a.add(b).mod(Fn);
-            addModFnMethod.invoke(null, aArr, bArr);
-            BigInteger actual = ctor.newInstance(1, aArr);
+
+            Object aMutable = mutableModFnCtor.newInstance(aArr);
+            Object bMutable = mutableModFnCtor.newInstance(bArr);
+            addMethod.invoke(aMutable, bMutable);
+            aArr = (int[])digitsField.get(aMutable);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test subModFn
-        Method subModFnMethod = BigInteger.class.getDeclaredMethod("subModFn", int[].class, int[].class);
-        subModFnMethod.setAccessible(true);
+        // test MutableModFn.subtract()
+        Method subtractMethod = mutableModFnClass.getDeclaredMethod("subtract", mutableModFnClass);
+        subtractMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
-            BigInteger a = ctor.newInstance(1, aArr);
             int[] bArr = createRandomModFn(n);
-            BigInteger b = ctor.newInstance(1, bArr);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+
+            BigInteger a = bigintCtor.newInstance(1, aArr);
+            BigInteger b = bigintCtor.newInstance(1, bArr);
             BigInteger expected = a.subtract(b).mod(Fn);
-            subModFnMethod.invoke(null, aArr, bArr);
-            BigInteger actual = ctor.newInstance(1, aArr);
+
+            Object aMutable = mutableModFnCtor.newInstance(aArr);
+            Object bMutable = mutableModFnCtor.newInstance(bArr);
+            subtractMethod.invoke(aMutable, bMutable);
+            aArr = (int[])digitsField.get(aMutable);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test shiftLeftModFn against BigInteger.shiftLeft().mod(Fn)
-        Method shiftLeftMethod = BigInteger.class.getDeclaredMethod("shiftLeftModFn", int[].class, int.class, int[].class);
+        // test MutableModFn.shiftLeft() against BigInteger.shiftLeft().mod(Fn)
+        Method shiftLeftMethod = mutableModFnClass.getDeclaredMethod("shiftLeft", int.class, mutableModFnClass);
         shiftLeftMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
             int[] bArr = new int[aArr.length];
+            int shiftDistance = rnd.nextInt(1 << (n+1));
             int[] FnArr = new int[aArr.length];
             FnArr[0] = 1;
             FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = ctor.newInstance(1, FnArr);
-            int shiftDistance = rnd.nextInt(1 << (n+1));
-            BigInteger expected = ctor.newInstance(1, aArr).shiftLeft(shiftDistance).mod(Fn);
-            shiftLeftMethod.invoke(null, aArr, shiftDistance, bArr);
-            BigInteger actual = ctor.newInstance(1, bArr);
+            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
+
+            BigInteger a = bigintCtor.newInstance(1, aArr);
+            BigInteger expected = a.shiftLeft(shiftDistance).mod(Fn);
+
+            Object aMutable = mutableModFnCtor.newInstance(aArr);
+            Object bMutable = mutableModFnCtor.newInstance(bArr);
+            shiftLeftMethod.invoke(aMutable, shiftDistance, bMutable);
+            bArr = (int[])digitsField.get(bMutable);
+            BigInteger actual = bigintCtor.newInstance(1, bArr);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test shiftRightModFn against BigInteger.multiply(2^(-shiftDistance)).mod(Fn)
-        Method shiftRightMethod = BigInteger.class.getDeclaredMethod("shiftRightModFn", int[].class, int.class, int[].class);
+        // test MutableModFn.shiftRight() against BigInteger.multiply(2^(-shiftDistance)).mod(Fn)
+        Method shiftRightMethod = mutableModFnClass.getDeclaredMethod("shiftRight", int.class, mutableModFnClass);
         shiftRightMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
             int[] bArr = new int[aArr.length];
+            int shiftDistance = rnd.nextInt(1 << (n+1));
             int[] FnArr = new int[aArr.length];
             FnArr[0] = 1;
             FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = ctor.newInstance(1, FnArr);
-            int shiftDistance = rnd.nextInt(1 << (n+1));
+            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
+
             BigInteger inv2 = Fn.add(ONE).divide(TWO);   // 2^(-1) mod Fn
             BigInteger inv = inv2.modPow(BigInteger.valueOf(shiftDistance), Fn);   // 2^(-shiftDistance) mod Fn
-            BigInteger expected = ctor.newInstance(1, aArr).multiply(inv).mod(Fn);
-            shiftRightMethod.invoke(null, aArr, shiftDistance, bArr);
-            BigInteger actual = ctor.newInstance(1, bArr);
+            BigInteger a = bigintCtor.newInstance(1, aArr);
+            BigInteger expected = a.multiply(inv).mod(Fn);
+
+            Object aMutable = mutableModFnCtor.newInstance(aArr);
+            Object bMutable = mutableModFnCtor.newInstance(bArr);
+            shiftRightMethod.invoke(aMutable, shiftDistance, bMutable);
+            bArr = (int[])digitsField.get(bMutable);
+            BigInteger actual = bigintCtor.newInstance(1, bArr);
+
             if (!actual.equals(expected))
                 failCount++;
         }
 
-        // test shiftLeftModFn and shiftRightModFn by doing multiple shifts which should cancel each other out
+        // test MutableModFn.shiftLeft() and MutableModFn.shiftRight() by doing multiple shifts which should cancel each other out
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(10);
             int bitLen = (1<<n) + 1;
-            int[] a = createRandomModFn(n);
-            int[] aOrig = a.clone();
             // pick random shift amounts whose sum is zero
             List<Integer> amounts = new ArrayList<Integer>();
             int count = 1 + rnd.nextInt(20);
@@ -551,48 +591,61 @@ public class BigIntegerTest {
                 total -= amount;
             }
             Collections.shuffle(amounts);
-            for (int amount : amounts) {
-                int[] b = new int[a.length];
+
+            int[] a = createRandomModFn(n);
+            int[] aOrig = a.clone();
+            Object aMutable = mutableModFnCtor.newInstance(a);
+            for (int amount: amounts) {
+                Object bMutable = mutableModFnCtor.newInstance(new int[a.length]);
                 if (amount > 0)
-                    shiftLeftMethod.invoke(null, a, amount, b);
+                    shiftLeftMethod.invoke(aMutable, amount, bMutable);
                 else
-                    shiftRightMethod.invoke(null, a, -amount, b);
-                a = b;
+                    shiftRightMethod.invoke(aMutable, -amount, bMutable);
+                aMutable = bMutable;
             }
-            modFnMethod.invoke(null, new Object[] {a});
-            modFnMethod.invoke(null, new Object[] {aOrig});
+            reduceMethod.invoke(aMutable);
+            a = (int[])digitsField.get(aMutable);
+
             if (!Arrays.equals(a, aOrig))
                 failCount++;
         }
 
-        // test modFn
+        // test MutableModFn.reduce()
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(15);
             int[] a = createRandomModFn(n);
             a[0] = rnd.nextInt();   // test all int values, not just 0 and 1
             int[] aOrig = a.clone();
-            modFnMethod.invoke(null, a);
-            BigInteger actual = ctor.newInstance(1, a);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
-            BigInteger expected = ctor.newInstance(1, aOrig).mod(Fn);
+
+            BigInteger expected = bigintCtor.newInstance(1, aOrig).mod(Fn);
+
+            Object aMutable = mutableModFnCtor.newInstance(a);
+            reduceMethod.invoke(aMutable);
+            a = (int[])digitsField.get(aMutable);
+            BigInteger actual = bigintCtor.newInstance(1, a);
+
             if (!actual.equals(expected))
                 failCount++;
             if (actual.compareTo(Fn) >= 0)
                 failCount++;
         }
 
-        // test modFnLong
-        Method modFnLongMethod = BigInteger.class.getDeclaredMethod("modFnLong", int[].class);
-        modFnLongMethod.setAccessible(true);
+        // test MutableModFn.reduceLong()
+        Method reduceLongMethod = mutableModFnClass.getDeclaredMethod("reduceLong", int[].class);
+        reduceLongMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 5 + rnd.nextInt(15);
             int len = 1 << (n + 1 - 5);
             int[] a = createRandomArray(len);
             int[] aOrig = a.clone();
-            modFnLongMethod.invoke(null, a);
-            BigInteger actual = ctor.newInstance(1, a);
             BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
-            BigInteger expected = ctor.newInstance(1, aOrig).mod(Fn);
+
+            BigInteger expected = bigintCtor.newInstance(1, aOrig).mod(Fn);
+
+            reduceLongMethod.invoke(null, a);
+            BigInteger actual = bigintCtor.newInstance(1, a);
+
             if (!actual.equals(expected))
                 failCount++;
             if (actual.compareTo(Fn) >= 0)
@@ -607,15 +660,15 @@ public class BigIntegerTest {
             int len = 1 << (n + 1 - 5);
             int[] aArr = createRandomArray(len);
             aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
-            BigInteger a = ctor.newInstance(1, aArr);
+            BigInteger a = bigintCtor.newInstance(1, aArr);
             int[] bArr = createRandomArray(len);
             bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
-            BigInteger b = ctor.newInstance(1, bArr);
+            BigInteger b = bigintCtor.newInstance(1, bArr);
             int numBits = rnd.nextInt(n);
             BigInteger pow2 = BigInteger.valueOf(1<<numBits);
             BigInteger expected = a.add(b).mod(pow2);
             addModPow2Method.invoke(null, aArr, bArr, numBits);
-            BigInteger actual = ctor.newInstance(1, aArr);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
             if (!actual.equals(expected))
                 failCount++;
         }
@@ -628,15 +681,15 @@ public class BigIntegerTest {
             int len = 1 << (n + 1 - 5);
             int[] aArr = createRandomArray(len);
             aArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
-            BigInteger a = ctor.newInstance(1, aArr);
+            BigInteger a = bigintCtor.newInstance(1, aArr);
             int[] bArr = createRandomArray(len);
             bArr[0] &= 0x7FFFFFFF; // make sure the most significant int doesn't overflow
-            BigInteger b = ctor.newInstance(1, bArr);
+            BigInteger b = bigintCtor.newInstance(1, bArr);
             int numBits = rnd.nextInt(n);
             BigInteger pow2 = BigInteger.valueOf(1<<numBits);
             BigInteger expected = a.subtract(b).mod(pow2);
             subModPow2Method.invoke(null, aArr, bArr, numBits);
-            BigInteger actual = ctor.newInstance(1, aArr);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
             if (!actual.equals(expected))
                 failCount++;
         }
@@ -647,13 +700,13 @@ public class BigIntegerTest {
         for (int k = 0; k<100; k++) {
             int n = 1 + rnd.nextInt(1000);
             int[] aArr = createRandomArray(n);
-            BigInteger actual = ctor.newInstance(1, aArr);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
             int pieceSize = 1 + smallRandom(n-1, rnd);
             int[][] pieces = (int[][])splitBitsMethod.invoke(null, aArr, pieceSize);
             BigInteger expected = ZERO;
             for (int i=pieces.length-1; i>=0; i--) {
                 int[] piece = pieces[i];
-                BigInteger pieceBigInt = ctor.newInstance(1, piece);
+                BigInteger pieceBigInt = bigintCtor.newInstance(1, piece);
                 expected = expected.shiftLeft(pieceSize).add(pieceBigInt);
             }
             if (!actual.equals(expected))
@@ -665,12 +718,12 @@ public class BigIntegerTest {
         addShiftedMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int[] aArr = createRandomArray(1 + rnd.nextInt(1000));
-            BigInteger a = ctor.newInstance(1, aArr);
+            BigInteger a = bigintCtor.newInstance(1, aArr);
             int offset = rnd.nextInt(aArr.length);
             int[] bArr = createRandomArray(1 + rnd.nextInt(1000));
-            BigInteger b = ctor.newInstance(1, bArr);
+            BigInteger b = bigintCtor.newInstance(1, bArr);
             addShiftedMethod.invoke(null, aArr, bArr, offset);
-            BigInteger actual = ctor.newInstance(1, aArr);
+            BigInteger actual = bigintCtor.newInstance(1, aArr);
             BigInteger mask = ONE.shiftLeft(aArr.length*32).subtract(ONE);
             BigInteger expected = a.add(b.shiftLeft(offset*32)).and(mask);
             if (!actual.equals(expected))
@@ -682,7 +735,7 @@ public class BigIntegerTest {
         appendBitsMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int[] src = createRandomArray(1 + rnd.nextInt(1000));
-            BigInteger srcBigInt = ctor.newInstance(1, src);
+            BigInteger srcBigInt = bigintCtor.newInstance(1, src);
             int[] dest = new int[src.length];
             int valBits = 1 + smallRandom(src.length*32-1, rnd);
             int padBits = 1 + smallRandom(src.length*32-1, rnd);
@@ -698,7 +751,7 @@ public class BigIntegerTest {
             }
             if (destBits > 0)
                 dest = Arrays.copyOfRange(dest, dest.length-(destBits+31)/32, dest.length);
-            BigInteger actual = ctor.newInstance(1, dest);
+            BigInteger actual = bigintCtor.newInstance(1, dest);
             if (!actual.equals(expected))
                 failCount++;
         }
@@ -739,10 +792,9 @@ public class BigIntegerTest {
     private static int[][] createRandomDftArray(int m, int n) {
         int numElements = m%2==0 ? 1<<n : 1<<(n+1);
         numElements /= 2;
-        int[][] a = new int[numElements][(1<<(n-5))+1];
+        int[][] a = new int[numElements][];
         for (int i=0; i<a.length; i++)
-            for (int j=0; j<a[i].length; j++)
-                a[i][j] = rnd.nextInt();
+            a[i] = createRandomModFn(n);
         return a;
     }
 

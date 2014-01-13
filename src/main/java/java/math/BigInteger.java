@@ -369,7 +369,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * arguments and copies the magnitude so this constructor would be
      * safe for external use.
      */
-    private BigInteger(int signum, int[] magnitude) {
+    BigInteger(int signum, int[] magnitude) {
         this.mag = stripLeadingZeroInts(magnitude);
 
         if (signum < -1 || signum > 1)
@@ -1920,7 +1920,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *   <li>Calculate all pieces of z" by multiplying the i-th piece of a by the i-th piece of b.</li>
      *   <li>Perform an Inverse Discrete Fourier Transform (IDFT) on z". z" will contain all pieces of
      *       a*b mod F<sub>n</sub> where F<sub>n</sub>=2<sup>2<sup>n</sup></sup>+1.</li>
-     *   <li>Calculate all pieces of z such that each piece is congruent to z' modulo n+2 and congruent to
+     *   <li>Calculate all pieces of z such that each piece is congruent to z' modulo 2<sup>n+2</sup> and congruent to
      *       z" modulo F<sub>n</sub>. This is done using the
      *       <a href="http://en.wikipedia.org/wiki/Chinese_remainder_theorem">Chinese remainder theorem</a>.</li>
      *   <li>Calculate c by adding z<sub>i</sub> * 2<sup>i*2<sup>n-1</sup></sup> for all i, where z<sub>i</sub> is the
@@ -1958,7 +1958,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int numPieces = even ? 1<<n : 1<<(n+1);
         int pieceSize = 1 << (n-1-5);   // in ints
 
-        // build u and v from a and b, allocating 3n+5 bits in u and v per n+2 bits from a and b, resp.
+        // zi mod 2^(n+2): build u and v from a and b, allocating 3n+5 bits in u and v per n+2 bits from a and b, resp.
         int numPiecesA = (a.length+pieceSize) / pieceSize;
         int[] u = new int[(numPiecesA*(3*n+5)+31)/32];
         int uBitLength = 0;
@@ -1993,45 +1993,46 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        int[][] ai = splitInts(a, halfNumPcs, pieceSize, (1<<(n-5))+1);
-        int[][] bi = null;
+        MutableModFn[] ai = splitInts(a, halfNumPcs, pieceSize, (1<<(n-5))+1);
+        MutableModFn[] bi = null;
         if (!square)
             bi = splitInts(b, halfNumPcs, pieceSize, (1<<(n-5))+1);
         int omega = even ? 4 : 2;
-        int[][] c = new int[halfNumPcs][];
+        MutableModFn[] c = new MutableModFn[halfNumPcs];
         if (square) {
             dft(ai, omega);
-            modFn(ai);
+            reduce(ai);
             for (int i=0; i<c.length; i++)
-                c[i] = squareModFn(ai[i]);
+                c[i] = ai[i].square();
         }
         else {
             dft(ai, omega);
             dft(bi, omega);
-            modFn(ai);
-            modFn(bi);
+            reduce(ai);
+            reduce(bi);
             for (int i=0; i<c.length; i++)
-                c[i] = multModFn(ai[i], bi[i]);
+                c[i] = ai[i].multiply(bi[i]);
         }
         idft(c, omega);
-        modFn(c);
+        reduce(c);
 
         int[] z = new int[(1<<(m-5))+1];
         // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
+        // note: z is an int[] rather than a MutableBigInteger because MBI.addShifted() seems to be much slower than BI.addShifted()
         for (int i=0; i<halfNumPcs; i++) {
             int[] eta = i>=zi.length ? new int[(n+2+31)/32] : zi[i];
 
             // zi = delta = (zi-c[i]) % 2^(n+2)
-            subModPow2(eta, c[i], n+2);
+            subModPow2(eta, c[i].digits, n+2);
 
             // z += zr<<shift = [ci + delta*(2^2^n+1)] << [i*2^(n-1)]
             int shift = i*(1<<(n-1-5));   // assume n>=6
-            addShifted(z, c[i], shift);
+            addShifted(z, c[i].digits, shift);
             addShifted(z, eta, shift);
             addShifted(z, eta, shift+(1<<(n-5)));
         }
 
-        modFn(z);   // assume m>=5
+        new MutableModFn(z).reduce();   // assume m>=5
         return z;
     }
 
@@ -2095,7 +2096,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void dft(int[][] A, int omega) {
+    private static void dft(MutableModFn[] A, int omega) {
         dftBailey(A, omega);
     }
 
@@ -2106,7 +2107,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void dftBailey(int[][] A, int omega) {
+    private static void dftBailey(MutableModFn[] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
@@ -2138,11 +2139,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param idxOffset value to add to the array index when accessing elements of {@code A}
      * @param stride stride length
      */
-    private static void dftDirect(int[][] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
+    private static void dftDirect(MutableModFn[] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 1;   // v starts at 1 rather than 0 for the same reason
-        int intLen = A[0].length;
-        int[] d = new int[intLen];
+        MutableModFn d = new MutableModFn(A[0].digits.length);
 
         int slen = len / 2;
         while (slen > 1) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
@@ -2151,7 +2151,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 int x2 = getDftExponent(n, v, j+expOffset, omega) * expScale;          // for level v+1
                 int x3 = getDftExponent(n, v+1, j+slen+expOffset, omega) * expScale;   // for level v+2
 
-                // stride length = stride*slen subarrays
+                // stride length = stride*slen elements
                 int idx0 = stride*j + idxOffset;
                 int idx1 = stride*j + stride*slen/2 + idxOffset;
                 int idx2 = idx0 + stride*slen;
@@ -2159,26 +2159,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
                 for (int k=slen-1; k>=0; k-=2) {
                     // do level v+1
-                    shiftLeftModFn(A[idx2], x2, d);
-                    System.arraycopy(A[idx0], 0, A[idx2], 0, intLen);
-                    addModFn(A[idx0], d);
-                    subModFn(A[idx2], d);
+                    A[idx2].shiftLeft(x2, d);
+                    A[idx0].copyTo(A[idx2]);
+                    A[idx0].add(d);
+                    A[idx2].subtract(d);
 
-                    shiftLeftModFn(A[idx3], x2, d);
-                    System.arraycopy(A[idx1], 0, A[idx3], 0, intLen);
-                    addModFn(A[idx1], d);
-                    subModFn(A[idx3], d);
+                    A[idx3].shiftLeft(x2, d);
+                    A[idx1].copyTo(A[idx3]);
+                    A[idx1].add(d);
+                    A[idx3].subtract(d);
 
                     // do level v+2
-                    shiftLeftModFn(A[idx1], x1, d);
-                    System.arraycopy(A[idx0], 0, A[idx1], 0, intLen);
-                    addModFn(A[idx0], d);
-                    subModFn(A[idx1], d);
+                    A[idx1].shiftLeft(x1, d);
+                    A[idx0].copyTo(A[idx1]);
+                    A[idx0].add(d);
+                    A[idx1].subtract(d);
 
-                    shiftLeftModFn(A[idx3], x3, d);
-                    System.arraycopy(A[idx2], 0, A[idx3], 0, intLen);
-                    addModFn(A[idx2], d);
-                    subModFn(A[idx3], d);
+                    A[idx3].shiftLeft(x3, d);
+                    A[idx2].copyTo(A[idx3]);
+                    A[idx2].add(d);
+                    A[idx3].subtract(d);
 
                     idx0 += stride;
                     idx1 += stride;
@@ -2196,13 +2196,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<len; j+=2*slen) {
                 int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
                 int idx = stride*j + idxOffset;
-                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
+                int idx2 = idx + stride*slen;   // stride length = stride*slen elements
 
                 for (int k=slen-1; k>=0; k--) {
-                    shiftLeftModFn(A[idx2], x, d);
-                    System.arraycopy(A[idx], 0, A[idx2], 0, intLen);
-                    addModFn(A[idx], d);
-                    subModFn(A[idx2], d);
+                    A[idx2].shiftLeft(x, d);
+                    A[idx].copyTo(A[idx2]);
+                    A[idx].add(d);
+                    A[idx2].subtract(d);
                     idx += stride;
                     idx2 += stride;
                 }
@@ -2238,18 +2238,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param rows number of matrix rows
      * @param cols number of matrix columns
      */
-    private static void applyDftWeights(int[][] A, int omega, int rows, int cols) {
+    private static void applyDftWeights(MutableModFn[] A, int omega, int rows, int cols) {
         int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
 
         for (int i=0; i<rows; i++)
             for (int j=0; j<cols; j++) {
                 int idx = i*cols + j;
-                int[] temp = new int[A[idx].length];
+                MutableModFn temp = new MutableModFn(A[idx].digits.length);
                 int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
                 if (omega == 4)
                     shiftAmt *= 2;
-                shiftLeftModFn(A[idx], shiftAmt, temp);
-                System.arraycopy(temp, 0, A[idx], 0, temp.length);
+                A[idx].shiftLeft(shiftAmt, temp);
+                System.arraycopy(temp.digits, 0, A[idx].digits, 0, temp.digits.length);
             }
     }
 
@@ -2268,7 +2268,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void idft(int[][] A, int omega) {
+    private static void idft(MutableModFn[] A, int omega) {
         idftBailey(A, omega);
     }
 
@@ -2279,7 +2279,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void idftBailey(int[][] A, int omega) {
+    private static void idftBailey(MutableModFn[] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
@@ -2301,11 +2301,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
-    private static void idftDirect(int[][] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
+    private static void idftDirect(MutableModFn[] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 31 - Integer.numberOfLeadingZeros(len);
-        int intLen = A[0].length;
-        int[] c = new int[intLen];
+        MutableModFn c = new MutableModFn(A[0].digits.length);
 
         int slen = 1;
         while (slen <= len/4) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
@@ -2314,7 +2313,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 int x2 = getDftExponent(n, v-1, j+expOffset, omega)*expScale + 1;        // for level v-1
                 int x3 = getDftExponent(n, v, j+slen*2+expOffset, omega)*expScale + 1;   // for level v
 
-                // stride length = stride*slen subarrays
+                // stride length = stride*slen elements
                 int idx0 = stride*j + idxOffset;
                 int idx1 = stride*j + stride*slen + idxOffset;
                 int idx2 = idx0 + stride*slen*2;
@@ -2322,30 +2321,30 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
                 for (int k=slen-1; k>=0; k--) {
                     // do level v
-                    System.arraycopy(A[idx0], 0, c, 0, intLen);
-                    addModFn(A[idx0], A[idx1]);
-                    shiftRightModFn(A[idx0], 1, A[idx0]);
-                    subModFn(c, A[idx1]);
-                    shiftRightModFn(c, x1, A[idx1]);
+                    A[idx0].copyTo(c);
+                    A[idx0].add(A[idx1]);
+                    A[idx0].shiftRight(1, A[idx0]);
+                    c.subtract(A[idx1]);
+                    c.shiftRight(x1, A[idx1]);
 
-                    System.arraycopy(A[idx2], 0, c, 0, intLen);
-                    addModFn(A[idx2], A[idx3]);
-                    shiftRightModFn(A[idx2], 1, A[idx2]);
-                    subModFn(c, A[idx3]);
-                    shiftRightModFn(c, x3, A[idx3]);
+                    A[idx2].copyTo(c);
+                    A[idx2].add(A[idx3]);
+                    A[idx2].shiftRight(1, A[idx2]);
+                    c.subtract(A[idx3]);
+                    c.shiftRight(x3, A[idx3]);
 
                     // do level v-1
-                    System.arraycopy(A[idx0], 0, c, 0, intLen);
-                    addModFn(A[idx0], A[idx2]);
-                    shiftRightModFn(A[idx0], 1, A[idx0]);
-                    subModFn(c, A[idx2]);
-                    shiftRightModFn(c, x2, A[idx2]);
+                    A[idx0].copyTo(c);
+                    A[idx0].add(A[idx2]);
+                    A[idx0].shiftRight(1, A[idx0]);
+                    c.subtract(A[idx2]);
+                    c.shiftRight(x2, A[idx2]);
 
-                    System.arraycopy(A[idx1], 0, c, 0, intLen);
-                    addModFn(A[idx1], A[idx3]);
-                    shiftRightModFn(A[idx1], 1, A[idx1]);
-                    subModFn(c, A[idx3]);
-                    shiftRightModFn(c, x2, A[idx3]);
+                    A[idx1].copyTo(c);
+                    A[idx1].add(A[idx3]);
+                    A[idx1].shiftRight(1, A[idx1]);
+                    c.subtract(A[idx3]);
+                    c.shiftRight(x2, A[idx3]);
 
                     idx0 += stride;
                     idx1 += stride;
@@ -2363,15 +2362,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int j=0; j<len; j+=2*slen) {
                 int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
                 int idx = stride*j + idxOffset;
-                int idx2 = idx + stride*slen;   // stride length = stride*slen subarrays
+                int idx2 = idx + stride*slen;   // stride length = stride*slen elements
 
                 for (int k=slen-1; k>=0; k--) {
-                    System.arraycopy(A[idx], 0, c, 0, intLen);
-                    addModFn(A[idx], A[idx2]);
-                    shiftRightModFn(A[idx], 1, A[idx]);
+                    A[idx].copyTo(c);
+                    A[idx].add(A[idx2]);
+                    A[idx].shiftRight(1, A[idx]);
 
-                    subModFn(c, A[idx2]);
-                    shiftRightModFn(c, x, A[idx2]);
+                    c.subtract(A[idx2]);
+                    c.shiftRight(x, A[idx2]);
                     idx += stride;
                     idx2 += stride;
                 }
@@ -2379,395 +2378,24 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /** Divides vector elements by powers of omega (aka twiddle factors) */
-    private static void applyIdftWeights(int[][] A, int omega, int rows, int cols) {
+    private static void applyIdftWeights(MutableModFn[] A, int omega, int rows, int cols) {
         int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
 
         for (int i=0; i<rows; i++)
             for (int j=0; j<cols; j++) {
                 int idx = i*cols + j;
-                int[] temp = new int[A[idx].length];
+                MutableModFn temp = new MutableModFn(A[idx].digits.length);
                 int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
                 if (omega == 4)
                     shiftAmt *= 2;
-                shiftRightModFn(A[idx], shiftAmt, temp);
-                System.arraycopy(temp, 0, A[idx], 0, temp.length);
+                A[idx].shiftRight(shiftAmt, temp);
+                temp.copyTo(A[idx]);
             }
     }
 
-    /**
-     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo
-     * 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=<code>(a.length-1)*32</code>; in other words,
-     * <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
-     * Both input values are given as <code>int</code> arrays; they must be the same length.
-     * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
-     */
-    private static void addModFn(int[] a, int[] b) {
-        boolean carry = false;
-        for (int i=a.length-1; i>=0; i--) {
-            int sum = a[i] + b[i];
-            if (carry)
-                sum++;
-            carry = ((sum>>>31) < (a[i]>>>31)+(b[i]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
-            a[i] = sum;
-        }
-
-        // take a mod Fn by adding any remaining carry bit to the lowest bit;
-        // since Fn is congruent to 1 (mod 2^n), it suffices to add 1
-        int i = a.length - 1;
-        while (carry && i>=0) {
-            int sum = a[i] + 1;
-            a[i] = sum;
-            carry = sum == 0;
-            i--;
-        }
-
-        modFn(a);
-    }
-
-    /**
-     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo
-     * 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=<code>(a.length-1)*32</code>; in other words,
-     * <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
-     * Both input values are given as <code>int</code> arrays; they must be the same length.
-     * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
-     */
-    private static void subModFn(int[] a, int[] b) {
-        boolean borrow = false;
-        for (int i=a.length-1; i>=0; i--) {
-            int diff = a[i] - b[i];
-            if (borrow)
-                diff--;
-            borrow = ((diff>>>31) > (a[i]>>>31)-(b[i]>>>31));   // borrow if signBit(diff) > signBit(a)-signBit(b)
-            a[i] = diff;
-        }
-
-        // if we borrowed from the most significant int, subtract 2^2^n which is the same as adding 1 (mod Fn)
-        if (borrow) {
-            a[0]++;   // undo borrow
-            int i = a.length - 1;
-            boolean carry = true;
-            while (carry && i>=0) {
-                int sum = a[i] + 1;
-                a[i] = sum;
-                carry = sum == 0;
-                i--;
-            }
-        }
-    }
-
-    /**
-     * Multiplies two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>2<sup>n</sup></sup>+1,
-     * and returns the result in a new array.<br/>
-     * <code>a</code> and <code>b</code> are assumed to be reduced mod 2<sup>2<sup>n</sup></sup>+1, i.e.
-     * 0&le;a&lt;2<sup>2<sup>n</sup></sup>+1 and 0&le;b&lt;2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
-     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit; must be the same length as a
-     */
-    private static int[] multModFn(int[] a, int[] b) {
-        // if a=b=2^n, a*b=1 (mod Fn)
-        if (a[0]==1 && b[0]==1) {
-            int[] c = new int[a.length];
-            c[c.length-1] = 1;
-            return c;
-        }
-        // otherwise, a*b will fit into 2*2^n bits
-        else {
-            BigInteger aBigInt = new BigInteger(1, a);
-            BigInteger bBigInt = new BigInteger(1, b);
-            int[] c = aBigInt.multiply(bBigInt).mag;
-    
-            // pad c to make it 2*2^n in length
-            int[] cpad = new int[a.length-1+b.length-1];
-            System.arraycopy(c, 0, cpad, cpad.length-c.length, c.length);
-            // reduce cpad mod Fn which makes the first cpad.length/2-1 ints zero; return the others
-            modFnLong(cpad);
-            return Arrays.copyOfRange(cpad, cpad.length/2-1, cpad.length);
-        }
-    }
-
-    /** @see #multModFn(int[], int[]) */
-    private static int[] squareModFn(int[] a) {
-        // if a=2^n, a^2=1 (mod Fn)
-        if (a[0] == 1) {
-            int[] c = new int[a.length];
-            c[c.length-1] = 1;
-            return c;
-        }
-        // otherwise, a^2 will fit into 2*2^n bits
-        else {
-            BigInteger aBigInt = new BigInteger(1, a);
-            int[] c = aBigInt.square().mag;
-
-            // pad c to make it 2*2^n in length
-            int[] cpad = new int[2*a.length-2];
-            System.arraycopy(c, 0, cpad, cpad.length-c.length, c.length);
-            // reduce cpad mod Fn which makes the first cpad.length/2-1 ints zero; return the others
-            modFnLong(cpad);
-            return Arrays.copyOfRange(cpad, cpad.length/2-1, cpad.length);
-        }
-    }
-
-    /** Like {@link #modFn(int[])} but expects the argument to be 2^(n+1) bits long. */
-    private static void modFnLong(int[] a) {
-        // Reduction modulo Fn is done by subtracting the upper half from the lower half
-        int len = a.length;
-        boolean carry = false;
-        for (int i=len-1; i>=len/2; i--) {
-            int bi = a[i-len/2];
-            int diff = a[i] - bi;
-            if (carry)
-                diff--;
-            carry = ((diff>>>31) > (a[i]>>>31)-(bi>>>31));   // carry if signBit(diff) > signBit(a)-signBit(b)
-            a[i] = diff;
-        }
-        for (int i=len/2-1; i>=0; i--)
-            a[i] = 0;
-        // if result is negative, add Fn; since Fn is congruent to 1 (mod 2^n), it suffices to add 1
-        if (carry) {
-            int j = len - 1;
-            do {
-                int sum = a[j] + 1;
-                a[j] = sum;
-                carry = sum == 0;
-                j--;
-                if (j <= 0)
-                    break;
-            } while (carry);
-        }
-    }
-
-    /**
-     * Reduces a number modulo F<sub>n</sub>. The value of n is determined from the array's length.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     */
-    private static void modFn(int[] a) {
-        // Reduction modulo Fn is done by subtracting the most significant int from the least significant int
-        int len = a.length;
-        int bi = a[0];
-        int diff = a[len-1] - bi;
-        boolean borrow = ((diff>>>31) > (a[len-1]>>>31)-(bi>>>31));   // borrow if signBit(diff) > signBit(a)-signBit(b)
-        a[len-1] = diff;
-        a[0] = 0;   // because we subtracted a[0] from a[len-1]
-        if (borrow) {
-            int i = len - 2;
-            do {
-                diff = a[i] - 1;
-                a[i] = diff;
-                borrow = diff == -1;
-                i--;
-            } while (borrow && i>=0);
-        }
-
-        // if we borrowed from the most significant int, subtract 2^2^n which is the same as adding 1 (mod Fn)
-        if (borrow) {
-            int i = a.length - 1;
-            boolean carry = true;
-            a[0] = 0;   // increment a[0] by 1 to make it 0
-            while (carry && i>=0) {
-                int sum = a[i] + 1;
-                a[i] = sum;
-                carry = sum == 0;
-                i--;
-            }
-        }
-    }
-
-    private static void modFn(int[][] a) {
+    private static void reduce(MutableModFn[] a) {
         for (int i=0; i<a.length; i++)
-            modFn(a[i]);
-    }
-
-    /**
-     * Multiplies a number by 2<sup>-shiftAmtBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
-     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
-     * "Right" means towards the higher array indices and the lower bits<br/>.
-     * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
-     * shifting it to the right by <code>shiftAmt</code> bits.<br/>
-     * The result is returned in the third argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param shiftAmtBits the shift amount in bits; must be less than <code>32*2*(len-1))</code>
-     * @param b the return value; must be at least as long as <code>a</code>
-     */
-    private static void shiftRightModFn(int[] a, int shiftAmtBits, int[] b) {
-        int len = a.length;
-        if (shiftAmtBits > 32*(len-1)) {
-            shiftLeftModFn(a, 32*2*(len-1)-shiftAmtBits, b);
-            return;
-        }
-
-        int shiftAmtInts = shiftAmtBits / 32;   // number of ints to shift
-        if (shiftAmtInts > 0) {
-            boolean borrow = false;
-
-            // shift the digits that stay positive, except a[len-1] which is special
-            for (int i=1; i<len-shiftAmtInts; i++) {
-                int diff = a[i];
-                if (borrow)
-                    diff--;
-                b[shiftAmtInts+i] = diff;
-                borrow = diff==-1 && borrow;
-            }
-
-            // subtract a[len-1] from a[0]
-            int diff = a[0] - a[len-1];
-            if (borrow) {
-                diff--;
-                borrow = diff == -1;
-            }
-            else
-                borrow = a[0]==0 && a[len-1]!=0;   // a[0] can only be 0 or 1; if a[0]!=0, a[len-1]==0
-            b[shiftAmtInts] = diff;
-
-            // using the fact that adding x*(Fn-1) is the same as subtracting x,
-            // subtract digits shifted off the right, except for a[0] which is special
-            for (int i=1; i<shiftAmtInts; i++) {
-                b[shiftAmtInts-i] = -a[len-1-i];
-                if (borrow)
-                    b[shiftAmtInts-i]--;
-                borrow = b[shiftAmtInts-i]!=0 || borrow;
-            }
-
-            // if we borrowed from the most significant int, add 1 to the overall number
-            boolean carry = borrow;
-            if (carry) {
-                // increment b[0] and decrement b[len-1]
-                b[0] = 0;
-                int i = len - 1;
-                do {
-                    int sum = b[i] + 1;
-                    b[i] = sum;
-                    carry = sum == 0;
-                    i--;
-                } while (carry && i>=0);
-            }
-            else
-                b[0] = 0;
-        }
-        else
-            System.arraycopy(a, 0, b, 0, len);
-
-        int shiftAmtFrac = shiftAmtBits % 32;
-        if (shiftAmtFrac != 0) {
-            int bhi = b[len-1] << (32-shiftAmtFrac);
-
-            // do remaining digits
-            b[len-1] >>>= shiftAmtFrac;
-            for (int i=len-1; i>0; i--) {
-                b[i] |= b[i-1] << (32-shiftAmtFrac);
-                b[i-1] >>>= shiftAmtFrac;
-            }
-
-            // b[len-1] spills over into b[1]
-            int diff = b[1] - bhi;
-            boolean borrow = ((diff>>>31) > (b[1]>>>31)-(bhi>>>31));   // borrow if signBit(diff) > signBit(a)-signBit(b)
-            b[1] = diff;
-
-            // if we borrowed from b[0], add 1 to the overall number
-            boolean carry = borrow;
-            if (carry) {
-                // increment b[0] and decrement b[len-1]
-                b[0] = 0;
-                int i = len - 1;
-                do {
-                    int sum = b[i] + 1;
-                    b[i] = sum;
-                    carry = sum == 0;
-                    i--;
-                } while (carry && i>=0);
-            }
-            else
-                b[0] = 0;
-        }
-    }
-
-    /**
-     * Multiplies a number by 2<sup>shiftAmt</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
-     * <code>(a.length-1)*32</code>; in other words, <code>a</code> must hold 2<sup>n</sup>+1 bits.<br/>
-     * "Left" means towards the higher array indices and the lower bits<br/>.
-     * This is equivalent to extending the number to <code>2*(a.length-1)</code> ints and cyclicly
-     * shifting it to the left by <code>shiftAmt</code> bits.<br/>
-     * The result is returned in the third argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit; the array's length must be 2^n+1 for some n
-     * @param shiftAmtBits the shift amount in bits
-     * @param b the return value; must be at least as long as <code>a</code>
-     */
-    private static void shiftLeftModFn(int[] a, int shiftAmtBits, int[] b) {
-        int len = a.length;
-
-        if (shiftAmtBits > 32*(len-1)) {
-            shiftRightModFn(a, 32*2*(len-1)-shiftAmtBits, b);
-            return;
-        }
-
-        int shiftAmtInts = shiftAmtBits / 32;   // number of ints to shift
-        if (shiftAmtInts > 0) {
-            boolean borrow = false;
-            // using the fact that adding x*(Fn-1) is the same as subtracting x,
-            // subtract digits shifted outside the [0..Fn-2] range, except for a[0] which is special
-            for (int i=0; i<shiftAmtInts; i++) {
-                b[len-1-i] = -a[shiftAmtInts-i];
-                if (borrow)
-                    b[len-1-i]--;
-                borrow = b[len-1-i]!=0 || borrow;
-            }
-
-            // subtract a[0] from a[len-1] (they overlap unless numElements=len-1)
-            int diff;
-            if (shiftAmtInts < len-1)
-                diff = a[len-1] - a[0];
-            else   // no overlap
-                diff = -a[0];
-            if (borrow) {
-                diff--;
-                borrow = diff == -1;
-            }
-            else
-                borrow = a[0]==1 && diff==-1;   // a[0] can only be 0 or 1
-            b[len-1-shiftAmtInts] = diff;
-
-            // finally, shift the digits that stay in the [0..Fn-2] range
-            for (int i=1; i<len-shiftAmtInts-1; i++) {
-                diff = a[len-1-i];
-                if (borrow)
-                    diff--;
-                b[len-1-shiftAmtInts-i] = diff;
-                borrow = diff==-1 && borrow;
-            }
-
-            // if we borrowed from the most significant int, add 1 to the overall number
-            boolean carry = borrow;
-            if (carry) {
-                // increment b[0] and decrement b[len-1]
-                b[0] = 0;
-                int i = len - 1;
-                do {
-                    int sum = b[i] + 1;
-                    b[i] = sum;
-                    carry = sum == 0;
-                    i--;
-                } while (carry && i>=0);
-            }
-            else
-                b[0] = 0;
-        }
-        else
-            System.arraycopy(a, 0, b, 0, len);
-
-        int shiftAmtFrac = shiftAmtBits % 32;
-        if (shiftAmtFrac != 0) {
-            b[0] <<= shiftAmtFrac;   // no spill-over because 0<=a[0]<=1 and shiftAmtFrac<=31
-            for (int i=1; i<len; i++) {
-                b[i-1] |= b[i] >>> (32-shiftAmtFrac);
-                b[i] <<= shiftAmtFrac;
-            }
-        }
-
-        modFn(b);
+            a[i].reduce();
     }
 
     /**
@@ -2945,19 +2573,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param a the input array
      * @param numPieces the number of pieces to split the array into
      * @param pieceSize the size of each piece in the input array in <code>ints</code>
-     * @param targetPieceSize the size of each piece in the output array in <code>ints</code>
-     * @return an array of length <code>numPieces</code> containing subarrays of length <code>targetPieceSize</code>
+     * @param targetPieceSize the size of each <code>MutableModFn</code> in the output array in <code>ints</code>
+     * @return an array of length <code>numPieces</code> containing {@link MutableModFn}s of length <code>targetPieceSize</code> ints
      */
-    private static int[][] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
-        int[][] ai = new int[numPieces][targetPieceSize];
+    private static MutableModFn[] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
+        MutableModFn[] ai = new MutableModFn[numPieces];
         int aIdx = a.length - pieceSize;
         int pieceIdx = 0;
         while (aIdx >= 0) {
-            System.arraycopy(a, aIdx, ai[pieceIdx], targetPieceSize-pieceSize, pieceSize);
+            int[] digits = new int[targetPieceSize];
+            System.arraycopy(a, aIdx, digits, targetPieceSize-pieceSize, pieceSize);
+            ai[pieceIdx] = new MutableModFn(digits);
             aIdx -= pieceSize;
             pieceIdx++;
         }
-        System.arraycopy(a, 0, ai[a.length/pieceSize], targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
+        int[] digits = new int[targetPieceSize];
+        System.arraycopy(a, 0, digits, targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
+        ai[pieceIdx] = new MutableModFn(digits);
+        while (++pieceIdx < numPieces)
+            ai[pieceIdx] = new MutableModFn(targetPieceSize);
         return ai;
     }
 
@@ -2968,7 +2602,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @return {@code this<sup>2</sup>}
      */
-    private BigInteger square() {
+    BigInteger square() {
         if (signum == 0) {
             return ZERO;
         }
