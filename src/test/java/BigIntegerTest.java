@@ -430,14 +430,10 @@ public class BigIntegerTest {
             int n = 5 + rnd.nextInt(10);
             int[] a = createRandomModFn(n);
             int[] b = createRandomModFn(n);
-            int[] FnArr = new int[a.length];
-            FnArr[0] = 1;
-            FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
 
             BigInteger aBigInt = bigintCtor.newInstance(1, a);
             BigInteger bBigInt = bigintCtor.newInstance(1, b);
-            BigInteger expected = aBigInt.multiply(bBigInt).mod(Fn);
+            BigInteger expected = aBigInt.multiply(bBigInt).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(a);
             Object bMutable = mutableModFnCtor.newInstance(b);
@@ -455,13 +451,9 @@ public class BigIntegerTest {
         for (int i=0; i<100; i++) {
             int n = 5 + rnd.nextInt(10);
             int[] a = createRandomModFn(n);
-            int[] FnArr = new int[a.length];
-            FnArr[0] = 1;
-            FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
 
             BigInteger aBigInt = bigintCtor.newInstance(1, a);
-            BigInteger expected = aBigInt.multiply(aBigInt).mod(Fn);
+            BigInteger expected = aBigInt.multiply(aBigInt).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(a);
             Object cMutable = squareModFnMethod.invoke(aMutable);
@@ -479,11 +471,10 @@ public class BigIntegerTest {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
             int[] bArr = createRandomModFn(n);
-            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
 
             BigInteger a = bigintCtor.newInstance(1, aArr);
             BigInteger b = bigintCtor.newInstance(1, bArr);
-            BigInteger expected = a.add(b).mod(Fn);
+            BigInteger expected = a.add(b).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(aArr);
             Object bMutable = mutableModFnCtor.newInstance(bArr);
@@ -502,11 +493,10 @@ public class BigIntegerTest {
             int n = 5 + rnd.nextInt(10);
             int[] aArr = createRandomModFn(n);
             int[] bArr = createRandomModFn(n);
-            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
 
             BigInteger a = bigintCtor.newInstance(1, aArr);
             BigInteger b = bigintCtor.newInstance(1, bArr);
-            BigInteger expected = a.subtract(b).mod(Fn);
+            BigInteger expected = a.subtract(b).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(aArr);
             Object bMutable = mutableModFnCtor.newInstance(bArr);
@@ -526,13 +516,9 @@ public class BigIntegerTest {
             int[] aArr = createRandomModFn(n);
             int[] bArr = new int[aArr.length];
             int shiftDistance = rnd.nextInt(1 << (n+1));
-            int[] FnArr = new int[aArr.length];
-            FnArr[0] = 1;
-            FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
 
             BigInteger a = bigintCtor.newInstance(1, aArr);
-            BigInteger expected = a.shiftLeft(shiftDistance).mod(Fn);
+            BigInteger expected = a.shiftLeft(shiftDistance).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(aArr);
             Object bMutable = mutableModFnCtor.newInstance(bArr);
@@ -552,11 +538,8 @@ public class BigIntegerTest {
             int[] aArr = createRandomModFn(n);
             int[] bArr = new int[aArr.length];
             int shiftDistance = rnd.nextInt(1 << (n+1));
-            int[] FnArr = new int[aArr.length];
-            FnArr[0] = 1;
-            FnArr[FnArr.length-1] = 1;
-            BigInteger Fn = bigintCtor.newInstance(1, FnArr);
 
+            BigInteger Fn = fermat(n);
             BigInteger inv2 = Fn.add(ONE).divide(TWO);   // 2^(-1) mod Fn
             BigInteger inv = inv2.modPow(BigInteger.valueOf(shiftDistance), Fn);   // 2^(-shiftDistance) mod Fn
             BigInteger a = bigintCtor.newInstance(1, aArr);
@@ -616,7 +599,7 @@ public class BigIntegerTest {
             int[] a = createRandomModFn(n);
             a[0] = rnd.nextInt();   // test all int values, not just 0 and 1
             int[] aOrig = a.clone();
-            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger Fn = fermat(n);
 
             BigInteger expected = bigintCtor.newInstance(1, aOrig).mod(Fn);
 
@@ -639,7 +622,7 @@ public class BigIntegerTest {
             int len = 1 << (n + 1 - 5);
             int[] a = createRandomArray(len);
             int[] aOrig = a.clone();
-            BigInteger Fn = BigInteger.valueOf(2).pow(1 << n).add(BigInteger.ONE);
+            BigInteger Fn = fermat(n);
 
             BigInteger expected = bigintCtor.newInstance(1, aOrig).mod(Fn);
 
@@ -796,6 +779,17 @@ public class BigIntegerTest {
         for (int i=0; i<a.length; i++)
             a[i] = createRandomModFn(n);
         return a;
+    }
+
+    /** Returns the n-th Fermat number */
+    private static BigInteger fermat(int n) throws Exception {
+        Constructor<BigInteger> bigintCtor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
+        bigintCtor.setAccessible(true);
+        int length = (1<<(n-5)) + 1;
+        int[] FnArr = new int[length];
+        FnArr[0] = 1;
+        FnArr[FnArr.length-1] = 1;
+        return bigintCtor.newInstance(1, FnArr);
     }
 
     private static void inverse() throws Exception {
