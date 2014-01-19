@@ -1993,15 +1993,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
 
         // zr mod Fn
-        MutableModFn[] ai = splitInts(a, halfNumPcs, pieceSize, (1<<(n-5))+1);
+        MutableModFn[] ai = split(a, halfNumPcs, pieceSize, (1<<(n-6))+1);   // assume n>=6
         MutableModFn[] bi = null;
         if (!square)
-            bi = splitInts(b, halfNumPcs, pieceSize, (1<<(n-5))+1);
+            bi = split(b, halfNumPcs, pieceSize, (1<<(n-6))+1);
         int omega = even ? 4 : 2;
         MutableModFn[] c = new MutableModFn[halfNumPcs];
         if (square) {
             dft(ai, omega);
             reduce(ai);
+            c = new MutableModFn[ai.length];
             for (int i=0; i<c.length; i++)
                 c[i] = ai[i].square();
         }
@@ -2010,11 +2011,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             dft(bi, omega);
             reduce(ai);
             reduce(bi);
+            c = new MutableModFn[ai.length];
             for (int i=0; i<c.length; i++)
                 c[i] = ai[i].multiply(bi[i]);
         }
         idft(c, omega);
         reduce(c);
+        int[][] cInt = toIntArray(c);
 
         int[] z = new int[(1<<(m-5))+1];
         // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
@@ -2023,16 +2026,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             int[] eta = i>=zi.length ? new int[(n+2+31)/32] : zi[i];
 
             // zi = delta = (zi-c[i]) % 2^(n+2)
-            subModPow2(eta, c[i].digits, n+2);
+            subModPow2(eta, cInt[i], n+2);
 
             // z += zr<<shift = [ci + delta*(2^2^n+1)] << [i*2^(n-1)]
             int shift = i*(1<<(n-1-5));   // assume n>=6
-            addShifted(z, c[i].digits, shift);
+            addShifted(z, cInt[i], shift);
             addShifted(z, eta, shift);
             addShifted(z, eta, shift+(1<<(n-5)));
         }
 
-        new MutableModFn(z).reduce();   // assume m>=5
+        MutableModFn.reduce(z);   // assume m>=5
         return z;
     }
 
@@ -2393,9 +2396,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
     }
 
+    /** see {@link MutableModFn#reduce()} */
     private static void reduce(MutableModFn[] a) {
         for (int i=0; i<a.length; i++)
             a[i].reduce();
+    }
+
+    private static int[][] toIntArray(MutableModFn[] a) {
+        int[][] aInt = new int[a.length][];
+        for(int i=0;i<a.length;i++)
+            aInt[i] = MutableModFn.toIntArrayOdd(a[i].digits);
+        return aInt;
     }
 
     /**
@@ -2568,27 +2579,39 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Splits an <code>int</code> array into pieces of <code>pieceSize ints</code> each, and
-     * pads each piece to <code>targetPieceSize ints</code>.
+     * Splits an <code>int</code> array into pieces of <code>pieceSize longs</code> each,
+     * pads each piece to <code>targetPieceSize longs</code>, and wraps it in a {@link MutableModFn}
+     * (this implies <code>targetPieceSize</code>=2<sup>k</sup>+1 for some k).
      * @param a the input array
      * @param numPieces the number of pieces to split the array into
      * @param pieceSize the size of each piece in the input array in <code>ints</code>
-     * @param targetPieceSize the size of each <code>MutableModFn</code> in the output array in <code>ints</code>
-     * @return an array of length <code>numPieces</code> containing {@link MutableModFn}s of length <code>targetPieceSize</code> ints
+     * @param targetPieceSize the size of each <code>MutableModFn</code> in the output array in <code>longs</code>
+     * @return an array of length <code>numPieces</code> containing {@link MutableModFn}s of length <code>targetPieceSize longs</code> each
      */
-    private static MutableModFn[] splitInts(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
+    private static MutableModFn[] split(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
         MutableModFn[] ai = new MutableModFn[numPieces];
         int aIdx = a.length - pieceSize;
         int pieceIdx = 0;
         while (aIdx >= 0) {
-            int[] digits = new int[targetPieceSize];
-            System.arraycopy(a, aIdx, digits, targetPieceSize-pieceSize, pieceSize);
+            long[] digits = new long[targetPieceSize];
+            for (int i=0; i<pieceSize; i+=2)
+                digits[targetPieceSize-pieceSize/2+i/2] = (((long)a[aIdx+i])<<32) | (a[aIdx+i+1]&0xFFFFFFFFL);
             ai[pieceIdx] = new MutableModFn(digits);
             aIdx -= pieceSize;
             pieceIdx++;
         }
-        int[] digits = new int[targetPieceSize];
-        System.arraycopy(a, 0, digits, targetPieceSize-(a.length%pieceSize), a.length%pieceSize);
+        long[] digits = new long[targetPieceSize];
+        if ((a.length%pieceSize) % 2 == 0)
+            for (int i=0; i<a.length%pieceSize; i+=2)
+                digits[targetPieceSize-(a.length%pieceSize)/2+i/2] = (((long)a[i])<<32) | (a[i+1]&0xFFFFFFFFL);
+        else {
+            for (int i=0; i<a.length%pieceSize-2; i+=2) {
+                digits[targetPieceSize-(a.length%pieceSize)/2+i/2] = ((long)a[i+1]) << 32;
+                digits[targetPieceSize-(a.length%pieceSize)/2+i/2-1] |= a[i] & 0xFFFFFFFFL;
+            }
+            // the remaining half-long
+            digits[targetPieceSize-1] |= a[a.length%pieceSize-1] & 0xFFFFFFFFL;
+        }
         ai[pieceIdx] = new MutableModFn(digits);
         while (++pieceIdx < numPieces)
             ai[pieceIdx] = new MutableModFn(targetPieceSize);
