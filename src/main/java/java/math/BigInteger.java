@@ -1508,6 +1508,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
     }
 
+    /**
+     * Multiplies {@code this} number by another using multiple threads if the
+     * numbers are sufficiently large.
+     *
+     * @param  val value to be multiplied by this BigInteger.
+     * @return {@code this * val}
+     * @see #multiply(BigInteger)
+     */
+    public BigInteger multiplyParallel(BigInteger val) {
+        return multiply(val, Runtime.getRuntime().availableProcessors() - 1);
+    }
+
+    private BigInteger multiply(BigInteger val, int numThreads) {
+        int xlen = mag.length;
+        int ylen = val.mag.length;
+        if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen))
+            return multiply(val);
+        else
+            return multiplySchoenhageStrassen(this, val, numThreads);
+    }
+
     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
         if (Integer.bitCount(y) == 1) {
             return new BigInteger(shiftLeft(x,Integer.numberOfTrailingZeros(y)), sign);
@@ -1873,25 +1894,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     // Schoenhage-Strassen
 
     /**
-     * Multiplies {@code this} number by another using multiple threads if the
-     * numbers are sufficiently large.
-     *
-     * @param  val value to be multiplied by this BigInteger.
-     * @return {@code this * val}
-     * @see #multiply(BigInteger)
-     */
-    public BigInteger multiplyParallel(BigInteger val) {
-        int xlen = mag.length;
-        int ylen = val.mag.length;
-        if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen))
-            return multiply(val);
-        else {
-            int numThreads = Runtime.getRuntime().availableProcessors() - 1;
-            return multiplySchoenhageStrassen(this, val, numThreads);
-        }
-    }
-
-    /**
      * Multiplies two {@link BigInteger}s using the
      * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
      * Schoenhage-Strassen algorithm</a> algorithm.
@@ -1996,7 +1998,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         int[] gamma;
         if (square)
-            gamma = new BigInteger(1, u).square().mag;   // gamma = u * u
+            gamma = new BigInteger(1, u).square(numThreads).mag;   // gamma = u * u
         else {
             int numPiecesB = (b.length+pieceSize) / pieceSize;
             int[] v = new int[(numPiecesB*(3*n+5)+31)/32];
@@ -2005,7 +2007,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 appendBits(v, vBitLength, b, i*pieceSize, n+2);
                 vBitLength += 3*n+5;
             }
-            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v)).mag;   // gamma = u * v
+            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v), numThreads).mag;   // gamma = u * v
         }
         int[][] gammai = splitBits(gamma, 3*n+5);
         int halfNumPcs = numPieces / 2;
@@ -3228,6 +3230,21 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     return multiplySchoenhageStrassen(this, this, 1);
             }
         }
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this<sup>2</sup>)},
+     * using multiple threads if the numbers are sufficiently large.
+     *
+     * @return {@code this<sup>2</sup>}
+     * @see #square()
+     */
+    private BigInteger square(int numThreads) {
+        int xlen = mag.length;
+        if (!shouldUseSchoenhageStrassen(xlen))
+            return square();
+        else
+            return multiplySchoenhageStrassen(this, this, numThreads);
     }
 
     /**
