@@ -428,8 +428,8 @@ public class BigIntegerTest {
         bigintCtor.setAccessible(true);
         for (int i=0; i<100; i++) {
             int n = 6 + rnd.nextInt(10);
-            long[] a = createRandomModFnLong(n);
-            long[] b = createRandomModFnLong(n);
+            long[] a = createRandomModFn(n);
+            long[] b = createRandomModFn(n);
 
             int[] aInt = toIntArray(a);
             BigInteger aBigInt = bigintCtor.newInstance(1, aInt);
@@ -453,7 +453,7 @@ public class BigIntegerTest {
         squareModFnMethod.setAccessible(true);
         for (int i=0; i<100; i++) {
             int n = 6 + rnd.nextInt(10);
-            long[] a = createRandomModFnLong(n);
+            long[] a = createRandomModFn(n);
 
             int[] aInt = toIntArray(a);
             BigInteger aBigInt = bigintCtor.newInstance(1, aInt);
@@ -476,8 +476,8 @@ public class BigIntegerTest {
         toIntArrayOddMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 6 + rnd.nextInt(10);
-            long[] aArr = createRandomModFnLong(n);
-            long[] bArr = createRandomModFnLong(n);
+            long[] aArr = createRandomModFn(n);
+            long[] bArr = createRandomModFn(n);
 
             int[] aArrInt = toIntArray(aArr);
             BigInteger a = bigintCtor.newInstance(1, aArrInt);
@@ -501,8 +501,8 @@ public class BigIntegerTest {
         subtractMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 6 + rnd.nextInt(10);
-            long[] aArr = createRandomModFnLong(n);
-            long[] bArr = createRandomModFnLong(n);
+            long[] aArr = createRandomModFn(n);
+            long[] bArr = createRandomModFn(n);
 
             int[] aArrInt = toIntArray(aArr);
             BigInteger a = bigintCtor.newInstance(1, aArrInt);
@@ -526,7 +526,7 @@ public class BigIntegerTest {
         shiftLeftMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 6 + rnd.nextInt(10);
-            long[] aArr = createRandomModFnLong(n);
+            long[] aArr = createRandomModFn(n);
             long[] bArr = new long[aArr.length];
             int shiftDistance = rnd.nextInt(1 << (n+1));
 
@@ -550,7 +550,7 @@ public class BigIntegerTest {
         shiftRightMethod.setAccessible(true);
         for (int k = 0; k<100; k++) {
             int n = 6 + rnd.nextInt(10);
-            long[] aArr = createRandomModFnLong(n);
+            long[] aArr = createRandomModFn(n);
             long[] bArr = new long[aArr.length];
             int shiftDistance = rnd.nextInt(1 << (n+1));
 
@@ -592,7 +592,7 @@ public class BigIntegerTest {
             }
             Collections.shuffle(amounts);
 
-            long[] a = createRandomModFnLong(n);
+            long[] a = createRandomModFn(n);
             long[] aOrig = a.clone();
             Object aMutable = mutableModFnCtor.newInstance(a);
             for (int amount: amounts) {
@@ -613,7 +613,7 @@ public class BigIntegerTest {
         // test MutableModFn.reduce()
         for (int k = 0; k<100; k++) {
             int n = 6 + rnd.nextInt(15);
-            long[] a = createRandomModFnLong(n);
+            long[] a = createRandomModFn(n);
             a[0] = rnd.nextLong();   // test all long values, not just 0 and 1
             long[] aOrig = a.clone();
             BigInteger Fn = fermat(n);
@@ -800,7 +800,7 @@ public class BigIntegerTest {
      * @param n must be 6 or greater
      * @return an array of length ceil((2^n+1) / 64.0)
      */
-    private static long[] createRandomModFnLong(int n) {
+    private static long[] createRandomModFn(int n) {
         int length = (1<<(n-6)) + 1;
         long[] a = new long[length];
         if (rnd.nextInt(5) == 0)
@@ -817,7 +817,7 @@ public class BigIntegerTest {
         numElements /= 2;
         long[][] a = new long[numElements][];
         for (int i=0; i<a.length; i++)
-            a[i] = createRandomModFnLong(n);
+            a[i] = createRandomModFn(n);
         return a;
     }
 
