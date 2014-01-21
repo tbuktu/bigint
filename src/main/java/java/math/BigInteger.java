@@ -2080,9 +2080,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Estimates whether SS will be more efficient than the other methods when multiplying two numbers
-     * of a given length in bits.
+     * of a given length in ints.
      * @param length the number of ints in each of the two factors
-     * @return <code>true</code> if SS is more efficient, <code>false</code> if Toom-Cook is more efficient
+     * @return <code>true</code> if SS will be more efficient, <code>false</code> if Toom-Cook will be more efficient
      */
     private static boolean shouldUseSchoenhageStrassen(int length) {
         if (IS64BIT) {
@@ -2820,33 +2820,33 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * (this implies <code>targetPieceSize</code>=2<sup>k</sup>+1 for some k).
      * @param a the input array
      * @param numPieces the number of pieces to split the array into
-     * @param pieceSize the size of each piece in the input array in <code>ints</code>
+     * @param sourcePieceSize the size of each piece in the input array in <code>ints</code>
      * @param targetPieceSize the size of each <code>MutableModFn</code> in the output array in <code>longs</code>
      * @return an array of length <code>numPieces</code> containing {@link MutableModFn}s of length <code>targetPieceSize longs</code> each
      */
-    private static MutableModFn[] split(int[] a, int numPieces, int pieceSize, int targetPieceSize) {
+    private static MutableModFn[] split(int[] a, int numPieces, int sourcePieceSize, int targetPieceSize) {
         MutableModFn[] ai = new MutableModFn[numPieces];
-        int aIdx = a.length - pieceSize;
+        int aIdx = a.length - sourcePieceSize;
         int pieceIdx = 0;
         while (aIdx >= 0) {
             long[] digits = new long[targetPieceSize];
-            for (int i=0; i<pieceSize; i+=2)
-                digits[targetPieceSize-pieceSize/2+i/2] = (((long)a[aIdx+i])<<32) | (a[aIdx+i+1]&0xFFFFFFFFL);
+            for (int i=0; i<sourcePieceSize; i+=2)
+                digits[targetPieceSize-sourcePieceSize/2+i/2] = (((long)a[aIdx+i])<<32) | (a[aIdx+i+1]&0xFFFFFFFFL);
             ai[pieceIdx] = new MutableModFn(digits);
-            aIdx -= pieceSize;
+            aIdx -= sourcePieceSize;
             pieceIdx++;
         }
         long[] digits = new long[targetPieceSize];
-        if ((a.length%pieceSize) % 2 == 0)
-            for (int i=0; i<a.length%pieceSize; i+=2)
-                digits[targetPieceSize-(a.length%pieceSize)/2+i/2] = (((long)a[i])<<32) | (a[i+1]&0xFFFFFFFFL);
+        if ((a.length%sourcePieceSize) % 2 == 0)
+            for (int i=0; i<a.length%sourcePieceSize; i+=2)
+                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2] = (((long)a[i])<<32) | (a[i+1]&0xFFFFFFFFL);
         else {
-            for (int i=0; i<a.length%pieceSize-2; i+=2) {
-                digits[targetPieceSize-(a.length%pieceSize)/2+i/2] = ((long)a[i+1]) << 32;
-                digits[targetPieceSize-(a.length%pieceSize)/2+i/2-1] |= a[i] & 0xFFFFFFFFL;
+            for (int i=0; i<a.length%sourcePieceSize-2; i+=2) {
+                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2] = ((long)a[i+1]) << 32;
+                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2-1] |= a[i] & 0xFFFFFFFFL;
             }
             // the remaining half-long
-            digits[targetPieceSize-1] |= a[a.length%pieceSize-1] & 0xFFFFFFFFL;
+            digits[targetPieceSize-1] |= a[a.length%sourcePieceSize-1] & 0xFFFFFFFFL;
         }
         ai[pieceIdx] = new MutableModFn(digits);
         while (++pieceIdx < numPieces)
@@ -3101,9 +3101,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Estimates whether Barrett Division will be more efficient than Burnikel-Ziegler when
-     * dividing two numbers of a given length in bits.
+     * dividing two numbers of a given length in ints.
      * @param length the number of ints in each of the two inputs
-     * @return <code>true</code> if Barrett is more efficient, <code>false</code> if Burnikel-Ziegler is more efficient
+     * @return <code>true</code> if Barrett will be more efficient, <code>false</code> if Burnikel-Ziegler will be more efficient
      */
     static boolean shouldDivideBarrett(int length) {
         if (IS64BIT) {
