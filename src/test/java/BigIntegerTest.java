@@ -386,6 +386,20 @@ public class BigIntegerTest {
             }
         }
 
+        // test multithreaded multiplySchoenhageStrassen()
+        Method multiplySchoenhageStrassenMethod = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
+        multiplySchoenhageStrassenMethod.setAccessible(true);
+        for (int i=0; i<10; i++) {
+            BigInteger a = new BigInteger(ORDER_SS_BARRETT, rnd);
+            BigInteger b = new BigInteger(ORDER_SS_BARRETT, rnd);
+            // call multiplySchoenhageStrassen() directly rather than multiplyParallel() to test different numbers of threads
+            // and to ensure multithreadedness even in single-core environments
+            BigInteger c1 = (BigInteger)multiplySchoenhageStrassenMethod.invoke(null, a, b, 2+rnd.nextInt(10));
+            BigInteger c2 = a.multiply(b);
+            if (!c1.equals(c2))
+                failCount++;
+        }
+
         // verify that idft(dft(a)) = a
         Class<?> mutableModFnClass = Class.forName("java.math.MutableModFn");
         Constructor<?> mutableModFnCtor = mutableModFnClass.getDeclaredConstructor(long[].class);
@@ -394,9 +408,9 @@ public class BigIntegerTest {
         digitsField.setAccessible(true);
         Method reduceMethod = BigInteger.class.getDeclaredMethod("reduce", Array.newInstance(mutableModFnClass, 0).getClass());
         reduceMethod.setAccessible(true);
-        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class);
+        Method dftMethod = BigInteger.class.getDeclaredMethod("dft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class, int.class);
         dftMethod.setAccessible(true);
-        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class);
+        Method idftMethod = BigInteger.class.getDeclaredMethod("idft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class, int.class);
         idftMethod.setAccessible(true);
         for (int k=0; k<100; k++) {
             int m = 10 + rnd.nextInt(8);
@@ -409,8 +423,8 @@ public class BigIntegerTest {
             Object vector = Array.newInstance(mutableModFnClass, a.length);
             for (int i=0; i<a.length; i++)
                 Array.set(vector, i, mutableModFnCtor.newInstance(a[i]));
-            dftMethod.invoke(null, vector, omega);
-            idftMethod.invoke(null, vector, omega);
+            dftMethod.invoke(null, vector, omega, 1);
+            idftMethod.invoke(null, vector, omega, 1);
             reduceMethod.invoke(null, vector);
             for (int i=0; i<aOrig.length; i++) {
                 long[] origDigits = (long[])digitsField.get(Array.get(vector, i));

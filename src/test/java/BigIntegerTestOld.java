@@ -67,9 +67,10 @@ public class BigIntegerTestOld {
         // test the if... path in multModFn()
         BigInteger pow19_1 = BigInteger.valueOf(1).shiftLeft((1<<19)-1);   // 2^(2^19-1)
         BigInteger pow20_2 = BigInteger.valueOf(1).shiftLeft((1<<20)-2);   // 2^(2^20-2)
-        Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class);
+        Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
         ssMult.setAccessible(true);
-        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE)));
+        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE), 1));
+        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE), 2+random.nextInt(10)));
     }
 
     @Test
@@ -84,6 +85,14 @@ public class BigIntegerTestOld {
             BigInteger c2 = THREE.pow(2*i);
             assertEquals(c2, c1);
         }
+
+        // test SS parallel squaring
+        Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
+        ssMult.setAccessible(true);
+        BigInteger a = THREE.pow(1000000);
+        BigInteger c1 = (BigInteger)ssMult.invoke(null, a, a, Runtime.getRuntime().availableProcessors());
+        BigInteger c2 = THREE.pow(2*1000000);
+        assertEquals(c2, c1);
     }
 
     @Test

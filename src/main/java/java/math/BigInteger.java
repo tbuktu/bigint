@@ -33,9 +33,16 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
+
 import sun.misc.DoubleConsts;
 import sun.misc.FloatConsts;
 
@@ -1497,9 +1504,30 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             } else if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen)) {
                 return multiplyToomCook3(this, val);
             } else {
-                return multiplySchoenhageStrassen(this, val);
+                return multiplySchoenhageStrassen(this, val, 1);
             }
         }
+    }
+
+    /**
+     * Multiplies {@code this} number by another using multiple threads if the
+     * numbers are sufficiently large.
+     *
+     * @param  val value to be multiplied by this BigInteger.
+     * @return {@code this * val}
+     * @see #multiply(BigInteger)
+     */
+    public BigInteger multiplyParallel(BigInteger val) {
+        return multiply(val, Runtime.getRuntime().availableProcessors()-1);
+    }
+
+    private BigInteger multiply(BigInteger val, int numThreads) {
+        int xlen = mag.length;
+        int ylen = val.mag.length;
+        if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen))
+            return multiply(val);
+        else
+            return multiplySchoenhageStrassen(this, val, numThreads);
     }
 
     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
@@ -1872,9 +1900,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Schoenhage-Strassen algorithm</a> algorithm.
      * @param a the first factor
      * @param b the second factor
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return a*b
      */
-    private static BigInteger multiplySchoenhageStrassen(BigInteger a, BigInteger b) {
+    private static BigInteger multiplySchoenhageStrassen(BigInteger a, BigInteger b, int numThreads) {
         // remove any minus signs, multiply, then fix sign
         int signum = a.signum() * b.signum();
         if (a.signum() < 0)
@@ -1882,7 +1911,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (b.signum() < 0)
             b = b.negate();
 
-        int[] cArr = multiplySchoenhageStrassen(a.mag, b.mag);
+        int[] cArr = multiplySchoenhageStrassen(a.mag, b.mag, numThreads);
 
         BigInteger c = new BigInteger(1, cArr);
         if (signum < 0)
@@ -1940,9 +1969,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * </ol>
      * @param a
      * @param b
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return a*b
      */
-    private static int[] multiplySchoenhageStrassen(int[] a, int[] b) {
+    private static int[] multiplySchoenhageStrassen(int[] a, int[] b, int numThreads) {
         boolean square = a == b;
 
         // set M to the number of binary digits in a or b, whichever is greater
@@ -1968,7 +1998,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         int[] gamma;
         if (square)
-            gamma = new BigInteger(1, u).square().mag;   // gamma = u * u
+            gamma = new BigInteger(1, u).square(numThreads).mag;   // gamma = u * u
         else {
             int numPiecesB = (b.length+pieceSize) / pieceSize;
             int[] v = new int[(numPiecesB*(3*n+5)+31)/32];
@@ -1977,7 +2007,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 appendBits(v, vBitLength, b, i*pieceSize, n+2);
                 vBitLength += 3*n+5;
             }
-            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v)).mag;   // gamma = u * v
+            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v), numThreads).mag;   // gamma = u * v
         }
         int[][] gammai = splitBits(gamma, 3*n+5);
         int halfNumPcs = numPieces / 2;
@@ -1998,24 +2028,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (!square)
             bi = split(b, halfNumPcs, pieceSize, (1<<(n-6))+1);
         int omega = even ? 4 : 2;
-        MutableModFn[] c = new MutableModFn[halfNumPcs];
+        MutableModFn[] c;
         if (square) {
-            dft(ai, omega);
+            dft(ai, omega, numThreads);
             reduce(ai);
-            c = new MutableModFn[ai.length];
-            for (int i=0; i<c.length; i++)
-                c[i] = ai[i].square();
+            c = squareElements(ai, numThreads);
         }
         else {
-            dft(ai, omega);
-            dft(bi, omega);
+            dft(ai, omega, numThreads);
+            dft(bi, omega, numThreads);
             reduce(ai);
             reduce(bi);
-            c = new MutableModFn[ai.length];
-            for (int i=0; i<c.length; i++)
-                c[i] = ai[i].multiply(bi[i]);
+            c = multiplyElements(ai, bi, numThreads);
         }
-        idft(c, omega);
+        idft(c, omega, numThreads);
         reduce(c);
         int[][] cInt = toIntArray(c);
 
@@ -2098,19 +2124,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
+     * @param numThreads number of threads to use; 1 means run on the current thread
      */
-    private static void dft(MutableModFn[] A, int omega) {
-        dftBailey(A, omega);
+    private static void dft(MutableModFn[] A, int omega, int numThreads) {
+        if (numThreads > 1)
+            try {
+                dftParallel(A, omega, numThreads);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new ArithmeticException(e.getLocalizedMessage());
+            }
+        else
+            dftSequential(A, omega);
     }
 
     /**
-     * Performs a DFT on {@code A}.
+     * Performs a single-threaded DFT on {@code A}.
      * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
      * Bailey's 4-step algorithm</a>.
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void dftBailey(MutableModFn[] A, int omega) {
+    private static void dftSequential(MutableModFn[] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
@@ -2129,6 +2163,59 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
         for (int i=0; i<rows; i++)
             dftDirect(A, omega, 0, rows, cols, i*cols, 1);
+    }
+
+    /**
+     * Performs a multithreaded DFT on {@code A}.
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.
+     * @param A the vector to transform
+     * @param omega root of unity, can be 2 or 4
+     * @param numThreads number of threads to use; 1 means run on the current thread
+     */
+    private static void dftParallel(final MutableModFn[] A, final int omega, int numThreads) throws InterruptedException, ExecutionException {
+        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
+        final int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
+        final int cols = A.length / rows;   // number of columns
+
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        // step 1: perform an DFT on each column
+        Collection<Future<?>> pending = new ArrayList<>();
+        for (int i=0; i<cols; i++) {
+            final int colIdx = i;
+            Future<?> future = executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    dftDirect(A, omega, rows, cols, rows, colIdx, cols);
+                }
+            });
+            pending.add(future);
+        }
+        for (Future<?> future: pending)
+            future.get();
+
+        // step 2: multiply by powers of omega
+        applyDftWeights(A, omega, rows, cols);
+
+        // step 3 is built into step 1 by making the stride length a multiple of the row length
+
+        // step 4: perform an DFT on each row
+        pending = new ArrayList<>();
+        for (int i=0; i<rows; i++) {
+            final int rowIdx = i;
+            Future<?> future = executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
+                }
+            });
+            pending.add(future);
+        }
+        for (Future<?> future: pending)
+            future.get();
+
+        executor.shutdown();
     }
 
     /**
@@ -2215,7 +2302,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns the power to which to raise omega in a DFT.<br/>
      * When <code>omega</code>=4, this method doubles the exponent so
-     * <code>omega</code> can be assumed always to be 2 in {@link #dft(int[][], int)}.
+     * <code>omega</code> can be assumed always to be 2 in the
+     * {@code dftDirect} and {@code idftDirect} methods.
      * @param n the log of the DFT length
      * @param v butterfly depth
      * @param idx index of the array element to be computed
@@ -2270,19 +2358,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
+     * @param numThreads number of threads to use; 1 means run on the current thread
      */
-    private static void idft(MutableModFn[] A, int omega) {
-        idftBailey(A, omega);
+    private static void idft(MutableModFn[] A, int omega, int numThreads) {
+        if (numThreads > 1)
+            try {
+                idftParallel(A, omega, numThreads);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new ArithmeticException(e.getLocalizedMessage());
+            }
+        else
+            idftSequential(A, omega);
     }
 
     /**
-     * Performs an IDFT on {@code A}.
+     * Performs a single-threaded IDFT on {@code A}.
      * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
      * Bailey's 4-step algorithm</a>.
      * @param A the vector to transform
      * @param omega root of unity, can be 2 or 4
      */
-    private static void idftBailey(MutableModFn[] A, int omega) {
+    private static void idftSequential(MutableModFn[] A, int omega) {
         // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
         int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
         int cols = A.length / rows;   // number of columns
@@ -2301,6 +2397,58 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
         for (int i=0; i<cols; i++)
             idftDirect(A, omega, rows, rows, cols, i, cols);
+    }
+
+    /**
+     * Performs a multithreaded IDFT on {@code A}.
+     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
+     * Bailey's 4-step algorithm</a>.
+     * @param A the vector to transform
+     * @param omega root of unity, can be 2 or 4
+     * @param numThreads number of threads to use; 1 means run on the current thread
+     */
+    private static void idftParallel(final MutableModFn[] A, final int omega, int numThreads) throws InterruptedException, ExecutionException {
+        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
+        final int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
+        final int cols = A.length / rows;   // number of columns
+
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        // step 1: perform an IDFT on each row
+        Collection<Future<?>> pending = new ArrayList<>();
+        for (int i=0; i<rows; i++) {
+            final int rowIdx = i;
+            Future<?> future = executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    idftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
+                }
+            });
+            pending.add(future);
+        }
+        for (Future<?> future: pending)
+            future.get();
+
+        // step 2: multiply by powers of omega
+        applyIdftWeights(A, omega, rows, cols);
+
+        // step 3 is built into step 4 by making the stride length a multiple of the row length
+        // step 4: perform an IDFT on each column
+        pending = new ArrayList<>();
+        for (int i=0; i<cols; i++) {
+            final int colIdx = i;
+            Future<?> future = executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    idftDirect(A, omega, rows, rows, cols, colIdx, cols);
+                }
+            });
+            pending.add(future);
+        }
+        for (Future<?> future: pending)
+            future.get();
+
+        executor.shutdown();
     }
 
     /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
@@ -2407,6 +2555,81 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for(int i=0;i<a.length;i++)
             aInt[i] = MutableModFn.toIntArrayOdd(a[i].digits);
         return aInt;
+    }
+
+    /**
+     * Calls {@code multiply()} for each element of <code>a</code> and <code>b</code>.
+     * @param a
+     * @param b an array of the same length as <code>a</code>
+     * @param numThreads number of threads to use; 1 means run on the current thread
+     * @return <code>a[i]*b[i]</code> for all <code>i</code>
+     */
+    private static MutableModFn[] multiplyElements(final MutableModFn[] a, final MutableModFn[] b, int numThreads) {
+        final MutableModFn[] c = new MutableModFn[a.length];
+        if (numThreads > 1) {
+            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+            Collection<Future<?>> pending = new ArrayList<>();
+            for (int i=0; i<numThreads; i++) {
+                final int fromIdx = c.length * i / numThreads;
+                final int toIdx = c.length * (i+1) / numThreads;
+                Future<?> future = executor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (int idx=fromIdx; idx<toIdx; idx++)
+                            c[idx] = a[idx].multiply(b[idx]);
+                    }
+                });
+                pending.add(future);
+            }
+            executor.shutdown();
+            try {
+                for (Future<?> future: pending)
+                    future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new ArithmeticException(e.getLocalizedMessage());
+            }
+        }
+        else
+            for (int i=0; i<c.length; i++)
+                c[i] = a[i].multiply(b[i]);
+        return c;
+    }
+
+    /**
+     * Calls {@code square()} for each element of <code>a</code>.
+     * @param a
+     * @param numThreads number of threads to use; 1 means run on the current thread
+     * @return <code>a[i]<sup>2</sup></code> for all <code>i</code>
+     */
+    private static MutableModFn[] squareElements(final MutableModFn[] a, int numThreads) {
+        final MutableModFn[] c = new MutableModFn[a.length];
+        if (numThreads > 1) {
+            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+            Collection<Future<?>> pending = new ArrayList<>();
+            for (int i=0; i<numThreads; i++) {
+                final int fromIdx = c.length * i / numThreads;
+                final int toIdx = c.length * (i+1) / numThreads;
+                Future<?> future = executor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (int idx=fromIdx; idx<toIdx; idx++)
+                            c[idx] = a[idx].square();
+                    }
+                });
+                pending.add(future);
+            }
+            executor.shutdown();
+            try {
+                for (Future<?> future: pending)
+                    future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new ArithmeticException(e.getLocalizedMessage());
+            }
+        }
+        else
+            for (int i=0; i<c.length; i++)
+                c[i] = a[i].square();
+        return c;
     }
 
     /**
@@ -2641,9 +2864,24 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 if (!shouldUseSchoenhageStrassen(len))
                     return squareToomCook3();
                 else
-                    return multiplySchoenhageStrassen(this, this);
+                    return multiplySchoenhageStrassen(this, this, 1);
             }
         }
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this<sup>2</sup>)},
+     * using multiple threads if the numbers are sufficiently large.
+     *
+     * @return {@code this<sup>2</sup>}
+     * @see #square()
+     */
+    private BigInteger square(int numThreads) {
+        int xlen = mag.length;
+        if (!shouldUseSchoenhageStrassen(xlen))
+            return square();
+        else
+            return multiplySchoenhageStrassen(this, this, numThreads);
     }
 
     /**
