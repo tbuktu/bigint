@@ -64,13 +64,14 @@ public class BigIntegerTestOld {
             assertEquals(ZERO, d[1]);
         }
 
-        // test the if... path in multModFn()
-        BigInteger pow19_1 = BigInteger.valueOf(1).shiftLeft((1<<19)-1);   // 2^(2^19-1)
-        BigInteger pow20_2 = BigInteger.valueOf(1).shiftLeft((1<<20)-2);   // 2^(2^20-2)
+        // test SS parallel multiplication
         Method ssMult = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
         ssMult.setAccessible(true);
-        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE), 1));
-        assertEquals(pow20_2.add(pow19_1), ssMult.invoke(null, pow19_1, pow19_1.add(BigInteger.ONE), 2+random.nextInt(10)));
+        BigInteger a = THREE.pow(1000000);
+        BigInteger b = a.add(ONE);
+        BigInteger c1 = (BigInteger)ssMult.invoke(null, a, b, Runtime.getRuntime().availableProcessors());
+        BigInteger c2 = THREE.pow(2*1000000).add(a);
+        assertEquals(c2, c1);
     }
 
     @Test
