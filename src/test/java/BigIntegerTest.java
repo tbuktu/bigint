@@ -392,9 +392,7 @@ public class BigIntegerTest {
         for (int i=0; i<10; i++) {
             BigInteger a = new BigInteger(ORDER_SS_BARRETT, rnd);
             BigInteger b = new BigInteger(ORDER_SS_BARRETT, rnd);
-            // call multiplySchoenhageStrassen() directly rather than multiplyParallel() to test different numbers of threads
-            // and to ensure multithreadedness even in single-core environments
-            BigInteger c1 = (BigInteger)multiplySchoenhageStrassenMethod.invoke(null, a, b, 2+rnd.nextInt(10));
+            BigInteger c1 = a.multiplyParallel(b, 2+rnd.nextInt(10));
             BigInteger c2 = a.multiply(b);
             if (!c1.equals(c2))
                 failCount++;

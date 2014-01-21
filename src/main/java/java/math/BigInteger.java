@@ -1521,6 +1521,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return multiply(val, Runtime.getRuntime().availableProcessors()-1);
     }
 
+    /**
+     * Multiplies {@code this} number by another using a specified number of
+     * threads if the inputs are sufficiently large.
+     *
+     * @param  val value to be multiplied by this BigInteger.
+     * @param  numThreads number of threads to use; 1 means run on the current thread
+     * @return {@code this * val}
+     * @see #multiply(BigInteger)
+     */
+    public BigInteger multiplyParallel(BigInteger val, int numThreads) {
+        return multiply(val, numThreads);
+    }
+
     private BigInteger multiply(BigInteger val, int numThreads) {
         int xlen = mag.length;
         int ylen = val.mag.length;
