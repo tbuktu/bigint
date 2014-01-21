@@ -182,7 +182,7 @@ class MutableModFn {
      * Reduces this number modulo F<sub>n</sub>.<br/>
      * {@code digits[0]} will be 0 or 1.
      */
-    void reduce() {
+    private void reduce() {
         // Reduction modulo Fn is done by subtracting the most significant int from the least significant int
         int len = digits.length;
         long bi = digits[0];

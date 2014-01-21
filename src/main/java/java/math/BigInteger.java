@@ -2044,18 +2044,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableModFn[] c;
         if (square) {
             dft(ai, omega, numThreads);
-            reduce(ai);
             c = squareElements(ai, numThreads);
         }
         else {
             dft(ai, omega, numThreads);
             dft(bi, omega, numThreads);
-            reduce(ai);
-            reduce(bi);
             c = multiplyElements(ai, bi, numThreads);
         }
         idft(c, omega, numThreads);
-        reduce(c);
         int[][] cInt = toIntArray(c);
 
         int[] z = new int[(1<<(m-5))+1];
@@ -2555,12 +2551,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 A[idx].shiftRight(shiftAmt, temp);
                 temp.copyTo(A[idx]);
             }
-    }
-
-    /** see {@link MutableModFn#reduce()} */
-    private static void reduce(MutableModFn[] a) {
-        for (int i=0; i<a.length; i++)
-            a[i].reduce();
     }
 
     private static int[][] toIntArray(MutableModFn[] a) {

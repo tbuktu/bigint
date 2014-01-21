@@ -404,8 +404,6 @@ public class BigIntegerTest {
         mutableModFnCtor.setAccessible(true);
         Field digitsField = mutableModFnClass.getDeclaredField("digits");
         digitsField.setAccessible(true);
-        Method reduceMethod = BigInteger.class.getDeclaredMethod("reduce", Array.newInstance(mutableModFnClass, 0).getClass());
-        reduceMethod.setAccessible(true);
         Method dftMethod = BigInteger.class.getDeclaredMethod("dft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class, int.class);
         dftMethod.setAccessible(true);
         Method idftMethod = BigInteger.class.getDeclaredMethod("idft", Array.newInstance(mutableModFnClass, 0).getClass(), int.class, int.class);
@@ -423,7 +421,6 @@ public class BigIntegerTest {
                 Array.set(vector, i, mutableModFnCtor.newInstance(a[i]));
             dftMethod.invoke(null, vector, omega, 1);
             idftMethod.invoke(null, vector, omega, 1);
-            reduceMethod.invoke(null, vector);
             for (int i=0; i<aOrig.length; i++) {
                 long[] origDigits = (long[])digitsField.get(Array.get(vector, i));
                 if (!Arrays.equals(origDigits, aOrig[i]))
@@ -434,7 +431,7 @@ public class BigIntegerTest {
         // test MutableModFn.multiply()
         Method multiplyMethod = mutableModFnClass.getDeclaredMethod("multiply", mutableModFnClass);
         multiplyMethod.setAccessible(true);
-        reduceMethod = mutableModFnClass.getDeclaredMethod("reduce");   // this is the other reduce method
+        Method reduceMethod = mutableModFnClass.getDeclaredMethod("reduce");
         reduceMethod.setAccessible(true);
         Constructor<BigInteger> bigintCtor = BigInteger.class.getDeclaredConstructor(int.class, int[].class);
         bigintCtor.setAccessible(true);
