@@ -2165,7 +2165,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // step 1: perform an DFT on each column, that is, on the vector
         // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
         for (int i=0; i<cols; i++)
-            dftDirect(A, omega, rows, cols, rows, i, cols);
+            dftDirect(A, omega, rows, rows, cols, i, cols);
 
         // step 2: multiply by powers of omega
         applyDftWeights(A, omega, rows, cols);
@@ -2175,7 +2175,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // step 4: perform an DFT on each row, that is, on the vector
         // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
         for (int i=0; i<rows; i++)
-            dftDirect(A, omega, 0, rows, cols, i*cols, 1);
+            dftDirect(A, omega, cols, 0, rows, i*cols, 1);
     }
 
     /**
@@ -2200,7 +2200,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             Future<?> future = executor.submit(new Runnable() {
                 @Override
                 public void run() {
-                    dftDirect(A, omega, rows, cols, rows, colIdx, cols);
+                    dftDirect(A, omega, rows, rows, cols, colIdx, cols);
                 }
             });
             pending.add(future);
@@ -2220,7 +2220,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             Future<?> future = executor.submit(new Runnable() {
                 @Override
                 public void run() {
-                    dftDirect(A, omega, 0, rows, cols, rowIdx*cols, 1);
+                    dftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
                 }
             });
             pending.add(future);
@@ -2242,7 +2242,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param idxOffset value to add to the array index when accessing elements of {@code A}
      * @param stride stride length
      */
-    private static void dftDirect(MutableModFn[] A, int omega, int expOffset, int expScale, int len, int idxOffset, int stride) {
+    private static void dftDirect(MutableModFn[] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
         int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
         int v = 1;   // v starts at 1 rather than 0 for the same reason
         MutableModFn d = new MutableModFn(A[0].digits.length);
