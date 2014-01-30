@@ -129,12 +129,11 @@ class MutableModFn {
         }
     }
 
-    MutableModFn multiply(MutableModFn b) {
+    void multiply(MutableModFn b) {
         // if a=b=2^n, a*b=1 (mod Fn)
         if (digits[0]==1 && b.digits[0]==1) {
-            long[] c = new long[digits.length];
-            c[c.length-1] = 1;
-            return new MutableModFn(c);
+            Arrays.fill(digits, 0);
+            digits[digits.length-1] = 1;
         }
         // otherwise, a*b will fit into 2*2^n bits
         else {
@@ -149,18 +148,16 @@ class MutableModFn {
             long[] c = toLongArrayEven(cIntPad);
             // reduce cpad mod Fn which makes the first cpad.length/2-1 longs zero; return the others
             reduceWide(c);
-            c = Arrays.copyOfRange(c, c.length/2-1, c.length);
-            return new MutableModFn(c);
+            System.arraycopy(c, c.length/2-1, digits, 0, c.length/2+1);
         }
     }
 
     /** @see #multiply(MutableModFn) */
-    MutableModFn square() {
+    void square() {
         // if a=2^n, a^2=1 (mod Fn)
         if (digits[0] == 1) {
-            long[] c = new long[digits.length];
-            c[c.length-1] = 1;
-            return new MutableModFn(c);
+            Arrays.fill(digits, 0);
+            digits[digits.length-1] = 1;
         }
         // otherwise, a^2 will fit into 2*2^n bits
         else {
@@ -173,8 +170,7 @@ class MutableModFn {
             long[] c = toLongArrayEven(cIntPad);
             // reduce cpad mod Fn which makes the first cpad.length/2-1 longs zero; return the others
             reduceWide(c);
-            c = Arrays.copyOfRange(c, c.length/2-1, c.length);
-            return new MutableModFn(c);
+            System.arraycopy(c, c.length/2-1, digits, 0, c.length/2+1);
         }
     }
 

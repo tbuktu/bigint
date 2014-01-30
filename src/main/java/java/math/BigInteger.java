@@ -2041,16 +2041,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (!square)
             bi = split(b, halfNumPcs, pieceSize, (1<<(n-6))+1);
         int omega = even ? 4 : 2;
-        MutableModFn[] c;
         if (square) {
             dft(ai, omega, numThreads);
-            c = squareElements(ai, numThreads);
+            squareElements(ai, numThreads);
         }
         else {
             dft(ai, omega, numThreads);
             dft(bi, omega, numThreads);
-            c = multiplyElements(ai, bi, numThreads);
+            multiplyElements(ai, bi, numThreads);
         }
+        MutableModFn[] c = ai;
         idft(c, omega, numThreads);
         int[][] cInt = toIntArray(c);
 
@@ -2561,13 +2561,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Calls {@code multiply()} for each element of <code>a</code> and <code>b</code>.
+     * Calls {@code multiply()} for each element of <code>a</code> and <code>b</code> and
+     * places the result into <code>a</code>, i.e., <code>a[i]</code> becomes
+     * <code>a[i]*b[i]</code> for all <code>i</code>.
      * @param a
      * @param b an array of the same length as <code>a</code>
      * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return <code>a[i]*b[i]</code> for all <code>i</code>
      */
-    private static MutableModFn[] multiplyElements(final MutableModFn[] a, final MutableModFn[] b, int numThreads) {
+    private static void multiplyElements(final MutableModFn[] a, final MutableModFn[] b, int numThreads) {
         final MutableModFn[] c = new MutableModFn[a.length];
         if (numThreads > 1) {
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
@@ -2579,7 +2580,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     @Override
                     public void run() {
                         for (int idx=fromIdx; idx<toIdx; idx++)
-                            c[idx] = a[idx].multiply(b[idx]);
+                            a[idx].multiply(b[idx]);
                     }
                 });
                 pending.add(future);
@@ -2594,17 +2595,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         else
             for (int i=0; i<c.length; i++)
-                c[i] = a[i].multiply(b[i]);
-        return c;
+                a[i].multiply(b[i]);
     }
 
     /**
-     * Calls {@code square()} for each element of <code>a</code>.
+     * Calls {@code square()} for each element of <code>a</code> and places the result into
+     * <code>a</code>, i.e., <code>a[i]</code> becomes <code>a[i]<sup>2</sup></code> for all
+     * <code>i</code>.
      * @param a
      * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return <code>a[i]<sup>2</sup></code> for all <code>i</code>
      */
-    private static MutableModFn[] squareElements(final MutableModFn[] a, int numThreads) {
+    private static void squareElements(final MutableModFn[] a, int numThreads) {
         final MutableModFn[] c = new MutableModFn[a.length];
         if (numThreads > 1) {
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
@@ -2616,7 +2617,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     @Override
                     public void run() {
                         for (int idx=fromIdx; idx<toIdx; idx++)
-                            c[idx] = a[idx].square();
+                            a[idx].square();
                     }
                 });
                 pending.add(future);
@@ -2631,8 +2632,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
         else
             for (int i=0; i<c.length; i++)
-                c[i] = a[i].square();
-        return c;
+                a[i].square();
     }
 
     /**

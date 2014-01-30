@@ -448,8 +448,8 @@ public class BigIntegerTest {
 
             Object aMutable = mutableModFnCtor.newInstance(a);
             Object bMutable = mutableModFnCtor.newInstance(b);
-            Object cMutable = multiplyMethod.invoke(aMutable, bMutable);
-            long[] c = (long[])digitsField.get(cMutable);
+            multiplyMethod.invoke(aMutable, bMutable);
+            long[] c = (long[])digitsField.get(aMutable);
             int[] cInt = toIntArray(c);
             BigInteger actual = bigintCtor.newInstance(1, cInt);
 
@@ -469,8 +469,8 @@ public class BigIntegerTest {
             BigInteger expected = aBigInt.multiply(aBigInt).mod(fermat(n));
 
             Object aMutable = mutableModFnCtor.newInstance(a);
-            Object cMutable = squareModFnMethod.invoke(aMutable);
-            long[] c = (long[])digitsField.get(cMutable);
+            squareModFnMethod.invoke(aMutable);
+            long[] c = (long[])digitsField.get(aMutable);
             int[] cInt = toIntArray(c);
             BigInteger actual = bigintCtor.newInstance(1, cInt);
 
