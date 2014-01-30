@@ -38,7 +38,7 @@ import java.util.Arrays;
  * it is a {@code long[]}, not an {@code int[]}).
  * The length of the array is 2<sup>n-6</sup>+1 which implicitly determines n.
  *
- * @see BigInteger#multiplySchoenhageStrassen(BigInteger, BigInteger)
+ * @see BigInteger#multiplySchoenhageStrassen(BigInteger, BigInteger, int)
  * @author Timothy Buktu
  */
 class MutableModFn {
@@ -146,7 +146,7 @@ class MutableModFn {
             int[] cIntPad = new int[intDigits.length-1+intBDigits.length-1];
             System.arraycopy(cInt, 0, cIntPad, cIntPad.length-cInt.length, cInt.length);
             long[] c = toLongArrayEven(cIntPad);
-            // reduce cpad mod Fn which makes the first cpad.length/2-1 longs zero; return the others
+            // reduce c mod Fn which makes the first c.length/2-1 longs zero; return the others
             reduceWide(c);
             System.arraycopy(c, c.length/2-1, digits, 0, c.length/2+1);
         }
@@ -168,7 +168,7 @@ class MutableModFn {
             int[] cIntPad = new int[2*intDigits.length-2];
             System.arraycopy(cInt, 0, cIntPad, cIntPad.length-cInt.length, cInt.length);
             long[] c = toLongArrayEven(cIntPad);
-            // reduce cpad mod Fn which makes the first cpad.length/2-1 longs zero; return the others
+            // reduce c mod Fn which makes the first c.length/2-1 longs zero; return the others
             reduceWide(c);
             System.arraycopy(c, c.length/2-1, digits, 0, c.length/2+1);
         }
