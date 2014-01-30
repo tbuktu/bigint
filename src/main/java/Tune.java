@@ -44,7 +44,7 @@ public class Tune {
 
     public static void main(String[] args) throws Exception {
         Method slowMethod = BigInteger.class.getDeclaredMethod("multiplyToomCook3", BigInteger.class, BigInteger.class);
-        Method fastMethod = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class);
+        Method fastMethod = BigInteger.class.getDeclaredMethod("multiplySchoenhageStrassen", BigInteger.class, BigInteger.class, int.class);
         tune(slowMethod, fastMethod);
 
         System.out.println("***** Note: Barrett thresholds are only meaningful if SS thresholds");
@@ -124,12 +124,6 @@ public class Tune {
     }
     
     private static boolean compare(Method method1, Method method2, int numBits, boolean warmup) throws Exception {
-        if (!Arrays.equals(method1.getParameterTypes(), method2.getParameterTypes())) {
-            System.err.println("Method signatures do not match!");
-            System.exit(1);
-        }
-        int numParams = method1.getParameterTypes().length;
-
         long randomSeed = new Random().nextLong();
 
         int numIterations;
@@ -138,13 +132,11 @@ public class Tune {
             numIterations = 0;
             long t1 = System.currentTimeMillis();
             while (System.currentTimeMillis() < t1+MIN_DURATION_MSECS) {
-                // assume the object and all parameters are BigIntegers
                 BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
-                BigInteger[] params = new BigInteger[numParams];
-                for (int i=0; i<numParams; i++)
-                    params[i] = nextBigInteger(rng, numBits);
-                method1.invoke(obj, (Object[])params);
-                method2.invoke(obj, (Object[])params);
+                Object[] params1 = generateParams(method1, rng, numBits);
+                method1.invoke(obj, (Object[])params1);
+                Object[] params2 = generateParams(method2, rng, numBits);
+                method2.invoke(obj, (Object[])params2);
                 numIterations++;
             }
         }
@@ -154,11 +146,8 @@ public class Tune {
         Random rng = new Random(randomSeed);
         long t1 = System.currentTimeMillis();
         for (int i=0; i<numIterations; i++) {
-            // assume the object and all parameters are BigIntegers
             BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
-            BigInteger[] params = new BigInteger[numParams];
-            for (int j=0; j<numParams; j++)
-                params[j] = nextBigInteger(rng, numBits);
+            Object[] params = generateParams(method1, rng, numBits);
             method1.invoke(obj, (Object[])params);
         }
         long t2 = System.currentTimeMillis();
@@ -167,18 +156,26 @@ public class Tune {
         rng = new Random(randomSeed);
         t1 = System.currentTimeMillis();
         for (int i=0; i<numIterations; i++) {
-            // assume the object and all parameters are BigIntegers
             BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
-            BigInteger[] params = new BigInteger[numParams];
-            for (int j=0; j<numParams; j++)
-                params[j] = nextBigInteger(rng, numBits);
+            Object[] params = generateParams(method2, rng, numBits);
             method2.invoke(obj, (Object[])params);
         }
         t2 = System.currentTimeMillis();
         long method2Time = t2 - t1;
         return method2Time < method1Time;
     }
-    
+
+    private static Object[] generateParams(Method method, Random rng, int numBits) {
+        int numParams = method.getParameterTypes().length;
+        Object[] params = new Object[numParams];
+        for (int j=0; j<numParams; j++)
+            if (method.getParameterTypes()[j].equals(BigInteger.class))
+                params[j] = nextBigInteger(rng, numBits);
+            else
+                params[j] = 1;   // numThreads arg for multiplySchoenhageStrassen
+        return params;
+    }
+
     private static BigInteger nextBigInteger(Random rng, int numBits) {
         BigInteger a;
         do {
