@@ -2565,13 +2565,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param numThreads number of threads to use; 1 means run on the current thread
      */
     private static void multiplyElements(final MutableModFn[] a, final MutableModFn[] b, int numThreads) {
-        final MutableModFn[] c = new MutableModFn[a.length];
         if (numThreads > 1) {
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
             Collection<Future<?>> pending = new ArrayList<>();
             for (int i=0; i<numThreads; i++) {
-                final int fromIdx = c.length * i / numThreads;
-                final int toIdx = c.length * (i+1) / numThreads;
+                final int fromIdx = a.length * i / numThreads;
+                final int toIdx = a.length * (i+1) / numThreads;
                 Future<?> future = executor.submit(new Runnable() {
                     @Override
                     public void run() {
@@ -2590,7 +2589,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
         }
         else
-            for (int i=0; i<c.length; i++)
+            for (int i=0; i<a.length; i++)
                 a[i].multiply(b[i]);
     }
 
@@ -2602,13 +2601,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param numThreads number of threads to use; 1 means run on the current thread
      */
     private static void squareElements(final MutableModFn[] a, int numThreads) {
-        final MutableModFn[] c = new MutableModFn[a.length];
         if (numThreads > 1) {
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
             Collection<Future<?>> pending = new ArrayList<>();
             for (int i=0; i<numThreads; i++) {
-                final int fromIdx = c.length * i / numThreads;
-                final int toIdx = c.length * (i+1) / numThreads;
+                final int fromIdx = a.length * i / numThreads;
+                final int toIdx = a.length * (i+1) / numThreads;
                 Future<?> future = executor.submit(new Runnable() {
                     @Override
                     public void run() {
@@ -2627,7 +2625,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
         }
         else
-            for (int i=0; i<c.length; i++)
+            for (int i=0; i<a.length; i++)
                 a[i].square();
     }
 
