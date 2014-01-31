@@ -55,49 +55,49 @@ Benchmark results for multiplication of two n-digit numbers (Intel i3 @3.1 GHz, 
     <td align="right">25,000</td><td align="right">14ms</td><td align="right" align="right">2.5ms</td><td align="right">2.6ms</td><td align="right">1.0</td><td align="right">Toom</td>
   </tr>
   <tr>
-    <td align="right">50,000</td><td align="right">57ms</td><td align="right" align="right">7.2ms</td><td align="right">7.1ms</td><td align="right">1.0</td><td align="right">Toom</td>
+    <td align="right">50,000</td><td align="right">57ms</td><td align="right" align="right">7.2ms</td><td align="right">7.0ms</td><td align="right">1.0</td><td align="right">Toom</td>
   </tr>
   <tr>
-    <td align="right">75,000</td><td align="right">.13s</td><td align="right" align="right">13ms</td><td align="right">9.4ms</td><td align="right">1.4</td><td align="right">SS</td>
+    <td align="right">75,000</td><td align="right">.13s</td><td align="right" align="right">13ms</td><td align="right">6.5ms</td><td align="right">2.0</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">100,000</td><td align="right">.23s</td><td align="right" align="right">20ms</td><td align="right">20ms</td><td align="right">1.0</td><td align="right">Toom</td>
+    <td align="right">100,000</td><td align="right">.23s</td><td align="right" align="right">20ms</td><td align="right">14ms</td><td align="right">1.4</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">250,000</td><td align="right">1.4s</td><td align="right" align="right">76s</td><td align="right">43ms</td><td align="right">1.8</td><td align="right">SS</td>
+    <td align="right">250,000</td><td align="right">1.4s</td><td align="right" align="right">76s</td><td align="right">30ms</td><td align="right">2.5</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">500,000</td><td align="right">5.7s</td><td align="right" align="right">.22s</td><td align="right">.10s</td><td align="right">2.2</td><td align="right">SS</td>
+    <td align="right">500,000</td><td align="right">5.7s</td><td align="right" align="right">.22s</td><td align="right">77ms</td><td align="right">2.9</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">750,000</td><td align="right">13s</td><td align="right" align="right">.38s</td><td align="right">.21s</td><td align="right">1.8</td><td align="right">SS</td>
+    <td align="right">750,000</td><td align="right">13s</td><td align="right" align="right">.38s</td><td align="right">.16s</td><td align="right">2.4</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">1,000,000</td><td align="right">23s</td><td align="right" align="right">.62s</td><td align="right">.22s</td><td align="right">2.8</td><td align="right">SS</td>
+    <td align="right">1,000,000</td><td align="right">23s</td><td align="right" align="right">.62s</td><td align="right">.16s</td><td align="right">3.9</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">2,500,000</td><td align="right">151s</td><td align="right" align="right">2.3s</td><td align="right">.55s</td><td align="right">4.2</td><td align="right">SS</td>
+    <td align="right">2,500,000</td><td align="right">151s</td><td align="right" align="right">2.3s</td><td align="right">.44s</td><td align="right">5.2</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">5,000,000</td><td align="right">620s</td><td align="right" align="right">6.7s</td><td align="right">1.1s</td><td align="right">6.1</td></td><td align="right">SS</td>
+    <td align="right">5,000,000</td><td align="right">620s</td><td align="right" align="right">6.7s</td><td align="right">.89s</td><td align="right">7.5</td></td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">7,500,000</td><td align="right">1395s</td><td align="right" align="right">12s</td><td align="right">2.7s</td><td align="right">4.4</td><td align="right">SS</td>
+    <td align="right">7,500,000</td><td align="right">1395s</td><td align="right" align="right">12s</td><td align="right">2.3s</td><td align="right">5.2</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">10,000,000</td><td align="right">2488s</td><td align="right" align="right">18s</td><td align="right">2.7s</td><td align="right">6.7</td><td align="right">SS</td>
+    <td align="right">10,000,000</td><td align="right">2488s</td><td align="right" align="right">18s</td><td align="right">2.3s</td><td align="right">7.8</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">25,000,000</td><td align="right"></td><td align="right" align="right">67s</td><td align="right">14s</td><td align="right">4.8</td><td align="right">SS</td>
+    <td align="right">25,000,000</td><td align="right"></td><td align="right" align="right">67s</td><td align="right">12s</td><td align="right">5.6</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">50,000,000</td><td align="right"></td><td align="right" align="right">181s</td><td align="right">29s</td><td align="right">6.2</td><td align="right">SS</td>
+    <td align="right">50,000,000</td><td align="right"></td><td align="right" align="right">181s</td><td align="right">25s</td><td align="right">7.2</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">75,000,000</td><td align="right"></td><td align="right" align="right">339s</td><td align="right">29s</td><td align="right">11.7</td><td align="right">SS</td>
+    <td align="right">75,000,000</td><td align="right"></td><td align="right" align="right">339s</td><td align="right">25s</td><td align="right">14</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">100,000,000</td><td align="right"></td><td align="right" align="right">454s</td><td align="right">74s</td><td align="right">6.1</td><td align="right">SS</td>
+    <td align="right">100,000,000</td><td align="right"></td><td align="right" align="right">454s</td><td align="right">61s</td><td align="right">7.4</td><td align="right">SS</td>
   </tr>
 </table>
 
@@ -152,45 +152,45 @@ Benchmark results for division of a 2n-digit number by a n-digit number (Intel i
     <td align="right">50,000</td><td align="right">99ms</td><td align="right">15ms</td><td align="right">15ms</td><td align="right">1.0</td><td align="right">BZ</td>
   </tr>
   <tr>
-    <td align="right">75,000</td><td align="right">.22s</td><td align="right">29ms</td><td align="right">29ms</td><td align="right">1.0</td><td align="right">BZ</td>
+    <td align="right">75,000</td><td align="right">.22s</td><td align="right">29ms</td><td align="right">25ms</td><td align="right">1.2</td><td align="right">BZ</td>
   </tr>
   <tr>
-    <td align="right">100,000</td><td align="right">.40s</td><td align="right">45ms</td><td align="right">43ms</td><td align="right">1.0</td><td align="right">BZ</td>
+    <td align="right">100,000</td><td align="right">.40s</td><td align="right">45ms</td><td align="right">42ms</td><td align="right">1.1</td><td align="right">BZ</td>
   </tr>
   <tr>
-    <td align="right">250,000</td><td align="right">2.5s</td><td align="right">.17s</td><td align="right">.16s</td><td align="right">1.1</td><td align="right">BZ</td>
+    <td align="right">250,000</td><td align="right">2.5s</td><td align="right">.17s</td><td align="right">.12s</td><td align="right">1.4</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">500,000</td><td align="right">9.9s</td><td align="right">.48s</td><td align="right">.41s</td><td align="right">1.2</td><td align="right">BZ</td>
+    <td align="right">500,000</td><td align="right">9.9s</td><td align="right">.48s</td><td align="right">.29s</td><td align="right">1.7</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">750,000</td><td align="right">22s</td><td align="right">.88s</td><td align="right">.80s</td><td align="right">1.1</td><td align="right">BZ</td>
+    <td align="right">750,000</td><td align="right">22s</td><td align="right">.88s</td><td align="right">.66s</td><td align="right">1.3</td><td align="right">BZ</td>
   </tr>
   <tr>
-    <td align="right">1,000,000</td><td align="right">40s</td><td align="right">1.4s</td><td align="right">.92s</td><td align="right">1.5</td><td align="right">Barr</td>
+    <td align="right">1,000,000</td><td align="right">40s</td><td align="right">1.4s</td><td align="right">.64s</td><td align="right">2.2</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">2,500,000</td><td align="right">250s</td><td align="right">5.2s</td><td align="right">2.1s</td><td align="right">2.5</td><td align="right">Barr</td>
+    <td align="right">2,500,000</td><td align="right">250s</td><td align="right">5.2s</td><td align="right">1.6s</td><td align="right">3.2</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">5,000,000</td><td align="right">1066s</td><td align="right">15s</td><td align="right">4.6s</td><td align="right">3.3</td><td align="right">Barr</td>
+    <td align="right">5,000,000</td><td align="right">1066s</td><td align="right">15s</td><td align="right">3.5s</td><td align="right">4.3</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">7,500,000</td><td align="right">2346s</td><td align="right">26s</td><td align="right">11s</td><td align="right">2.4</td><td align="right">Barr</td>
+    <td align="right">7,500,000</td><td align="right">2346s</td><td align="right">26s</td><td align="right">8.3s</td><td align="right">3.1</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">10,000,000</td><td align="right">4464s</td><td align="right">41s</td><td align="right">11s</td><td align="right">3.7</td><td align="right">Barr</td>
+    <td align="right">10,000,000</td><td align="right">4464s</td><td align="right">41s</td><td align="right">8.4s</td><td align="right">4.9</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">25,000,000</td><td align="right"></td><td align="right">156s</td><td align="right">55s</td><td align="right">2.8</td><td align="right">Barr</td>
+    <td align="right">25,000,000</td><td align="right"></td><td align="right">156s</td><td align="right">45s</td><td align="right">3.5</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">50,000,000</td><td align="right"></td><td align="right">421s</td><td align="right">119s</td><td align="right">3.5</td><td align="right">Barr</td>
+    <td align="right">50,000,000</td><td align="right"></td><td align="right">421s</td><td align="right">96s</td><td align="right">4.4</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">75,000,000</td><td align="right"></td><td align="right">800s</td><td align="right">119s</td><td align="right">6.7</td><td align="right">Barr</td>
+    <td align="right">75,000,000</td><td align="right"></td><td align="right">800s</td><td align="right">96s</td><td align="right">8.3</td><td align="right">Barr</td>
   </tr>
   <tr>
-    <td align="right">100,000,000</td><td align="right"></td><td align="right">1151s</td><td align="right">306s</td><td align="right">3.8</td><td align="right">Barr</td>
+    <td align="right">100,000,000</td><td align="right"></td><td align="right">1151s</td><td align="right">247s</td><td align="right">4.7</td><td align="right">Barr</td>
   </tr>
 </table>

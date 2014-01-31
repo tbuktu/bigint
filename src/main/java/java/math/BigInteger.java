@@ -2083,42 +2083,38 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static boolean shouldUseSchoenhageStrassen(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
-            // SS is slower than Toom-Cook below ~4,000 ints (~38,000 decimal digits)
-            // and faster above ~17,900 ints (~172 decimal digits).
-            // Between those values, it changes several times.
-            if (length <= 3952)
-                return false;
-            if (length <= 4096)   // 2^12
-                return true;
-            if (length <= 6256)
-                return false;
-            if (length <= 8192)   // 2^13
-                return true;
-            if (length <= 10832)
-                return false;
-            if (length <= 16384)   // 2^14
-                return true;
-            if (length <= 17904)
-                return false;
-            return true;
-        } else {
-            // The following values were determined experimentally on a 32-bit JVM.
             // SS is slower than Toom-Cook below ~2,000 ints (~19,300 decimal digits)
-            // and faster above ~9,200 ints (~88,900 decimal digits).
+            // and faster above ~8,700 ints (~84,000 decimal digits).
             // Between those values, it changes several times.
             if (length <= 2000)
                 return false;
             if (length <= 2048)   // 2^11
                 return true;
-            if (length <= 3216)
+            if (length <= 3120)
                 return false;
             if (length <= 4096)   // 2^12
                 return true;
-            if (length <= 5392)
+            if (length <= 5232)
                 return false;
             if (length <= 8192)   // 2^13
                 return true;
-            if (length <= 9232)
+            if (length <= 8720)
+                return false;
+            return true;
+        } else {
+            // The following values were determined experimentally on a 32-bit JVM.
+            // SS is slower than Toom-Cook below ~3,500 ints (~33,800 decimal digits)
+            // and faster above ~9,600 ints (~92,900 decimal digits).
+            // Between those values, it changes several times.
+            if (length <= 3504)
+                return false;
+            if (length <= 4096)   // 2^12
+                return true;
+            if (length <= 5968)
+                return false;
+            if (length <= 8192)   // 2^13
+                return true;
+            if (length <= 9648)
                 return false;
             return true;
         }
@@ -3098,45 +3094,45 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     static boolean shouldDivideBarrett(int length) {
         if (IS64BIT) {
             // The following values were determined experimentally on a 64-bit JVM.
-            if (length <= 30735)
+            if (length <= 14863)
+                return false;
+            if (length <= 16383)   // 2^14-1
+                return true;
+            if (length <= 23759)
                 return false;
             if (length <= 32767)   // 2^15-1
                 return true;
-            if (length <= 55311)
+            if (length <= 46063)
                 return false;
             if (length <= 65535)   // 2^16-1
                 return true;
-            if (length <= 90127)
+            if (length <= 73871)
                 return false;
             if (length <= 131071)   // 2^17-1
                 return true;
-            if (length <= 174415)
-                return false;
-            if (length <= 262143)   // 2^18-1
-                return true;
-            if (length <= 278512)
+            if (length <= 159887)
                 return false;
             return true;
         }
         else {
             // The following values were determined experimentally on a 32-bit JVM.
-            if (length <= 14863)
+            if (length <= 16175)
                 return false;
             if (length <= 16383)    // 2^14-1
                 return true;
-            if (length <= 27663)
+            if (length <= 26991)
                 return false;
             if (length <= 32767)    // 2^15-1
                 return true;
-            if (length <= 48079)
+            if (length <= 51215)
                 return false;
             if (length <= 65535)    // 2^16-1
                 return true;
-            if (length <= 85199)
+            if (length <= 80367)
                 return false;
             if (length <= 131071)   // 2^17-1
                 return true;
-            if (length <= 159791)
+            if (length <= 155663)
                 return false;
             return true;
         }

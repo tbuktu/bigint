@@ -1,5 +1,5 @@
 --- ../jdk8/jdk/src/share/classes/java/math/MutableBigInteger.java	2013-12-16 19:31:06.402286786 +0100
-+++ src/main/java/java/math/MutableBigInteger.java	2013-12-19 11:05:21.511371967 +0100
++++ src/main/java/java/math/MutableBigInteger.java	2013-12-30 21:30:17.879116439 +0100
 @@ -1155 +1155,9 @@
 -            return divideAndRemainderBurnikelZiegler(b, quotient);
 +            if (!BigInteger.shouldDivideBarrett(Math.min(intLen, b.intLen))) {
@@ -11,6 +11,9 @@
 +                quotient.setValue(quotTemp.value, quotTemp.intLen);
 +                return new MutableBigInteger(quotRem[1]);
 +            }
+@@ -1234 +1242 @@
+-     * The parameter beta was chosen to b 2<sup>32</sup> so almost all shifts are
++     * The parameter beta was chosen to be 2<sup>32</sup> so almost all shifts are
 @@ -1251 +1259 @@
 -            // Unlike Knuth division, we don't check for common powers of two here because
 +            // Unlike Knuth and Barrett division, we don't check for common powers of two here because
