@@ -1528,13 +1528,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param  val value to be multiplied by this BigInteger.
      * @param  numThreads number of threads to use; 1 means run on the current thread
      * @return {@code this * val}
-     * @see #multiply(BigInteger)
+     * @see #multiplyParallel(BigInteger)
      */
-    public BigInteger multiplyParallel(BigInteger val, int numThreads) {
-        return multiply(val, numThreads);
-    }
-
-    private BigInteger multiply(BigInteger val, int numThreads) {
+    public BigInteger multiply(BigInteger val, int numThreads) {
         int xlen = mag.length;
         int ylen = val.mag.length;
         if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen))
