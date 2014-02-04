@@ -210,7 +210,7 @@ class MutableModFn {
         }
     }
 
-    /** Like {@link #reduce()} but works on an array and expects it to be 2^(n+1) longs long. */
+    /** Like {@link #reduce()} but works on an array of length 2^(n+1). */
     private static void reduceWide(long[] a) {
         // Reduction modulo Fn is done by subtracting the upper half from the lower half
         int len = a.length;
