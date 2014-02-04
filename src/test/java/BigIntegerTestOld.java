@@ -98,7 +98,7 @@ public class BigIntegerTestOld {
 
     @Test
     public void testInverse() throws SecurityException, NoSuchMethodException, IllegalArgumentException, IllegalAccessException, InvocationTargetException, NoSuchFieldException {
-        Method inverseMethod = BigInteger.class.getDeclaredMethod("inverse", int.class);
+        Method inverseMethod = BigInteger.class.getDeclaredMethod("inverse", int.class, int.class);
         inverseMethod.setAccessible(true);
 
         Field newt0Field = BigInteger.class.getDeclaredField("NEWTON_THRESHOLD");
@@ -115,7 +115,7 @@ public class BigIntegerTestOld {
 
             int m = a.bitLength();
             int n = rng.nextInt(2*m) + 1;
-            BigInteger inv = (BigInteger)inverseMethod.invoke(a, n);
+            BigInteger inv = (BigInteger)inverseMethod.invoke(a, n, 1+rng.nextInt(4));
             BigInteger error = inv.multiply(a).subtract(ONE.shiftLeft(m+n)).abs();
             BigInteger maxError = ONE.shiftLeft(m).multiply(a);
             assertTrue(error.compareTo(maxError) <= 0);

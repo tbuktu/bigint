@@ -392,7 +392,7 @@ public class BigIntegerTest {
         for (int i=0; i<10; i++) {
             BigInteger a = new BigInteger(ORDER_SS_BARRETT, rnd);
             BigInteger b = new BigInteger(ORDER_SS_BARRETT, rnd);
-            BigInteger c1 = a.multiplyParallel(b, 2+rnd.nextInt(10));
+            BigInteger c1 = a.multiply(b, 2+rnd.nextInt(10));
             BigInteger c2 = a.multiply(b);
             if (!c1.equals(c2))
                 failCount++;
@@ -862,7 +862,7 @@ public class BigIntegerTest {
     private static void inverse() throws Exception {
         int failCount = 0;
 
-        Method inverseMethod = BigInteger.class.getDeclaredMethod("inverse", int.class);
+        Method inverseMethod = BigInteger.class.getDeclaredMethod("inverse", int.class, int.class);
         inverseMethod.setAccessible(true);
         for (int i=0; i<REDUCED_SIZE; i++) {
             BigInteger a;
@@ -871,7 +871,7 @@ public class BigIntegerTest {
             } while (a.compareTo(ZERO) <= 0);
             int n = rnd.nextInt(a.bitLength());
             BigInteger expected = BigInteger.ONE.shiftLeft(a.bitLength()+n).divide(a);
-            BigInteger actual = (BigInteger)inverseMethod.invoke(a, n);
+            BigInteger actual = (BigInteger)inverseMethod.invoke(a, n, 1+rnd.nextInt(4));
             if (actual.subtract(expected).abs().compareTo(ONE) > 1)
                 failCount++;
         }
