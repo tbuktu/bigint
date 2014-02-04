@@ -11,3 +11,4 @@ fi
 
 diff -u0 $JDK_SRC/jdk/src/share/classes/java/math/BigInteger.java > src/main/java/java/math/BigInteger.java.diff src/main/java/java/math/BigInteger.java
 diff -u0 $JDK_SRC/jdk/src/share/classes/java/math/MutableBigInteger.java > src/main/java/java/math/MutableBigInteger.java.diff src/main/java/java/math/MutableBigInteger.java
+diff -u0 $JDK_SRC/jdk/test/java/math/BigInteger/BigIntegerTest.java > src/test/java/BigIntegerTest.java.diff src/test/java/BigIntegerTest.java
