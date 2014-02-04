@@ -3043,6 +3043,38 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
+     * Returns a BigInteger whose value is {@code (this / val)},
+     * using multiple threads if the numbers are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided.
+     * @return {@code this / val}
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #divide(BigInteger)
+     */
+    public BigInteger divideParallel(BigInteger val) {
+        return divide(val, Runtime.getRuntime().availableProcessors()-1);
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this / val)},
+     * using multiple threads if the numbers are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided.
+     * @param  numThreads number of threads to use; 1 means run on the current thread
+     * @return {@code this / val}
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #divideParallel(BigInteger)
+     */
+    public BigInteger divide(BigInteger val, int numThreads) {
+        int xlen = mag.length;
+        int ylen = val.mag.length;
+        if (!shouldDivideBarrett(xlen) || !shouldDivideBarrett(ylen))
+            return divide(val);
+        else
+            return divideBarrett(val, numThreads);
+    }
+
+    /**
      * Returns a BigInteger whose value is {@code (this / val)} using an O(n^2) algorithm from Knuth.
      *
      * @param  val value by which this BigInteger is to be divided.
@@ -3078,8 +3110,47 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
                 return divideAndRemainderBurnikelZiegler(val);
             } else {
-                return divideAndRemainderBarrett(val);
+                return divideAndRemainderBarrett(val, 1);
             }
+        }
+    }
+
+    /**
+     * Returns an array of two BigIntegers containing {@code (this / val)}
+     * followed by {@code (this % val)}.<br/>
+     * Uses multiple threads if the numbers are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided, and the
+     *         remainder computed.
+     * @return an array of two BigIntegers: the quotient {@code (this / val)}
+     *         is the initial element, and the remainder {@code (this % val)}
+     *         is the final element.
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #divideAndRemainder(BigInteger)
+     */
+    public BigInteger[] divideAndRemainderParallel(BigInteger val) {
+        return divideAndRemainder(val, Runtime.getRuntime().availableProcessors()-1);
+    }
+
+    /**
+     * Returns an array of two BigIntegers containing {@code (this / val)}
+     * followed by {@code (this % val)}.<br/>
+     * Uses a specified number of threads if the inputs are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided, and the
+     *         remainder computed.
+     * @param  numThreads number of threads to use; 1 means run on the current thread
+     * @return an array of two BigIntegers: the quotient {@code (this / val)}
+     *         is the initial element, and the remainder {@code (this % val)}
+     *         is the final element.
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #divideAndRemainderParallel(BigInteger)
+     */
+    public BigInteger[] divideAndRemainder(BigInteger val, int numThreads) {
+        if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
+            return divideAndRemainderBurnikelZiegler(val);
+        } else {
+            return divideAndRemainderBarrett(val, numThreads);
         }
     }
 
@@ -3169,6 +3240,39 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
     }
 
+    /**
+     * Returns a BigInteger whose value is {@code (this % val)},
+     * using multiple threads if the inputs are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided, and the
+     *         remainder computed.
+     * @return {@code this % val}
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #remainder(BigInteger)
+     */
+    public BigInteger remainderParallel(BigInteger val) {
+        return remainder(val, Runtime.getRuntime().availableProcessors()-1);
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this % val)} using a
+     * specified number of threads if the inputs are sufficiently large.
+     *
+     * @param  val value by which this BigInteger is to be divided, and the
+     *         remainder computed.
+     * @param numThreads number of threads to use; 1 means run on the current thread
+     * @return {@code this % val}
+     * @throws ArithmeticException if {@code val} is zero.
+     * @see #remainderParallel(BigInteger)
+     */
+    public BigInteger remainder(BigInteger val, int numThreads) {
+        if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
+            return remainder(val);
+        } else {
+            return remainderBarrett(val, numThreads);
+        }
+    }
+
     /** Long division */
     private BigInteger remainderKnuth(BigInteger val) {
         MutableBigInteger q = new MutableBigInteger(),
@@ -3212,21 +3316,29 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /** Barrett division */
     private BigInteger divideBarrett(BigInteger val) {
-        return divideAndRemainderBarrett(val)[0];
+        return divideAndRemainderBarrett(val, 1)[0];
     }
 
-    /** Barrett division */
+    private BigInteger divideBarrett(BigInteger val, int numThreads) {
+        return divideAndRemainderBarrett(val, numThreads)[0];
+    }
+
     private BigInteger remainderBarrett(BigInteger val) {
-        return divideAndRemainderBarrett(val)[1];
+        return divideAndRemainderBarrett(val, 1)[1];
+    }
+
+    private BigInteger remainderBarrett(BigInteger val, int numThreads) {
+        return divideAndRemainderBarrett(val, numThreads)[1];
     }
 
     /**
      * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
      * @param val the divisor
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return an array containing the quotient and remainder
      */
-    private BigInteger[] divideAndRemainderBarrett(BigInteger val) {
-        BigInteger[] c = abs().divideAndRemainderBarrettPositive(val.abs());
+    private BigInteger[] divideAndRemainderBarrett(BigInteger val, int numThreads) {
+        BigInteger[] c = abs().divideAndRemainderBarrettPositive(val.abs(), numThreads);
         if (signum*val.signum < 0)
             c[0] = c[0].negate();
         if (signum < 0)
@@ -3238,9 +3350,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
      * <code>val</code> must be positive.
      * @param val the divisor
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return an array containing the quotient and remainder
      */
-    private BigInteger[] divideAndRemainderBarrettPositive(BigInteger val) {
+    private BigInteger[] divideAndRemainderBarrettPositive(BigInteger val, int numThreads) {
         int m = bitLength();
         int n = val.bitLength();
 
@@ -3251,20 +3364,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // Cancel common powers of two if it will speed up division, which is
             // the case iff it reduces bitLength() below the next lower power of two.
             if (Integer.numberOfLeadingZeros(n) < Integer.numberOfLeadingZeros(n-lowestSetBit)) {
-                BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit));
+                BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit), numThreads);
                 result[1] = result[1].shiftLeft(lowestSetBit);
                 return result;
             }
 
             if (m <= 2*n) {
                 // this case is handled by Barrett directly
-                BigInteger mu = val.inverse(m-n);
-                return barrettBase(val, mu);
+                BigInteger mu = val.inverse(m-n, numThreads);
+                return barrettBase(val, mu, numThreads);
             }
             else {
                 // treat each n-bit piece of a as a digit and do long division by val
                 // (which is also n bits), reusing the inverse
-                BigInteger mu2n = val.inverse(n);
+                BigInteger mu2n = val.inverse(n, numThreads);
                 int startBit = m / n * n;   // the bit at which the current n-bit piece starts
                 BigInteger quotient = ZERO;
                 BigInteger remainder = shiftRight(startBit);
@@ -3274,7 +3387,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     BigInteger ai = shiftRight(startBit).and(mask);
                     remainder = remainder.shiftLeft(n).add(ai);
                     BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
-                    BigInteger[] c = remainder.barrettBase(val, mu);
+                    BigInteger[] c = remainder.barrettBase(val, mu, numThreads);
                     quotient = quotient.shiftLeft(n).add(c[0]);
                     remainder = c[1];
                 }
@@ -3292,15 +3405,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Fast Division of Large Integers</a>, pg 17.
      * @param b
      * @param mu 2<sup>n</sup>/b where <code>n</code> is the number of binary digits of <code>this</code>
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return an array containing the quotient and remainder
      */
-    private BigInteger[] barrettBase(BigInteger b, BigInteger mu) {
+    private BigInteger[] barrettBase(BigInteger b, BigInteger mu, int numThreads) {
         int m = bitLength();
         int n = b.bitLength();
 
         BigInteger a1 = shiftRight(n-1);
-        BigInteger q = a1.multiply(mu).shiftRight(m-n+1);
-        BigInteger r = subtract(b.multiply(q));
+        BigInteger q = a1.multiply(mu, numThreads).shiftRight(m-n+1);
+        BigInteger r = subtract(b.multiply(q, numThreads));
         while (r.signum()<0 || r.compareTo(b)>=0)
             if (r.signum() < 0) {
                 r = r.add(b);
@@ -3321,9 +3435,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * <a href="http://treskal.com/kalle/exjobb/original-report.pdf">
      * Fast Division of Large Integers</a>, pg 23.
      * @param n precision in bits
+     * @param numThreads number of threads to use; 1 means run on the current thread
      * @return <code>1/this</code>, shifted to the left by <code>bitLength()+n</code> bits
      */
-    private BigInteger inverse(int n) {
+    private BigInteger inverse(int n, int numThreads) {
         int m = bitLength();
         if (n <= NEWTON_THRESHOLD)
             return ONE.shiftLeft(n*2).divideKnuth(shiftRightRounded(m-n));
@@ -3343,9 +3458,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i<numSteps; i++) {
             ki = k[i];
             // the following BigIntegers represent numbers of the form a*2^(-exponent)
-            BigInteger s = z.square();   // exponent = 2ki
+            BigInteger s = z.square(numThreads);   // exponent = 2ki
             BigInteger t = shiftRightRounded(m-2*ki-3);   // exponent = 2ki+3
-            BigInteger u = t.multiply(s);   // exponent = 4ki+3 > 2ki+1
+            BigInteger u = t.multiply(s, numThreads);   // exponent = 4ki+3 > 2ki+1
             BigInteger w = z.add(z);   // exponent = ki
             w = w.shiftLeft(3*ki+3);   // increase #fraction digits to 4ki+3 to match u
             z = w.subtract(u);   // exponent = 4ki+3
