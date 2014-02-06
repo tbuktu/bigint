@@ -74,7 +74,6 @@ class MutableModFn {
 
     /**
      * Adds another {@code MutableModFn} to this number.
-     * The result is returned in the first argument.
      * @param b
      */
     void add(MutableModFn b) {
@@ -102,7 +101,6 @@ class MutableModFn {
 
     /**
      * Subtracts another {@code MutableModFn} to this number.
-     * The result is returned in the first argument.
      * @param b
      */
     void subtract(MutableModFn b) {
@@ -129,6 +127,10 @@ class MutableModFn {
         }
     }
 
+    /**
+     * Multiplies this number by another {@code MutableModFn}.
+     * @param b
+     */
     void multiply(MutableModFn b) {
         // if a=b=2^n, a*b=1 (mod Fn)
         if (digits[0]==1 && b.digits[0]==1) {
@@ -152,7 +154,10 @@ class MutableModFn {
         }
     }
 
-    /** @see #multiply(MutableModFn) */
+    /**
+     * Squares this number.
+     * @see #multiply(MutableModFn)
+     */
     void square() {
         // if a=2^n, a^2=1 (mod Fn)
         if (digits[0] == 1) {
@@ -278,7 +283,7 @@ class MutableModFn {
      * "Right" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(digits.length-1)</code> ints and cyclicly
      * shifting to the right by <code>shiftAmt</code> bits.<br/>
-     * The result is returned in the second argument.
+     * The result is placed in the second argument.
      * @param shiftAmtBits the shift amount in bits; must be less than <code>64*2*(digits.length-1))</code>
      * @param b the return value; must have room for at least as many digits as <code>this</code>
      */
@@ -380,7 +385,7 @@ class MutableModFn {
      * "Left" means towards the higher array indices and the lower bits<br/>.
      * This is equivalent to extending the number to <code>2*(digits.length-1)</code> ints and cyclicly
      * shifting to the left by <code>shiftAmt</code> bits.<br/>
-     * The result is returned in the second argument.
+     * The result is placed in the second argument.
      * @param shiftAmtBits the shift amount in bits; must be less than <code>64*2*(digits.length-1))</code>
      * @param b the return value; must have room for at least as many digits as <code>this</code>
      */

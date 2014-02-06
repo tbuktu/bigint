@@ -1975,6 +1975,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *       Springer-Verlag, S. 281-292</a></li>
      *   <li><a href="http://malte-leip.net/beschreibung_ssa.pdf">Eine verstaendliche Beschreibung des
      *       Schoenhage-Strassen-Algorithmus</a></li>
+     *   <li><a href="http://www.loria.fr/~gaudry/publis/issac07.pdf">A GMP-based Implementation of
+     *       Schoenhage-Strassen's Large Integer Multiplication Algorithm</a></li>
      * </ol>
      * @param a
      * @param b
