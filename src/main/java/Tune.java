@@ -29,7 +29,6 @@
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -39,7 +38,7 @@ import java.util.Random;
  */
 public class Tune {
     private static final int START = 12;   // start at 2^12 binary digits
-    private static final int MIN_DURATION_MSECS = 2000;
+    private static final long MIN_DURATION_NANOSECS = 2000000000;
     private static final int ACCURACY = 1000;
 
     public static void main(String[] args) throws Exception {
@@ -56,7 +55,7 @@ public class Tune {
 
     private static void tune(Method slowMethod, Method fastMethod) throws Exception {
         System.out.println("Timing " + slowMethod.getName() + " vs " + fastMethod.getName());
-        
+
         slowMethod.setAccessible(true);
         fastMethod.setAccessible(true);
         int margin = slowMethod.getName().startsWith("divide") ? 10 : 0;   // fudge factor for division
@@ -78,7 +77,7 @@ public class Tune {
                 break;
         };
         System.out.println();
-        
+
         while (true) {
             int numBitsUpper = (numBitsLower-1) * 2 - margin;
 
@@ -105,7 +104,7 @@ public class Tune {
             if (fastMethodWins)
                 break;
         }
-        
+
         System.out.println("Intervals for which " + fastMethod.getName() + " is faster than " + slowMethod.getName() + ":");
         for (int[] interval: fastMethodIntervals) {
             System.out.print("  " + interval[0] + "..");
@@ -122,7 +121,7 @@ public class Tune {
             System.out.println(" ints");
         }
     }
-    
+
     private static boolean compare(Method method1, Method method2, int numBits, boolean warmup) throws Exception {
         long randomSeed = new Random().nextLong();
 
@@ -130,13 +129,19 @@ public class Tune {
         if (warmup) {
             Random rng = new Random(randomSeed);
             numIterations = 0;
-            long t1 = System.currentTimeMillis();
-            while (System.currentTimeMillis() < t1+MIN_DURATION_MSECS) {
+            long total = 0;
+            while (total < MIN_DURATION_NANOSECS) {
                 BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
                 Object[] params1 = generateParams(method1, rng, numBits);
+                long t1 = System.nanoTime();
                 method1.invoke(obj, (Object[])params1);
+                long t2 = System.nanoTime();
+                total += t2 - t1;
                 Object[] params2 = generateParams(method2, rng, numBits);
+                t1 = System.nanoTime();
                 method2.invoke(obj, (Object[])params2);
+                t2 = System.nanoTime();
+                total += t2 - t1;
                 numIterations++;
             }
         }
@@ -144,24 +149,26 @@ public class Tune {
             numIterations = 1;
 
         Random rng = new Random(randomSeed);
-        long t1 = System.currentTimeMillis();
+        long method1Time = 0;
         for (int i=0; i<numIterations; i++) {
             BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
             Object[] params = generateParams(method1, rng, numBits);
+            long t1 = System.nanoTime();
             method1.invoke(obj, (Object[])params);
+            long t2 = System.nanoTime();
+            method1Time += t2 - t1;
         }
-        long t2 = System.currentTimeMillis();
-        long method1Time = t2 - t1;
-        
+
         rng = new Random(randomSeed);
-        t1 = System.currentTimeMillis();
+        long method2Time = 0;
         for (int i=0; i<numIterations; i++) {
             BigInteger obj = method1.getName().startsWith("divide") ? nextBigInteger(rng, 2*numBits) : nextBigInteger(rng, numBits);
             Object[] params = generateParams(method2, rng, numBits);
+            long t1 = System.nanoTime();
             method2.invoke(obj, (Object[])params);
+            long t2 = System.nanoTime();
+            method2Time += t2 - t1;
         }
-        t2 = System.currentTimeMillis();
-        long method2Time = t2 - t1;
         return method2Time < method1Time;
     }
 
