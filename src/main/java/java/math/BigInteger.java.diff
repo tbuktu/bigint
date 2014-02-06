@@ -1,5 +1,5 @@
 --- ../jdk8/jdk/src/share/classes/java/math/BigInteger.java	2013-12-16 19:30:55.222190028 +0100
-+++ src/main/java/java/math/BigInteger.java	2014-02-04 21:26:39.380733747 +0100
++++ src/main/java/java/math/BigInteger.java	2014-02-06 16:28:18.097694670 +0100
 @@ -35,0 +36 @@
 +import java.util.ArrayList;
 @@ -36,0 +38 @@
@@ -81,7 +81,7 @@
 +            return multiplySchoenhageStrassen(this, val, numThreads);
 +    }
 +
-@@ -1853,0 +1904,933 @@
+@@ -1853,0 +1904,935 @@
 +    // Schoenhage-Strassen
 +
 +    /**
@@ -156,6 +156,8 @@
 +     *       Springer-Verlag, S. 281-292</a></li>
 +     *   <li><a href="http://malte-leip.net/beschreibung_ssa.pdf">Eine verstaendliche Beschreibung des
 +     *       Schoenhage-Strassen-Algorithmus</a></li>
++     *   <li><a href="http://www.loria.fr/~gaudry/publis/issac07.pdf">A GMP-based Implementation of
++     *       Schoenhage-Strassen's Large Integer Multiplication Algorithm</a></li>
 +     * </ol>
 +     * @param a
 +     * @param b
@@ -1015,16 +1017,16 @@
 +        return ai;
 +    }
 +
-@@ -1861 +2844 @@
+@@ -1861 +2846 @@
 -    private BigInteger square() {
 +    BigInteger square() {
-@@ -1874 +2857,4 @@
+@@ -1874 +2859,4 @@
 -                return squareToomCook3();
 +                if (!shouldUseSchoenhageStrassen(len))
 +                    return squareToomCook3();
 +                else
 +                    return multiplySchoenhageStrassen(this, this, 1);
-@@ -1879,0 +2866,15 @@
+@@ -1879,0 +2868,15 @@
 +     * Returns a BigInteger whose value is {@code (this<sup>2</sup>)},
 +     * using multiple threads if the numbers are sufficiently large.
 +     *
@@ -1040,14 +1042,14 @@
 +    }
 +
 +    /**
-@@ -2032 +3033,5 @@
+@@ -2032 +3035,5 @@
 -            return divideBurnikelZiegler(val);
 +            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
 +                return divideBurnikelZiegler(val);
 +            } else {
 +                return divideBarrett(val);
 +            }
-@@ -2036,0 +3042,32 @@
+@@ -2036,0 +3044,32 @@
 +     * Returns a BigInteger whose value is {@code (this / val)},
 +     * using multiple threads if the numbers are sufficiently large.
 +     *
@@ -1080,7 +1082,7 @@
 +    }
 +
 +    /**
-@@ -2068,0 +3106,41 @@
+@@ -2068,0 +3108,41 @@
 +            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
 +                return divideAndRemainderBurnikelZiegler(val);
 +            } else {
@@ -1122,7 +1124,7 @@
 +     */
 +    public BigInteger[] divideAndRemainder(BigInteger val, int numThreads) {
 +        if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-@@ -2069,0 +3148,55 @@
+@@ -2069,0 +3150,55 @@
 +        } else {
 +            return divideAndRemainderBarrett(val, numThreads);
 +        }
@@ -1178,7 +1180,7 @@
 +            if (length <= 155663)
 +                return false;
 +            return true;
-@@ -2098 +3231,38 @@
+@@ -2098 +3233,38 @@
 -            return remainderBurnikelZiegler(val);
 +            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
 +                return remainderBurnikelZiegler(val);
@@ -1218,7 +1220,7 @@
 +            return remainder(val);
 +        } else {
 +            return remainderBarrett(val, numThreads);
-@@ -2140,0 +3311,171 @@
+@@ -2140,0 +3313,171 @@
 +    }
 +
 +    /** Barrett division */
@@ -1348,7 +1350,7 @@
 +    private BigInteger inverse(int n, int numThreads) {
 +        int m = bitLength();
 +        if (n <= NEWTON_THRESHOLD)
-+            return ONE.shiftLeft(n*2).divideKnuth(shiftRightRounded(m-n));
++            return ONE.shiftLeft(n*2).divide(shiftRightRounded(m-n));
 +
 +        // let numSteps = ceil(log2(n/NEWTON_THRESHOLD)) and initialize k
 +        int numSteps = bitLengthForInt((n+NEWTON_THRESHOLD-1)/NEWTON_THRESHOLD);
@@ -1360,7 +1362,7 @@
 +        }
 +
 +        // calculate 1/this truncated to k0 fraction digits
-+        BigInteger z = ONE.shiftLeft(k[0]*2).divideKnuth(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
++        BigInteger z = ONE.shiftLeft(k[0]*2).divide(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
 +
 +        for (int i=0; i<numSteps; i++) {
 +            ki = k[i];
