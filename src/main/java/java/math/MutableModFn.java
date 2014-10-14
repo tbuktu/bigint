@@ -45,12 +45,12 @@ class MutableModFn {
     long[] digits;
 
     /**
-     * Creates a {@code MutableModFn} number from an {@code int} array whose length
+     * Creates a {@code MutableModFn} number from a {@code long} array whose length
      * must be 2<sup>n-6</sup>+1 for some n. The first element must be 0 or 1.
      * The caller is trusted to pass in a valid array.<br/>
      * No copy of the array is made; its contents will reflect operations on the
      * {@code MutableModFn} object.
-     * @param digits an int array in the same format as {@link BigInteger#mag}
+     * @param digits an long array in the same format as {@link BigInteger#mag}
      */
     MutableModFn(long[] digits) {
         this.digits = digits;
@@ -100,7 +100,7 @@ class MutableModFn {
     }
 
     /**
-     * Subtracts another {@code MutableModFn} to this number.
+     * Subtracts another {@code MutableModFn} from this number.
      * @param b
      */
     void subtract(MutableModFn b) {
@@ -113,7 +113,7 @@ class MutableModFn {
             digits[i] = diff;
         }
 
-        // if we borrowed from the most significant int, subtract 2^2^n which is the same as adding 1 (mod Fn)
+        // if we borrowed from the most significant long, subtract 2^2^n which is the same as adding 1 (mod Fn)
         if (borrow) {
             digits[0]++;   // undo borrow
             int i = digits.length - 1;
@@ -184,7 +184,7 @@ class MutableModFn {
      * {@code digits[0]} will be 0 or 1.
      */
     private void reduce() {
-        // Reduction modulo Fn is done by subtracting the most significant int from the least significant int
+        // Reduction modulo Fn is done by subtracting the most significant long from the least significant long
         int len = digits.length;
         long bi = digits[0];
         long diff = digits[len-1] - bi;
@@ -281,7 +281,7 @@ class MutableModFn {
      * Multiplies this number by 2<sup>-shiftAmtBits</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
      * <code>(digits.length-1)*64</code>.<br/>
      * "Right" means towards the higher array indices and the lower bits<br/>.
-     * This is equivalent to extending the number to <code>2*(digits.length-1)</code> ints and cyclicly
+     * This is equivalent to extending the number to <code>2*(digits.length-1)</code> longs and cyclicly
      * shifting to the right by <code>shiftAmt</code> bits.<br/>
      * The result is placed in the second argument.
      * @param shiftAmtBits the shift amount in bits; must be less than <code>64*2*(digits.length-1))</code>
@@ -383,7 +383,7 @@ class MutableModFn {
      * Multiplies this number by 2<sup>shiftAmt</sup> modulo 2<sup>2<sup>n</sup></sup>+1 where 2<sup>n</sup>=
      * <code>(digits.length-1)*64</code>.<br/>
      * "Left" means towards the higher array indices and the lower bits<br/>.
-     * This is equivalent to extending the number to <code>2*(digits.length-1)</code> ints and cyclicly
+     * This is equivalent to extending the number to <code>2*(digits.length-1)</code> longs and cyclicly
      * shifting to the left by <code>shiftAmt</code> bits.<br/>
      * The result is placed in the second argument.
      * @param shiftAmtBits the shift amount in bits; must be less than <code>64*2*(digits.length-1))</code>
@@ -432,7 +432,7 @@ class MutableModFn {
                 borrow = diff==-1 && borrow;
             }
 
-            // if we borrowed from the most significant int, add 1 to the overall number
+            // if we borrowed from the most significant long, add 1 to the overall number
             boolean carry = borrow;
             if (carry) {
                 // increment b[0] and decrement b[len-1]

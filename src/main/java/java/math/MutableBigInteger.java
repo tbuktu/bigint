@@ -790,7 +790,7 @@ class MutableBigInteger {
 
     /**
      * Adds the value of {@code addend} shifted {@code n} ints to the left.
-     * Has the same effect as {@code addend.leftShift(32*ints); add(addend);}
+     * Has the same effect as {@code addend.leftShift(32*n); add(addend);}
      * but doesn't change the value of {@code addend}.
      */
     void addShifted(MutableBigInteger addend, int n) {
