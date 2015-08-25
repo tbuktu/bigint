@@ -64,7 +64,7 @@ Benchmark results for multiplication of two n-digit numbers (Intel i3 @3.1 GHz, 
     <td align="right">100,000</td><td align="right">.23s</td><td align="right" align="right">20ms</td><td align="right">14ms</td><td align="right">1.4</td><td align="right">SS</td>
   </tr>
   <tr>
-    <td align="right">250,000</td><td align="right">1.4s</td><td align="right" align="right">76s</td><td align="right">30ms</td><td align="right">2.5</td><td align="right">SS</td>
+    <td align="right">250,000</td><td align="right">1.4s</td><td align="right" align="right">76ms</td><td align="right">30ms</td><td align="right">2.5</td><td align="right">SS</td>
   </tr>
   <tr>
     <td align="right">500,000</td><td align="right">5.7s</td><td align="right" align="right">.22s</td><td align="right">77ms</td><td align="right">2.9</td><td align="right">SS</td>
