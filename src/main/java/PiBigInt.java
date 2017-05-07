@@ -74,8 +74,22 @@ public class PiBigInt {
 
         int scale = (int)Math.ceil(numDecimalDigits/Math.log10(2));
         BigInteger three = BigInteger.valueOf(3).shiftLeft(scale);
-        BigInteger x = BigInteger.valueOf((long)(1/Math.sqrt(a.shiftRight(scale-62).doubleValue())*Math.pow(2, 31+62))).shiftLeft(scale-62);
-        int precision = 16;   // double precision floating point
+        BigInteger one = ONE.shiftLeft(scale);
+
+        int binaryZeros = a.compareTo(one)<0 ? 0 : scale-a.subtract(one).bitLength()-1;   // zeros after the decimal point if a is just above one
+        int decimalZeros = (int)(binaryZeros * Math.log10(2));
+        BigInteger x;
+        int precision;
+        // if a=1+eps, use 1-eps/2 for the initial approximation; otherwise, use 1/Math.sqrt(a)
+        if (decimalZeros > 8) {
+            x = three.subtract(a).shiftRight(1);
+            precision = decimalZeros * 2;
+        }
+        else {
+            x = BigInteger.valueOf((long)(1/Math.sqrt(a.shiftRight(scale-62).doubleValue())*Math.pow(2, 31+62))).shiftLeft(scale-62);
+            precision = 16;   // double precision floating point
+        }
+
         do {
             // x = 0.5*x*(3-a*x*x)
             BigInteger y = three.subtract(multiply(a, multiply(x, x, scale), scale));

@@ -69,9 +69,22 @@ public class Pi {
 
         BigDecimal three = BigDecimal.valueOf(3);
         BigDecimal oneHalf = new BigDecimal("0.5");
-        // this monstrosity is there because "new BigDecimal(Math.sqrt(1/a.doubleValue()))" is extremely slow
-        BigDecimal x = new BigDecimal(Math.sqrt(1/Double.valueOf(a.round(new MathContext(16)).toString())));
-        int precision = 16;   // double precision floating point
+
+        BigDecimal aMinusOne = a.subtract(ONE, context);
+        int decimalZeros = a.compareTo(ONE)<0 ? 0 : aMinusOne.scale()-aMinusOne.precision();   // zeros after the decimal point if a is just above one
+        BigDecimal x;
+        int precision;
+        // if a=1+eps, use 1-eps/2 for the initial approximation; otherwise, use 1/Math.sqrt(a)
+        if (decimalZeros > 8) {
+            x = three.subtract(a, context).multiply(oneHalf, context);
+            precision = decimalZeros * 2;
+        }
+        else {
+            // this monstrosity is there because "new BigDecimal(Math.sqrt(1/a.doubleValue()))" is extremely slow
+            x = new BigDecimal(Math.sqrt(1/Double.valueOf(a.round(new MathContext(16)).toString())));
+            precision = 16;   // double precision floating point
+        }
+
         do {
             // x = 0.5*x*(3-a*x*x)
             BigDecimal y = three.subtract(a.multiply(x.multiply(x, context), context), context);
