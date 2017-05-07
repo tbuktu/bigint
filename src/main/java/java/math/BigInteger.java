@@ -3117,16 +3117,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
-        if (val.mag.length < BURNIKEL_ZIEGLER_THRESHOLD ||
-                mag.length - val.mag.length < BURNIKEL_ZIEGLER_OFFSET) {
-            return divideAndRemainderKnuth(val);
-        } else {
-            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-                return divideAndRemainderBurnikelZiegler(val);
-            } else {
-                return divideAndRemainderBarrett(val, 1);
-            }
-        }
+        return divideAndRemainder(val, 1);
     }
 
     /**
@@ -3161,10 +3152,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @see #divideAndRemainderParallel(BigInteger)
      */
     public BigInteger[] divideAndRemainder(BigInteger val, int numThreads) {
-        if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-            return divideAndRemainderBurnikelZiegler(val);
+        if (val.mag.length < BURNIKEL_ZIEGLER_THRESHOLD ||
+                mag.length - val.mag.length < BURNIKEL_ZIEGLER_OFFSET) {
+            return divideAndRemainderKnuth(val);
         } else {
-            return divideAndRemainderBarrett(val, numThreads);
+            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
+                return divideAndRemainderBurnikelZiegler(val);
+            } else {
+                return divideAndRemainderBarrett(val, numThreads);
+            }
         }
     }
 
