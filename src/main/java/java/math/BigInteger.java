@@ -234,6 +234,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final int TOOM_COOK_THRESHOLD = 75;
 
     /**
+     * The threshold value for using floating point FFT multiplication.
+     * If the number of ints in each mag array is greater than the
+     * Toom-Cook threshold, and the number of ints in at least one of
+     * the mag arrays is greater than this threshold, then FFT
+     * multiplication will be used.
+     */
+    private static final int FFT_THRESHOLD = 1000;
+
+    private static final int BITS_PER_FFT_POINT = 10;
+
+    /**
      * The threshold value for using Karatsuba squaring.  If the number
      * of ints in the number are larger than this value,
      * Karatsuba squaring will be used.   This value is found
@@ -1517,10 +1528,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         } else {
             if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD)) {
                 return multiplyKaratsuba(this, val);
-            } else if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen)) {
+//            } else if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen)) {
+//                return multiplyToomCook3(this, val);
+//            } else {
+//                return multiplySchoenhageStrassen(this, val, 1);
+//            }
+            } else if (xlen < FFT_THRESHOLD || (ylen < FFT_THRESHOLD)) {
                 return multiplyToomCook3(this, val);
             } else {
-                return multiplySchoenhageStrassen(this, val, 1);
+                return multiplyFFT(this, val);
             }
         }
     }
@@ -2850,6 +2866,157 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         while (++pieceIdx < numPieces)
             ai[pieceIdx] = new MutableModFn(targetPieceSize);
         return ai;
+    }
+
+    public BigInteger multiplyFFT(BigInteger b) {
+        return multiplyFFT(this, b);
+    }
+
+    private BigInteger multiplyFFT(BigInteger a, BigInteger b) {
+        int signum = a.signum * b.signum;
+        int magLen = Math.max(a.mag.length, b.mag.length);
+        int fftLen = 2 * (magLen*32+BITS_PER_FFT_POINT-1) / BITS_PER_FFT_POINT;
+        fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
+        Complex[] aVec = a.toFFTVector(fftLen);
+        Complex[] bVec = b.toFFTVector(fftLen);
+        fft(aVec);
+        fft(bVec);
+        Complex[] cVec = multiplyPointwise(aVec, bVec);
+        ifft(cVec);
+        BigInteger c = fromFFTVector(cVec, signum);
+        return c;
+    }
+
+    // Converts this BigInteger into an array of complex numbers suitable for an FFT.
+    // fftLen must be a power of 2.
+    private Complex[] toFFTVector(int fftLen) {
+        Complex[] fftVec = new Complex[fftLen];
+        int fftIdx = 0;
+        int magBitIdx = 0;   // next bit of the current mag element
+        int magIdx = mag.length-1;
+        while (magIdx >= 0) {
+            int fftPoint = 0;
+            int fftBitIdx = 0;
+            do {
+                int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
+                fftPoint |= ((mag[magIdx]>>magBitIdx) & ((1<<bitsToCopy)-1)) << fftBitIdx;
+                fftBitIdx += bitsToCopy;
+                magBitIdx += bitsToCopy;
+                if (magBitIdx >= 32) {
+                    magBitIdx = 0;
+                    magIdx--;
+                    if (magIdx < 0)
+                        break;
+                }
+            } while (fftBitIdx < BITS_PER_FFT_POINT);
+            fftVec[fftIdx] = new Complex(fftPoint, 0);
+            fftIdx++;
+        }
+        while (fftIdx < fftLen)
+            fftVec[fftIdx++] = new Complex(0, 0);
+        return fftVec;
+    }
+
+    // Converts an array of complex numbers back into a BigInteger.
+    // The length of the array must be a power of 2.
+    private BigInteger fromFFTVector(Complex[] fftVec, int signum) {
+        int fftLen = fftVec.length;
+        int magLen = (fftLen*BITS_PER_FFT_POINT+31) / 32;
+        int[] mag = new int[magLen];
+        int magIdx = magLen - 1;
+        int magBitIdx = 0;
+        int fftIdx = 0;
+        long carry = 0;
+        while (fftIdx < fftLen) {
+            int fftBitIdx = 0;
+            long fftElem = Math.round(fftVec[fftIdx].real) + carry;
+            carry = fftElem >> BITS_PER_FFT_POINT;
+            fftElem &= (1<<BITS_PER_FFT_POINT) - 1;
+            do {
+                int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
+                mag[magIdx] |= (fftElem>>fftBitIdx) << magBitIdx;
+                magBitIdx += bitsToCopy;
+                fftBitIdx += bitsToCopy;
+                if (magBitIdx >= 32) {
+                    magBitIdx = 0;
+                    magIdx--;
+                }
+            } while (fftBitIdx < BITS_PER_FFT_POINT);
+            fftIdx++;
+        }
+        return new BigInteger(signum, mag);
+    }
+
+    // Radix-2 decimation-in-frequency FFT
+    private void fft(Complex[] a) {
+        int n = a.length;
+        int logN = 31 - Integer.numberOfLeadingZeros(n);
+        for (int s=logN; s>=1; s--) {
+            int m = 1 << s;
+            for (int i=0; i<n; i+=m) {
+                for (int j=0; j<m/2; j++){
+                    double angle = -2 * Math.PI * j / m;
+                    Complex omega = new Complex(Math.cos(angle), Math.sin(angle));
+                    Complex u = a[i + j];
+                    Complex v = a[i + j + m/2];
+                    a[i + j] = u.add(v);
+                    a[i + j + m/2] = u.subtract(v).multiply(omega);
+                }
+            }
+        }
+    }
+
+    // Radix-2 decimation-in-time inverse FFT
+    private void ifft(Complex[] a) {
+        int n = a.length;
+        int logN = 31 - Integer.numberOfLeadingZeros(n);
+        for (int s=1; s<=logN; s++) {
+            int m = 1 << s;
+            for (int i=0; i<n; i+=m) {
+                for (int j=0; j<m/2; j++) {
+                    double angle = 2 * Math.PI * j / m;
+                    Complex omega = new Complex(Math.cos(angle), Math.sin(angle));
+                    Complex u = a[i + j + m/2].multiply(omega);
+                    Complex v = a[i + j];
+                    a[i + j] = v.add(u);
+                    a[i + j + m/2] = v.subtract(u);
+                }
+            }
+        }
+        for (int i=0; i<a.length; i++)
+            a[i] = a[i].divide(n);
+    }
+
+    private Complex[] multiplyPointwise(Complex[] a, Complex[] b) {
+        Complex[] c = new Complex[a.length];
+        for (int i=0; i<c.length; i++)
+            c[i] = a[i].multiply(b[i]);
+        return c;
+    }
+
+    private class Complex {
+        double real, imag;
+
+        Complex(double real, double imag) {
+            this.real = real;
+            this.imag = imag;
+        }
+
+        Complex add(Complex c) {
+            return new Complex(real+c.real, imag+c.imag);
+        }
+
+        Complex subtract(Complex c) {
+            return new Complex(real-c.real, imag-c.imag);
+        }
+
+        Complex multiply(Complex c) {
+            return new Complex(real*c.real-imag*c.imag, real*c.imag+imag*c.real);
+        }
+
+        Complex divide(int n) {
+            return new Complex(real/n, imag/n);
+        }
     }
 
     // Squaring
