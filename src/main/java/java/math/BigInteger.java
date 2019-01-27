@@ -2877,20 +2877,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int magLen = Math.max(a.mag.length, b.mag.length);
         int fftLen = 2 * (magLen*32+BITS_PER_FFT_POINT-1) / BITS_PER_FFT_POINT;
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
-        Complex[] aVec = a.toFFTVector(fftLen);
-        Complex[] bVec = b.toFFTVector(fftLen);
+        MutableComplex[] aVec = a.toFFTVector(fftLen);
+        MutableComplex[] bVec = b.toFFTVector(fftLen);
         fft(aVec);
         fft(bVec);
-        Complex[] cVec = multiplyPointwise(aVec, bVec);
-        ifft(cVec);
-        BigInteger c = fromFFTVector(cVec, signum);
+        multiplyPointwise(aVec, bVec);
+        ifft(aVec);
+        BigInteger c = fromFFTVector(aVec, signum);
         return c;
     }
 
     // Converts this BigInteger into an array of complex numbers suitable for an FFT.
     // fftLen must be a power of 2.
-    private Complex[] toFFTVector(int fftLen) {
-        Complex[] fftVec = new Complex[fftLen];
+    private MutableComplex[] toFFTVector(int fftLen) {
+        MutableComplex[] fftVec = new MutableComplex[fftLen];
         int fftIdx = 0;
         int magBitIdx = 0;   // next bit of the current mag element
         int magIdx = mag.length-1;
@@ -2909,17 +2909,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                         break;
                 }
             } while (fftBitIdx < BITS_PER_FFT_POINT);
-            fftVec[fftIdx] = new Complex(fftPoint, 0);
+            fftVec[fftIdx] = new MutableComplex(fftPoint, 0);
             fftIdx++;
         }
         while (fftIdx < fftLen)
-            fftVec[fftIdx++] = new Complex(0, 0);
+            fftVec[fftIdx++] = new MutableComplex(0, 0);
         return fftVec;
     }
 
     // Converts an array of complex numbers back into a BigInteger.
     // The length of the array must be a power of 2.
-    private BigInteger fromFFTVector(Complex[] fftVec, int signum) {
+    private BigInteger fromFFTVector(MutableComplex[] fftVec, int signum) {
         int fftLen = fftVec.length;
         int magLen = (fftLen*BITS_PER_FFT_POINT+31) / 32;
         int[] mag = new int[magLen];
@@ -2948,77 +2948,99 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-2 decimation-in-frequency FFT
-    private void fft(Complex[] a) {
+    private void fft(MutableComplex[] a) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
+        MutableComplex u = new MutableComplex(0, 0);
+        MutableComplex v = new MutableComplex(0, 0);
         for (int s=logN; s>=1; s--) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/2; j++){
                     double angle = -2 * Math.PI * j / m;
-                    Complex omega = new Complex(Math.cos(angle), Math.sin(angle));
-                    Complex u = a[i + j];
-                    Complex v = a[i + j + m/2];
-                    a[i + j] = u.add(v);
-                    a[i + j + m/2] = u.subtract(v).multiply(omega);
+                    MutableComplex omega = new MutableComplex(Math.cos(angle), Math.sin(angle));
+                    // u = a[i+j]*omega; v = a[i+j+m/2]
+                    a[i + j].copyTo(u);
+                    a[i + j + m/2].copyTo(v);
+                    // a[i+j] = u+v
+                    a[i + j].add(v);
+                    // a[i+j+m/2] = (u-v)*omega
+                    u.subtract(v);
+                    u.multiply(omega);
+                    u.copyTo(a[i + j + m/2]);
                 }
             }
         }
     }
 
     // Radix-2 decimation-in-time inverse FFT
-    private void ifft(Complex[] a) {
+    private void ifft(MutableComplex[] a) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
+        MutableComplex u = new MutableComplex(0, 0);
+        MutableComplex v = new MutableComplex(0, 0);
         for (int s=1; s<=logN; s++) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/2; j++) {
                     double angle = 2 * Math.PI * j / m;
-                    Complex omega = new Complex(Math.cos(angle), Math.sin(angle));
-                    Complex u = a[i + j + m/2].multiply(omega);
-                    Complex v = a[i + j];
-                    a[i + j] = v.add(u);
-                    a[i + j + m/2] = v.subtract(u);
+                    MutableComplex omega = new MutableComplex(Math.cos(angle), Math.sin(angle));
+                    // u = a[i+j+m/2]*omega; v = a[i+j]
+                    a[i + j + m/2].copyTo(u);
+                    u.multiply(omega);
+                    a[i + j].copyTo(v);
+                    // a[i+j] = v+u; a[i+j+m/2] = v-u
+                    a[i + j].add(u);
+                    v.subtract(u);
+                    v.copyTo(a[i + j + m/2]);
                 }
             }
         }
         for (int i=0; i<a.length; i++)
-            a[i] = a[i].divide(n);
+            a[i].divide(n);
     }
 
-    private Complex[] multiplyPointwise(Complex[] a, Complex[] b) {
-        Complex[] c = new Complex[a.length];
+    // The result is placed in a
+    private void multiplyPointwise(MutableComplex[] a, MutableComplex[] b) {
+        MutableComplex[] c = new MutableComplex[a.length];
         for (int i=0; i<c.length; i++)
-            c[i] = a[i].multiply(b[i]);
-        return c;
+            a[i].multiply(b[i]);
     }
 
-    private class Complex {
+    private class MutableComplex {
         double real, imag;
 
-        Complex(double real, double imag) {
+        MutableComplex(double real, double imag) {
             this.real = real;
             this.imag = imag;
         }
 
-        Complex add(Complex c) {
-            return new Complex(real+c.real, imag+c.imag);
+        void copyTo(MutableComplex c) {
+            c.real = real;
+            c.imag = imag;
         }
 
-        Complex subtract(Complex c) {
-            return new Complex(real-c.real, imag-c.imag);
+        void add(MutableComplex c) {
+            real += c.real;
+            imag += c.imag;
         }
 
-        Complex multiply(Complex c) {
-            return new Complex(real*c.real-imag*c.imag, real*c.imag+imag*c.real);
+        void subtract(MutableComplex c) {
+            real -= c.real;
+            imag -= c.imag;
         }
 
-        Complex divide(int n) {
-            return new Complex(real/n, imag/n);
+        void multiply(MutableComplex c) {
+            double temp = real;
+            real = real*c.real - imag*c.imag;
+            imag = temp*c.imag + imag*c.real;
+        }
+
+        void divide(int n) {
+            real /= n;
+            imag /= n;
         }
     }
-
     // Squaring
 
     /**
