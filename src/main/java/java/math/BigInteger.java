@@ -2875,14 +2875,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private BigInteger multiplyFFT(BigInteger a, BigInteger b) {
         int signum = a.signum * b.signum;
         int magLen = Math.max(a.mag.length, b.mag.length);
-        int fftLen = 2 * (magLen*32+BITS_PER_FFT_POINT-1) / BITS_PER_FFT_POINT;
+        int fftLen = (magLen*32+BITS_PER_FFT_POINT-1) / BITS_PER_FFT_POINT;
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen);
         MutableComplex[] bVec = b.toFFTVector(fftLen);
-        fft(aVec);
-        fft(bVec);
+
+        // calculate weights for the right-angle transform
+        MutableComplex[] weights = new MutableComplex[fftLen];
+        MutableComplex[] invWeights = new MutableComplex[fftLen];
+        for (int i=0; i<fftLen; i++) {
+            double angle = 0.5 * Math.PI * i / fftLen;
+            double cos = Math.cos(angle);
+            double sin = Math.sin(angle);
+            weights[i] = new MutableComplex(cos, sin);
+            invWeights[i] = new MutableComplex(cos, -sin);
+        }
+
+        fft(aVec, weights);
+        fft(bVec, weights);
         multiplyPointwise(aVec, bVec);
-        ifft(aVec);
+        ifft(aVec, invWeights);
         BigInteger c = fromFFTVector(aVec, signum);
         return c;
     }
@@ -2893,7 +2905,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableComplex[] fftVec = new MutableComplex[fftLen];
         int fftIdx = 0;
         int magBitIdx = 0;   // next bit of the current mag element
-        int magIdx = mag.length-1;
+        int magIdx = mag.length - 1;
         while (magIdx >= 0) {
             int fftPoint = 0;
             int fftBitIdx = 0;
@@ -2921,45 +2933,51 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     // The length of the array must be a power of 2.
     private BigInteger fromFFTVector(MutableComplex[] fftVec, int signum) {
         int fftLen = fftVec.length;
-        int magLen = (fftLen*BITS_PER_FFT_POINT+31) / 32;
+        int magLen = 2 * (fftLen*BITS_PER_FFT_POINT+31) / 32;
         int[] mag = new int[magLen];
         int magIdx = magLen - 1;
         int magBitIdx = 0;
-        int fftIdx = 0;
         long carry = 0;
-        while (fftIdx < fftLen) {
-            int fftBitIdx = 0;
-            long fftElem = Math.round(fftVec[fftIdx].real) + carry;
-            carry = fftElem >> BITS_PER_FFT_POINT;
-            fftElem &= (1<<BITS_PER_FFT_POINT) - 1;
-            do {
-                int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
-                mag[magIdx] |= (fftElem>>fftBitIdx) << magBitIdx;
-                magBitIdx += bitsToCopy;
-                fftBitIdx += bitsToCopy;
-                if (magBitIdx >= 32) {
-                    magBitIdx = 0;
-                    magIdx--;
-                }
-            } while (fftBitIdx < BITS_PER_FFT_POINT);
-            fftIdx++;
+        for (int part=0; part<=1; part++) {   // real parts=lower half of the result, imag parts=upper half
+            int fftIdx = 0;
+            while (fftIdx < fftLen) {
+                int fftBitIdx = 0;
+                long fftElem = Math.round(part==0 ? fftVec[fftIdx].real : fftVec[fftIdx].imag) + carry;
+                carry = fftElem >> BITS_PER_FFT_POINT;
+                fftElem &= (1<<BITS_PER_FFT_POINT) - 1;
+                do {
+                    int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
+                    mag[magIdx] |= (fftElem>>fftBitIdx) << magBitIdx;
+                    magBitIdx += bitsToCopy;
+                    fftBitIdx += bitsToCopy;
+                    if (magBitIdx >= 32) {
+                        magBitIdx = 0;
+                        magIdx--;
+                    }
+                } while (fftBitIdx < BITS_PER_FFT_POINT);
+                fftIdx++;
+            }
         }
         return new BigInteger(signum, mag);
     }
 
-    // Radix-2 decimation-in-frequency FFT
-    private void fft(MutableComplex[] a) {
+    // Radix-2 decimation-in-frequency right-angle transform
+    private void fft(MutableComplex[] a, MutableComplex[] weights) {
         int n = a.length;
+        // apply weights
+        for (int i=0; i<n; i++)
+            a[i].multiply(weights[i]);
+
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex u = new MutableComplex(0, 0);
         MutableComplex v = new MutableComplex(0, 0);
         for (int s=logN; s>=1; s--) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
-                for (int j=0; j<m/2; j++){
+                for (int j=0; j<m/2; j++) {
                     double angle = -2 * Math.PI * j / m;
                     MutableComplex omega = new MutableComplex(Math.cos(angle), Math.sin(angle));
-                    // u = a[i+j]*omega; v = a[i+j+m/2]
+                    // u = a[i+j]; v = a[i+j+m/2]
                     a[i + j].copyTo(u);
                     a[i + j + m/2].copyTo(v);
                     // a[i+j] = u+v
@@ -2973,9 +2991,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
     }
 
-    // Radix-2 decimation-in-time inverse FFT
-    private void ifft(MutableComplex[] a) {
+    // Radix-2 decimation-in-time inverse right-angle transform
+    private void ifft(MutableComplex[] a, MutableComplex[] weights) {
         int n = a.length;
+
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex u = new MutableComplex(0, 0);
         MutableComplex v = new MutableComplex(0, 0);
@@ -2996,8 +3015,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 }
             }
         }
-        for (int i=0; i<a.length; i++)
+        for (int i=0; i<n; i++)
             a[i].divide(n);
+
+        // apply weights
+        for (int i=0; i<n; i++)
+            a[i].multiply(weights[i]);
     }
 
     // The result is placed in a
@@ -3041,6 +3064,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             imag /= n;
         }
     }
+
     // Squaring
 
     /**
