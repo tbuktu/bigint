@@ -2880,21 +2880,40 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableComplex[] aVec = a.toFFTVector(fftLen);
         MutableComplex[] bVec = b.toFFTVector(fftLen);
 
-        // calculate weights for the right-angle transform
-        MutableComplex[] weights = new MutableComplex[fftLen];
-        MutableComplex[] invWeights = new MutableComplex[fftLen];
-        for (int i=0; i<fftLen; i++) {
-            double angle = 0.5 * Math.PI * i / fftLen;
+        // calculate twiddle factors
+        MutableComplex[] roots = new MutableComplex[fftLen/2];
+        MutableComplex[] invRoots = new MutableComplex[fftLen/2];
+        for (int i=0; i<fftLen/2; i++) {
+            double angle = -2 * Math.PI * i / fftLen;
             double cos = Math.cos(angle);
             double sin = Math.sin(angle);
+            roots[i] = new MutableComplex(cos, sin);
+            invRoots[i] = new MutableComplex(cos, -sin);
+        }
+        // calculate weights for the right-angle transform: weights[i] = 0.5*pi*i/fftLen
+        MutableComplex[] weights = new MutableComplex[fftLen];
+        MutableComplex[] invWeights = new MutableComplex[fftLen];
+        double cos = Math.cos(0.25 * Math.PI);
+        double sin = Math.sin(0.25 * Math.PI);
+        weights[0] = new MutableComplex(1, 0);
+        weights[fftLen/2] = new MutableComplex(cos, sin);
+        invWeights[0] = new MutableComplex(1, 0);
+        invWeights[fftLen/2] = new MutableComplex(sin, -cos);
+        for (int i=1; i<fftLen/2; i++) {
+            double angle = 0.5 * Math.PI * i / fftLen;
+            cos = Math.cos(angle);
+            sin = Math.sin(angle);
+            weights[i] = new MutableComplex(cos, sin);
+            weights[fftLen-i] = new MutableComplex(sin, cos);
             weights[i] = new MutableComplex(cos, sin);
             invWeights[i] = new MutableComplex(cos, -sin);
+            invWeights[fftLen-i] = new MutableComplex(sin, -cos);
         }
 
-        fft(aVec, weights);
-        fft(bVec, weights);
+        fft(aVec, roots, weights);
+        fft(bVec, roots, weights);
         multiplyPointwise(aVec, bVec);
-        ifft(aVec, invWeights);
+        ifft(aVec, invRoots, invWeights);
         BigInteger c = fromFFTVector(aVec, signum);
         return c;
     }
@@ -2962,7 +2981,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-2 decimation-in-frequency right-angle transform
-    private void fft(MutableComplex[] a, MutableComplex[] weights) {
+    private void fft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
         // apply weights
         for (int i=0; i<n; i++)
@@ -2974,9 +2993,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int s=logN; s>=1; s--) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
-                for (int j=0; j<m/2; j++) {
-                    double angle = -2 * Math.PI * j / m;
-                    MutableComplex omega = new MutableComplex(Math.cos(angle), Math.sin(angle));
+                for (int j=0; j<m/2; j++){
+                    MutableComplex omega = roots[j<<(logN-s)];
                     // u = a[i+j]; v = a[i+j+m/2]
                     a[i + j].copyTo(u);
                     a[i + j + m/2].copyTo(v);
@@ -2992,9 +3010,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-2 decimation-in-time inverse right-angle transform
-    private void ifft(MutableComplex[] a, MutableComplex[] weights) {
+    private void ifft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
-
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex u = new MutableComplex(0, 0);
         MutableComplex v = new MutableComplex(0, 0);
@@ -3002,8 +3019,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/2; j++) {
-                    double angle = 2 * Math.PI * j / m;
-                    MutableComplex omega = new MutableComplex(Math.cos(angle), Math.sin(angle));
+                    MutableComplex omega = roots[j<<(logN-s)];
                     // u = a[i+j+m/2]*omega; v = a[i+j]
                     a[i + j + m/2].copyTo(u);
                     u.multiply(omega);
