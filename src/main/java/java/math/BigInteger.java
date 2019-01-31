@@ -242,8 +242,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static final int FFT_THRESHOLD = 1000;
 
-    private static final int BITS_PER_FFT_POINT = 10;
-
     /**
      * The threshold value for using Karatsuba squaring.  If the number
      * of ints in the number are larger than this value,
@@ -2875,10 +2873,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private BigInteger multiplyFFT(BigInteger a, BigInteger b) {
         int signum = a.signum * b.signum;
         int magLen = Math.max(a.mag.length, b.mag.length);
-        int fftLen = (magLen*32+BITS_PER_FFT_POINT-1) / BITS_PER_FFT_POINT;
+        int bitsPerPoint = bitsPerFFTPoint(magLen);
+        int fftLen = (magLen*32+bitsPerPoint-1) / bitsPerPoint;
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
-        MutableComplex[] aVec = a.toFFTVector(fftLen);
-        MutableComplex[] bVec = b.toFFTVector(fftLen);
+        MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
+        MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
 
         // calculate twiddle factors
         MutableComplex[] roots = new MutableComplex[fftLen/2];
@@ -2914,13 +2913,43 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         fft(bVec, roots, weights);
         multiplyPointwise(aVec, bVec);
         ifft(aVec, invRoots, invWeights);
-        BigInteger c = fromFFTVector(aVec, signum);
+        BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
         return c;
+    }
+
+    private int bitsPerFFTPoint(int magLen) {
+        int logBitLen = 32 - Integer.numberOfLeadingZeros(magLen*32 - 1);
+        if (logBitLen <= 10)
+            return 19;
+        else if (logBitLen <= 11)
+            return 18;
+        else if (logBitLen <= 13)
+            return 17;
+        else if (logBitLen <= 15)
+            return 16;
+        else if (logBitLen <= 17)
+            return 15;
+        else if (logBitLen <= 19)
+            return 14;
+        else if (logBitLen <= 21)
+            return 13;
+        else if (logBitLen <= 22)
+            return 12;
+        else if (logBitLen <= 24)
+            return 11;
+        else if (logBitLen <= 26)
+            return 10;
+        else if (logBitLen <= 28)
+            return 9;
+        else if (logBitLen <= 30)
+            return 8;
+        else
+            return 7;
     }
 
     // Converts this BigInteger into an array of complex numbers suitable for an FFT.
     // fftLen must be a power of 2.
-    private MutableComplex[] toFFTVector(int fftLen) {
+    private MutableComplex[] toFFTVector(int fftLen, int bitsPerFFTPoint) {
         MutableComplex[] fftVec = new MutableComplex[fftLen];
         int fftIdx = 0;
         int magBitIdx = 0;   // next bit of the current mag element
@@ -2929,7 +2958,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             int fftPoint = 0;
             int fftBitIdx = 0;
             do {
-                int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
+                int bitsToCopy = Math.min(32-magBitIdx, bitsPerFFTPoint-fftBitIdx);
                 fftPoint |= ((mag[magIdx]>>magBitIdx) & ((1<<bitsToCopy)-1)) << fftBitIdx;
                 fftBitIdx += bitsToCopy;
                 magBitIdx += bitsToCopy;
@@ -2939,7 +2968,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     if (magIdx < 0)
                         break;
                 }
-            } while (fftBitIdx < BITS_PER_FFT_POINT);
+            } while (fftBitIdx < bitsPerFFTPoint);
             fftVec[fftIdx] = new MutableComplex(fftPoint, 0);
             fftIdx++;
         }
@@ -2950,9 +2979,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     // Converts an array of complex numbers back into a BigInteger.
     // The length of the array must be a power of 2.
-    private BigInteger fromFFTVector(MutableComplex[] fftVec, int signum) {
+    private BigInteger fromFFTVector(MutableComplex[] fftVec, int signum, int bitsPerFFTPoint) {
         int fftLen = fftVec.length;
-        int magLen = 2 * (fftLen*BITS_PER_FFT_POINT+31) / 32;
+        int magLen = 2 * (fftLen*bitsPerFFTPoint+31) / 32;
         int[] mag = new int[magLen];
         int magIdx = magLen - 1;
         int magBitIdx = 0;
@@ -2962,10 +2991,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             while (fftIdx < fftLen) {
                 int fftBitIdx = 0;
                 long fftElem = Math.round(part==0 ? fftVec[fftIdx].real : fftVec[fftIdx].imag) + carry;
-                carry = fftElem >> BITS_PER_FFT_POINT;
-                fftElem &= (1<<BITS_PER_FFT_POINT) - 1;
+                carry = fftElem >> bitsPerFFTPoint;
+                fftElem &= (1<<bitsPerFFTPoint) - 1;
                 do {
-                    int bitsToCopy = Math.min(32-magBitIdx, BITS_PER_FFT_POINT-fftBitIdx);
+                    int bitsToCopy = Math.min(32-magBitIdx, bitsPerFFTPoint-fftBitIdx);
                     mag[magIdx] |= (fftElem>>fftBitIdx) << magBitIdx;
                     magBitIdx += bitsToCopy;
                     fftBitIdx += bitsToCopy;
@@ -2973,7 +3002,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                         magBitIdx = 0;
                         magIdx--;
                     }
-                } while (fftBitIdx < BITS_PER_FFT_POINT);
+                } while (fftBitIdx < bitsPerFFTPoint);
                 fftIdx++;
             }
         }
