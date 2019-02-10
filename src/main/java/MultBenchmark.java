@@ -35,9 +35,9 @@ import java.util.Random;
  * Benchmark for {@link BigInteger#multiply(BigInteger)} using different input sizes.
  */
 public class MultBenchmark {
-    private static int POW10_MIN = 1;   // start with 10^1-digit numbers
-    private static int POW10_MAX = 8;   // go up to 7.5*10^8 digits
-    private static long MIN_BENCH_DURATION = 2000000000;   // in nanoseconds
+    private static int POW10_MIN = 3;   // start with 10^1-digit numbers
+    private static int POW10_MAX = 6;   // go up to 7.5*10^8 digits
+    private static long MIN_BENCH_DURATION = 5000000000L;   // in nanoseconds
 
     /**
      * @param args ignored
@@ -72,18 +72,17 @@ public class MultBenchmark {
         } while (System.nanoTime()-tStart < MIN_BENCH_DURATION);
 
         System.out.print("Benchmarking " + mag/10.0 + "E" + pow10 + " digits... ");
-        long tTotal = 0;
         tStart = System.nanoTime();
+        long tMin = Long.MAX_VALUE;
         for (int i=0; i<numIterations; i++) {
             BigInteger a = new BigInteger(numBinaryDigits, rng);
             BigInteger b = new BigInteger(numBinaryDigits, rng);
             tStart = System.nanoTime();
             a.multiply(b);
             long tEnd = System.nanoTime();
-            tTotal += tEnd - tStart;
+            tMin = Math.min(tMin, tEnd-tStart);   // in nanoseconds
         }
-        double tNano = ((double)tTotal) / numIterations;   // in nanoseconds
-        double tMilli = tNano / 1000000.0;   // in milliseconds
+        double tMilli = tMin / 1000000.0;   // in milliseconds
         System.out.printf("Time per mult: %12.5fms", tMilli);
         System.out.println();
     }
