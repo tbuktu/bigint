@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,18 +33,14 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
+import java.util.Objects;
 import java.util.Random;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 
-import sun.misc.DoubleConsts;
-import sun.misc.FloatConsts;
+import jdk.internal.math.DoubleConsts;
+import jdk.internal.math.FloatConsts;
+import jdk.internal.HotSpotIntrinsicCandidate;
 
 /**
  * Immutable arbitrary-precision integers.  All operations behave as if
@@ -56,19 +52,17 @@ import sun.misc.FloatConsts;
  * and a few other miscellaneous operations.
  *
  * <p>Semantics of arithmetic operations exactly mimic those of Java's integer
- * arithmetic operators, as defined in <i>The Java Language Specification</i>.
+ * arithmetic operators, as defined in <i>The Java&trade; Language Specification</i>.
  * For example, division by zero throws an {@code ArithmeticException}, and
  * division of a negative by a positive yields a negative (or zero) remainder.
- * All of the details in the Spec concerning overflow are ignored, as
- * BigIntegers are made as large as necessary to accommodate the results of an
- * operation.
  *
  * <p>Semantics of shift operations extend those of Java's shift operators
  * to allow for negative shift distances.  A right-shift with a negative
  * shift distance results in a left shift, and vice-versa.  The unsigned
- * right shift operator ({@code >>>}) is omitted, as this operation makes
- * little sense in combination with the "infinite word size" abstraction
- * provided by this class.
+ * right shift operator ({@code >>>}) is omitted since this operation
+ * only makes sense for a fixed sized word and not for a
+ * representation conceptually having an infinite number of leading
+ * virtual sign bits.
  *
  * <p>Semantics of bitwise logical operations exactly mimic those of Java's
  * bitwise integer operators.  The binary operators ({@code and},
@@ -88,8 +82,8 @@ import sun.misc.FloatConsts;
  * extended so that it contains the designated bit.  None of the single-bit
  * operations can produce a BigInteger with a different sign from the
  * BigInteger being operated on, as they affect only a single bit, and the
- * "infinite word size" abstraction provided by this class ensures that there
- * are infinitely many "virtual sign bits" preceding each BigInteger.
+ * arbitrarily large abstraction provided by this class ensures that conceptually
+ * there are infinitely many "virtual sign bits" preceding each BigInteger.
  *
  * <p>For the sake of brevity and clarity, pseudo-code is used throughout the
  * descriptions of BigInteger methods.  The pseudo-code expression
@@ -109,32 +103,36 @@ import sun.misc.FloatConsts;
  * +2<sup>{@code Integer.MAX_VALUE}</sup> (exclusive)
  * and may support values outside of that range.
  *
+ * An {@code ArithmeticException} is thrown when a BigInteger
+ * constructor or method would generate a value outside of the
+ * supported range.
+ *
  * The range of probable prime values is limited and may be less than
  * the full supported positive range of {@code BigInteger}.
  * The range must be at least 1 to 2<sup>500000000</sup>.
  *
  * @implNote
- * BigInteger constructors and operations throw {@code ArithmeticException} when
- * the result is out of the supported range of
+ * In the reference implementation, BigInteger constructors and
+ * operations throw {@code ArithmeticException} when the result is out
+ * of the supported range of
  * -2<sup>{@code Integer.MAX_VALUE}</sup> (exclusive) to
  * +2<sup>{@code Integer.MAX_VALUE}</sup> (exclusive).
  *
  * @see     BigDecimal
+ * @jls     4.2.2 Integer Operations
  * @author  Josh Bloch
  * @author  Michael McCloskey
  * @author  Alan Eliasen
  * @author  Timothy Buktu
- * @since JDK1.1
+ * @since 1.1
  */
 
 public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * The signum of this BigInteger: -1 for negative, 0 for zero, or
-     * 1 for positive.  Note that the BigInteger zero <i>must</i> have
+     * 1 for positive.  Note that the BigInteger zero <em>must</em> have
      * a signum of 0.  This is necessary to ensures that there is exactly one
      * representation for each BigInteger value.
-     *
-     * @serial
      */
     final int signum;
 
@@ -149,60 +147,48 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     final int[] mag;
 
-    // These "redundant fields" are initialized with recognizable nonsense
-    // values, and cached the first time they are needed (or never, if they
-    // aren't needed).
-
-     /**
-     * One plus the bitCount of this BigInteger. Zeros means unitialized.
-     *
-     * @serial
-     * @see #bitCount
-     * @deprecated Deprecated since logical value is offset from stored
-     * value and correction factor is applied in accessor method.
-     */
-    @Deprecated
-    private int bitCount;
+    // The following fields are stable variables. A stable variable's value
+    // changes at most once from the default zero value to a non-zero stable
+    // value. A stable value is calculated lazily on demand.
 
     /**
-     * One plus the bitLength of this BigInteger. Zeros means unitialized.
+     * One plus the bitCount of this BigInteger. This is a stable variable.
+     *
+     * @see #bitCount
+     */
+    private int bitCountPlusOne;
+
+    /**
+     * One plus the bitLength of this BigInteger. This is a stable variable.
      * (either value is acceptable).
      *
-     * @serial
      * @see #bitLength()
-     * @deprecated Deprecated since logical value is offset from stored
-     * value and correction factor is applied in accessor method.
      */
-    @Deprecated
-    private int bitLength;
+    private int bitLengthPlusOne;
 
     /**
-     * Two plus the lowest set bit of this BigInteger, as returned by
-     * getLowestSetBit().
+     * Two plus the lowest set bit of this BigInteger. This is a stable variable.
      *
-     * @serial
      * @see #getLowestSetBit
-     * @deprecated Deprecated since logical value is offset from stored
-     * value and correction factor is applied in accessor method.
      */
-    @Deprecated
-    private int lowestSetBit;
+    private int lowestSetBitPlusTwo;
 
     /**
      * Two plus the index of the lowest-order int in the magnitude of this
-     * BigInteger that contains a nonzero int, or -2 (either value is acceptable).
-     * The least significant int has int-number 0, the next int in order of
+     * BigInteger that contains a nonzero int. This is a stable variable. The
+     * least significant int has int-number 0, the next int in order of
      * increasing significance has int-number 1, and so forth.
-     * @deprecated Deprecated since logical value is offset from stored
-     * value and correction factor is applied in accessor method.
+     *
+     * <p>Note: never used for a BigInteger with a magnitude of zero.
+     *
+     * @see #firstNonzeroIntNum()
      */
-    @Deprecated
-    private int firstNonzeroIntNum;
+    private int firstNonzeroIntNumPlusTwo;
 
     /**
      * This mask is used to obtain the value of an int as if it were unsigned.
      */
-    final static long LONG_MASK = 0xffffffffL;
+    static final long LONG_MASK = 0xffffffffL;
 
     /**
      * This constant limits {@code mag.length} of BigIntegers to the supported
@@ -222,7 +208,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Karatsuba multiplication will be used.   This value is found
      * experimentally to work well.
      */
-    private static final int KARATSUBA_THRESHOLD = 50;
+    private static final int KARATSUBA_THRESHOLD = 80;
 
     /**
      * The threshold value for using 3-way Toom-Cook multiplication.
@@ -231,7 +217,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * the mag arrays is greater than this threshold, then Toom-Cook
      * multiplication will be used.
      */
-    private static final int TOOM_COOK_THRESHOLD = 75;
+    private static final int TOOM_COOK_THRESHOLD = 240;
 
     /**
      * The threshold value for using floating point FFT multiplication.
@@ -248,7 +234,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Karatsuba squaring will be used.   This value is found
      * experimentally to work well.
      */
-    private static final int KARATSUBA_SQUARE_THRESHOLD = 90;
+    private static final int KARATSUBA_SQUARE_THRESHOLD = 128;
 
     /**
      * The threshold value for using Toom-Cook squaring.  If the number
@@ -256,14 +242,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Toom-Cook squaring will be used.   This value is found
      * experimentally to work well.
      */
-    private static final int TOOM_COOK_SQUARE_THRESHOLD = 140;
+    private static final int TOOM_COOK_SQUARE_THRESHOLD = 216;
 
     /**
      * The threshold value for using Burnikel-Ziegler division.  If the number
      * of ints in the divisor are larger than this value, Burnikel-Ziegler
      * division may be used.  This value is found experimentally to work well.
      */
-    static final int BURNIKEL_ZIEGLER_THRESHOLD = 50;
+    static final int BURNIKEL_ZIEGLER_THRESHOLD = 80;
 
     /**
      * The offset value for using Burnikel-Ziegler division.  If the number
@@ -275,12 +261,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     static final int BURNIKEL_ZIEGLER_OFFSET = 40;
 
     /**
-     * The threshold value, in bits, for using Newton iteration when
-     * computing the reciprocal of a number.
-     */
-    private static final int NEWTON_THRESHOLD = 100;
-
-    /**
      * The threshold value for using Schoenhage recursive base conversion. If
      * the number of ints in the number are larger than this value,
      * the Schoenhage algorithm will be used.  In practice, it appears that the
@@ -288,7 +268,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * relatively flat for thresholds between 2-25, so this choice may be
      * varied within this range for very small effect.
      */
-    private static final int SCHOENHAGE_BASE_CONVERSION_THRESHOLD = 8;
+    private static final int SCHOENHAGE_BASE_CONVERSION_THRESHOLD = 20;
 
     /**
      * The threshold value for using squaring code to perform multiplication
@@ -299,31 +279,50 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final int MULTIPLY_SQUARE_THRESHOLD = 20;
 
     /**
-     * Whether we're running on a 64-bit JVM.
+     * The threshold for using an intrinsic version of
+     * implMontgomeryXXX to perform Montgomery multiplication.  If the
+     * number of ints in the number is more than this value we do not
+     * use the intrinsic.
      */
-    private static final boolean IS64BIT = "64".equals(System.getProperty("sun.arch.data.model"));
+    private static final int MONTGOMERY_INTRINSIC_THRESHOLD = 512;
+
 
     // Constructors
 
     /**
-     * Translates a byte array containing the two's-complement binary
-     * representation of a BigInteger into a BigInteger.  The input array is
+     * Translates a byte sub-array containing the two's-complement binary
+     * representation of a BigInteger into a BigInteger.  The sub-array is
+     * specified via an offset into the array and a length.  The sub-array is
      * assumed to be in <i>big-endian</i> byte-order: the most significant
-     * byte is in the zeroth element.
+     * byte is the element at index {@code off}.  The {@code val} array is
+     * assumed to be unchanged for the duration of the constructor call.
      *
-     * @param  val big-endian two's-complement binary representation of
-     *         BigInteger.
+     * An {@code IndexOutOfBoundsException} is thrown if the length of the array
+     * {@code val} is non-zero and either {@code off} is negative, {@code len}
+     * is negative, or {@code off+len} is greater than the length of
+     * {@code val}.
+     *
+     * @param  val byte array containing a sub-array which is the big-endian
+     *         two's-complement binary representation of a BigInteger.
+     * @param  off the start offset of the binary representation.
+     * @param  len the number of bytes to use.
      * @throws NumberFormatException {@code val} is zero bytes long.
+     * @throws IndexOutOfBoundsException if the provided array offset and
+     *         length would cause an index into the byte array to be
+     *         negative or greater than or equal to the array length.
+     * @since 9
      */
-    public BigInteger(byte[] val) {
-        if (val.length == 0)
+    public BigInteger(byte[] val, int off, int len) {
+        if (val.length == 0) {
             throw new NumberFormatException("Zero length BigInteger");
+        }
+        Objects.checkFromIndexSize(off, len, val.length);
 
-        if (val[0] < 0) {
-            mag = makePositive(val);
+        if (val[off] < 0) {
+            mag = makePositive(val, off, len);
             signum = -1;
         } else {
-            mag = stripLeadingZeroBytes(val);
+            mag = stripLeadingZeroBytes(val, off, len);
             signum = (mag.length == 0 ? 0 : 1);
         }
         if (mag.length >= MAX_MAG_LENGTH) {
@@ -332,10 +331,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
+     * Translates a byte array containing the two's-complement binary
+     * representation of a BigInteger into a BigInteger.  The input array is
+     * assumed to be in <i>big-endian</i> byte-order: the most significant
+     * byte is in the zeroth element.  The {@code val} array is assumed to be
+     * unchanged for the duration of the constructor call.
+     *
+     * @param  val big-endian two's-complement binary representation of a
+     *         BigInteger.
+     * @throws NumberFormatException {@code val} is zero bytes long.
+     */
+    public BigInteger(byte[] val) {
+        this(val, 0, val.length);
+    }
+
+    /**
      * This private constructor translates an int array containing the
      * two's-complement binary representation of a BigInteger into a
      * BigInteger. The input array is assumed to be in <i>big-endian</i>
-     * int-order: the most significant int is in the zeroth element.
+     * int-order: the most significant int is in the zeroth element.  The
+     * {@code val} array is assumed to be unchanged for the duration of
+     * the constructor call.
      */
     private BigInteger(int[] val) {
         if (val.length == 0)
@@ -356,24 +372,40 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Translates the sign-magnitude representation of a BigInteger into a
      * BigInteger.  The sign is represented as an integer signum value: -1 for
-     * negative, 0 for zero, or 1 for positive.  The magnitude is a byte array
-     * in <i>big-endian</i> byte-order: the most significant byte is in the
-     * zeroth element.  A zero-length magnitude array is permissible, and will
-     * result in a BigInteger value of 0, whether signum is -1, 0 or 1.
+     * negative, 0 for zero, or 1 for positive.  The magnitude is a sub-array of
+     * a byte array in <i>big-endian</i> byte-order: the most significant byte
+     * is the element at index {@code off}.  A zero value of the length
+     * {@code len} is permissible, and will result in a BigInteger value of 0,
+     * whether signum is -1, 0 or 1.  The {@code magnitude} array is assumed to
+     * be unchanged for the duration of the constructor call.
+     *
+     * An {@code IndexOutOfBoundsException} is thrown if the length of the array
+     * {@code magnitude} is non-zero and either {@code off} is negative,
+     * {@code len} is negative, or {@code off+len} is greater than the length of
+     * {@code magnitude}.
      *
      * @param  signum signum of the number (-1 for negative, 0 for zero, 1
      *         for positive).
      * @param  magnitude big-endian binary representation of the magnitude of
      *         the number.
+     * @param  off the start offset of the binary representation.
+     * @param  len the number of bytes to use.
      * @throws NumberFormatException {@code signum} is not one of the three
      *         legal values (-1, 0, and 1), or {@code signum} is 0 and
      *         {@code magnitude} contains one or more non-zero bytes.
+     * @throws IndexOutOfBoundsException if the provided array offset and
+     *         length would cause an index into the byte array to be
+     *         negative or greater than or equal to the array length.
+     * @since 9
      */
-    public BigInteger(int signum, byte[] magnitude) {
-        this.mag = stripLeadingZeroBytes(magnitude);
-
-        if (signum < -1 || signum > 1)
+    public BigInteger(int signum, byte[] magnitude, int off, int len) {
+        if (signum < -1 || signum > 1) {
             throw(new NumberFormatException("Invalid signum value"));
+        }
+        Objects.checkFromIndexSize(off, len, magnitude.length);
+
+        // stripLeadingZeroBytes() returns a zero length array if len == 0
+        this.mag = stripLeadingZeroBytes(magnitude, off, len);
 
         if (this.mag.length == 0) {
             this.signum = 0;
@@ -388,12 +420,35 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
+     * Translates the sign-magnitude representation of a BigInteger into a
+     * BigInteger.  The sign is represented as an integer signum value: -1 for
+     * negative, 0 for zero, or 1 for positive.  The magnitude is a byte array
+     * in <i>big-endian</i> byte-order: the most significant byte is the
+     * zeroth element.  A zero-length magnitude array is permissible, and will
+     * result in a BigInteger value of 0, whether signum is -1, 0 or 1.  The
+     * {@code magnitude} array is assumed to be unchanged for the duration of
+     * the constructor call.
+     *
+     * @param  signum signum of the number (-1 for negative, 0 for zero, 1
+     *         for positive).
+     * @param  magnitude big-endian binary representation of the magnitude of
+     *         the number.
+     * @throws NumberFormatException {@code signum} is not one of the three
+     *         legal values (-1, 0, and 1), or {@code signum} is 0 and
+     *         {@code magnitude} contains one or more non-zero bytes.
+     */
+    public BigInteger(int signum, byte[] magnitude) {
+         this(signum, magnitude, 0, magnitude.length);
+    }
+
+    /**
      * A constructor for internal use that translates the sign-magnitude
      * representation of a BigInteger into a BigInteger. It checks the
      * arguments and copies the magnitude so this constructor would be
-     * safe for external use.
+     * safe for external use.  The {@code magnitude} array is assumed to be
+     * unchanged for the duration of the constructor call.
      */
-    BigInteger(int signum, int[] magnitude) {
+    private BigInteger(int signum, int[] magnitude) {
         this.mag = stripLeadingZeroInts(magnitude);
 
         if (signum < -1 || signum > 1)
@@ -508,7 +563,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /*
      * Constructs a new BigInteger using a char array with radix=10.
-     * Sign is precalculated outside and not allowed in the val.
+     * Sign is precalculated outside and not allowed in the val. The {@code val}
+     * array is assumed to be unchanged for the duration of the constructor
+     * call.
      */
     BigInteger(char[] val, int sign, int len) {
         int cursor = 0, numDigits;
@@ -660,7 +717,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Constructs a randomly generated positive BigInteger that is probably
      * prime, with the specified bitLength.
      *
-     * <p>It is recommended that the {@link #probablePrime probablePrime}
+     * @apiNote It is recommended that the {@link #probablePrime probablePrime}
      * method be used in preference to this constructor unless there
      * is a compelling need to specify a certainty.
      *
@@ -1076,11 +1133,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * This private constructor is for internal use and assumes that its
-     * arguments are correct.
+     * arguments are correct.  The {@code magnitude} array is assumed to be
+     * unchanged for the duration of the constructor call.
      */
     private BigInteger(byte[] magnitude, int signum) {
         this.signum = (magnitude.length == 0 ? 0 : signum);
-        this.mag = stripLeadingZeroBytes(magnitude);
+        this.mag = stripLeadingZeroBytes(magnitude, 0, magnitude.length);
         if (mag.length >= MAX_MAG_LENGTH) {
             checkRange();
         }
@@ -1106,9 +1164,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns a BigInteger whose value is equal to that of the
-     * specified {@code long}.  This "static factory method" is
-     * provided in preference to a ({@code long}) constructor
-     * because it allows for reuse of frequently used BigIntegers.
+     * specified {@code long}.
+     *
+     * @apiNote This static factory method is provided in preference
+     * to a ({@code long}) constructor because it allows for reuse of
+     * frequently used BigIntegers.
      *
      * @param  val value of the BigInteger to return.
      * @return a BigInteger with the specified value.
@@ -1161,7 +1221,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Initialize static constant array when class is loaded.
      */
-    private final static int MAX_CONSTANT = 16;
+    private static final int MAX_CONSTANT = 16;
     private static BigInteger posConst[] = new BigInteger[MAX_CONSTANT+1];
     private static BigInteger negConst[] = new BigInteger[MAX_CONSTANT+1];
 
@@ -1179,6 +1239,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final double LOG_TWO = Math.log(2.0);
 
     static {
+        assert 0 < KARATSUBA_THRESHOLD
+            && KARATSUBA_THRESHOLD < TOOM_COOK_THRESHOLD
+            && TOOM_COOK_THRESHOLD < Integer.MAX_VALUE
+            && 0 < KARATSUBA_SQUARE_THRESHOLD
+            && KARATSUBA_SQUARE_THRESHOLD < TOOM_COOK_SQUARE_THRESHOLD
+            && TOOM_COOK_SQUARE_THRESHOLD < Integer.MAX_VALUE :
+            "Algorithm thresholds are inconsistent";
+
         for (int i = 1; i <= MAX_CONSTANT; i++) {
             int[] magnitude = new int[1];
             magnitude[0] = i;
@@ -1215,9 +1283,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     public static final BigInteger ONE = valueOf(1);
 
     /**
-     * The BigInteger constant two.  (Not exported.)
+     * The BigInteger constant two.
+     *
+     * @since   9
      */
-    private static final BigInteger TWO = valueOf(2);
+    public static final BigInteger TWO = valueOf(2);
 
     /**
      * The BigInteger constant -1.  (Not exported.)
@@ -1500,6 +1570,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return {@code this * val}
      */
     public BigInteger multiply(BigInteger val) {
+        return multiply(val, false);
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this * val)}.  If
+     * the invocation is recursive certain overflow checks are skipped.
+     *
+     * @param  val value to be multiplied by this BigInteger.
+     * @param  isRecursion whether this is a recursive invocation
+     * @return {@code this * val}
+     */
+    private BigInteger multiply(BigInteger val, boolean isRecursion) {
         if (val.signum == 0 || signum == 0)
             return ZERO;
 
@@ -1526,47 +1608,69 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         } else {
             if ((xlen < TOOM_COOK_THRESHOLD) && (ylen < TOOM_COOK_THRESHOLD)) {
                 return multiplyKaratsuba(this, val);
-//            } else if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen)) {
-//                return multiplyToomCook3(this, val);
-//            } else {
-//                return multiplySchoenhageStrassen(this, val, 1);
-//            }
             } else if (xlen < FFT_THRESHOLD || (ylen < FFT_THRESHOLD)) {
+                //
+                // In "Hacker's Delight" section 2-13, p.33, it is explained
+                // that if x and y are unsigned 32-bit quantities and m and n
+                // are their respective numbers of leading zeros within 32 bits,
+                // then the number of leading zeros within their product as a
+                // 64-bit unsigned quantity is either m + n or m + n + 1. If
+                // their product is not to overflow, it cannot exceed 32 bits,
+                // and so the number of leading zeros of the product within 64
+                // bits must be at least 32, i.e., the leftmost set bit is at
+                // zero-relative position 31 or less.
+                //
+                // From the above there are three cases:
+                //
+                //     m + n    leftmost set bit    condition
+                //     -----    ----------------    ---------
+                //     >= 32    x <= 64 - 32 = 32   no overflow
+                //     == 31    x >= 64 - 32 = 32   possible overflow
+                //     <= 30    x >= 64 - 31 = 33   definite overflow
+                //
+                // The "possible overflow" condition cannot be detected by
+                // examning data lengths alone and requires further calculation.
+                //
+                // By analogy, if 'this' and 'val' have m and n as their
+                // respective numbers of leading zeros within 32*MAX_MAG_LENGTH
+                // bits, then:
+                //
+                //     m + n >= 32*MAX_MAG_LENGTH        no overflow
+                //     m + n == 32*MAX_MAG_LENGTH - 1    possible overflow
+                //     m + n <= 32*MAX_MAG_LENGTH - 2    definite overflow
+                //
+                // Note however that if the number of ints in the result
+                // were to be MAX_MAG_LENGTH and mag[0] < 0, then there would
+                // be overflow. As a result the leftmost bit (of mag[0]) cannot
+                // be used and the constraints must be adjusted by one bit to:
+                //
+                //     m + n >  32*MAX_MAG_LENGTH        no overflow
+                //     m + n == 32*MAX_MAG_LENGTH        possible overflow
+                //     m + n <  32*MAX_MAG_LENGTH        definite overflow
+                //
+                // The foregoing leading zero-based discussion is for clarity
+                // only. The actual calculations use the estimated bit length
+                // of the product as this is more natural to the internal
+                // array representation of the magnitude which has no leading
+                // zero elements.
+                //
+                if (!isRecursion) {
+                    // The bitLength() instance method is not used here as we
+                    // are only considering the magnitudes as non-negative. The
+                    // Toom-Cook multiplication algorithm determines the sign
+                    // at its end from the two signum values.
+                    if (bitLength(mag, mag.length) +
+                        bitLength(val.mag, val.mag.length) >
+                        32L*MAX_MAG_LENGTH) {
+                        reportOverflow();
+                    }
+                }
+
                 return multiplyToomCook3(this, val);
             } else {
                 return multiplyFFT(this, val);
             }
         }
-    }
-
-    /**
-     * Multiplies {@code this} number by another using multiple threads if the
-     * numbers are sufficiently large.
-     *
-     * @param  val value to be multiplied by this BigInteger.
-     * @return {@code this * val}
-     * @see #multiply(BigInteger)
-     */
-    public BigInteger multiplyParallel(BigInteger val) {
-        return multiply(val, Runtime.getRuntime().availableProcessors()-1);
-    }
-
-    /**
-     * Multiplies {@code this} number by another using a specified number of
-     * threads if the inputs are sufficiently large.
-     *
-     * @param  val value to be multiplied by this BigInteger.
-     * @param  numThreads number of threads to use; 1 means run on the current thread
-     * @return {@code this * val}
-     * @see #multiplyParallel(BigInteger)
-     */
-    public BigInteger multiply(BigInteger val, int numThreads) {
-        int xlen = mag.length;
-        int ylen = val.mag.length;
-        if (!shouldUseSchoenhageStrassen(xlen) || !shouldUseSchoenhageStrassen(ylen))
-            return multiply(val);
-        else
-            return multiplySchoenhageStrassen(this, val, numThreads);
     }
 
     private static BigInteger multiplyByInt(int[] x, int y, int sign) {
@@ -1637,12 +1741,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Multiplies int arrays x and y to the specified lengths and places
      * the result into z. There will be no leading zeros in the resultant array.
      */
-    private int[] multiplyToLen(int[] x, int xlen, int[] y, int ylen, int[] z) {
+    private static int[] multiplyToLen(int[] x, int xlen, int[] y, int ylen, int[] z) {
+        multiplyToLenCheck(x, xlen);
+        multiplyToLenCheck(y, ylen);
+        return implMultiplyToLen(x, xlen, y, ylen, z);
+    }
+
+    @HotSpotIntrinsicCandidate
+    private static int[] implMultiplyToLen(int[] x, int xlen, int[] y, int ylen, int[] z) {
         int xstart = xlen - 1;
         int ystart = ylen - 1;
 
         if (z == null || z.length < (xlen+ ylen))
-            z = new int[xlen+ylen];
+             z = new int[xlen+ylen];
 
         long carry = 0;
         for (int j=ystart, k=ystart+1+xstart; j >= 0; j--, k--) {
@@ -1665,6 +1776,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             z[i] = (int)carry;
         }
         return z;
+    }
+
+    private static void multiplyToLenCheck(int[] array, int length) {
+        if (length <= 0) {
+            return;  // not an error because multiplyToLen won't execute if len <= 0
+        }
+
+        Objects.requireNonNull(array);
+
+        if (length > array.length) {
+            throw new ArrayIndexOutOfBoundsException(length - 1);
+        }
     }
 
     /**
@@ -1764,16 +1887,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         BigInteger v0, v1, v2, vm1, vinf, t1, t2, tm1, da1, db1;
 
-        v0 = a0.multiply(b0);
+        v0 = a0.multiply(b0, true);
         da1 = a2.add(a0);
         db1 = b2.add(b0);
-        vm1 = da1.subtract(a1).multiply(db1.subtract(b1));
+        vm1 = da1.subtract(a1).multiply(db1.subtract(b1), true);
         da1 = da1.add(a1);
         db1 = db1.add(b1);
-        v1 = da1.multiply(db1);
+        v1 = da1.multiply(db1, true);
         v2 = da1.add(a2).shiftLeft(1).subtract(a0).multiply(
-             db1.add(b2).shiftLeft(1).subtract(b0));
-        vinf = a2.multiply(b2);
+             db1.add(b2).shiftLeft(1).subtract(b0), true);
+        vinf = a2.multiply(b2, true);
 
         // The algorithm requires two divisions by 2 and one by 3.
         // All divisions are known to be exact, that is, they do not produce
@@ -1929,941 +2052,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         System.arraycopy(mag, 0, upperInts, 0, upperLen);
 
         return new BigInteger(trustedStripLeadingZeroInts(upperInts), 1);
-    }
-
-    // Schoenhage-Strassen
-
-    /**
-     * Multiplies two {@link BigInteger}s using the
-     * <a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     * Schoenhage-Strassen algorithm</a> algorithm.
-     * @param a the first factor
-     * @param b the second factor
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return a*b
-     */
-    private static BigInteger multiplySchoenhageStrassen(BigInteger a, BigInteger b, int numThreads) {
-        // remove any minus signs, multiply, then fix sign
-        int signum = a.signum() * b.signum();
-        if (a.signum() < 0)
-            a = a.negate();
-        if (b.signum() < 0)
-            b = b.negate();
-
-        int[] cArr = multiplySchoenhageStrassen(a.mag, b.mag, numThreads);
-
-        BigInteger c = new BigInteger(1, cArr);
-        if (signum < 0)
-            c = c.negate();
-
-        return c;
-    }
-
-    /**
-     * This is the core Schoenhage-Strassen method. It multiplies two <b>positive</b> numbers given as
-     * int arrays, i.e. in base 2<sup>32</sup>.
-     * Positive means an int is always interpreted as an unsigned number, regardless of the sign bit.<br/>
-     * The arrays must be ordered most significant to least significant, so the most significant digit
-     * must be at index 0.<br/>
-     * If <code>a==b</code>, the DFT for b is omitted which saves roughly 1/4 of the execution time.
-     * <p/>
-     * The Schoenhage-Strassen algorithm works as follows:
-     * <ol>
-     *   <li>Given numbers a and b, split both numbers into pieces of length 2<sup>n-1</sup> bits.
-     *       See the code for how n is calculated.</li>
-     *   <li>Take the low n+2 bits of each piece of a, zero-pad them to 3n+5 bits,
-     *       and concatenate them to a new number u.</li>
-     *   <li>Do the same for b to obtain v.</li>
-     *   <li>Calculate all pieces of gamma by multiplying u and v (using Schoenhage-Strassen or another
-     *       algorithm).</li>
-     *   <li>Split gamma into pieces of 3n+5 bits.</li>
-     *   <li>Calculate z'<sub>i</sub> = gamma<sub>i</sub> + gamma<sub>i+2*2<sup>n</sup></sub> -
-     *       gamma<sub>i+2<sup>n</sup></sub> - gamma<sub>i+3*2<sup>n</sup></sub> and reduce modulo
-     *       2<sup>n+2</sup>.<br/>
-     *       z'<sub>i</sub> will be the i-th piece of a*b mod 2<sup>n+2</sup>.</li>
-     *   <li>Pad the pieces of a and b from step 1 to 2<sup>n</sup>+1 bits.</li>
-     *   <li>Perform a
-     *       <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
-     *       Discrete Fourier Transform</a> (DFT) on the padded pieces.</li>
-     *   <li>Calculate all pieces of z" by multiplying the i-th piece of a by the i-th piece of b.</li>
-     *   <li>Perform an Inverse Discrete Fourier Transform (IDFT) on z". z" will contain all pieces of
-     *       a*b mod F<sub>n</sub> where F<sub>n</sub>=2<sup>2<sup>n</sup></sup>+1.</li>
-     *   <li>Calculate all pieces of z such that each piece is congruent to z' modulo 2<sup>n+2</sup> and congruent to
-     *       z" modulo F<sub>n</sub>. This is done using the
-     *       <a href="http://en.wikipedia.org/wiki/Chinese_remainder_theorem">Chinese remainder theorem</a>.</li>
-     *   <li>Calculate c by adding z<sub>i</sub> * 2<sup>i*2<sup>n-1</sup></sup> for all i, where z<sub>i</sub> is the
-     *       i-th piece of z.</li>
-     *   <li>Return c reduced modulo 2<sup>2<sup>m</sup></sup>+1. See the code for how m is calculated.</li>
-     * </ol>
-     *
-     * References:
-     * <ol>
-     *   <li><a href="http://en.wikipedia.org/wiki/Sch%C3%B6nhage%E2%80%93Strassen_algorithm">
-     *       Wikipedia article</a>
-     *   <li><a href="http://www.scribd.com/doc/68857222/Schnelle-Multiplikation-gro%C3%9Fer-Zahlen">
-     *       Arnold Schoenhage und Volker Strassen: Schnelle Multiplikation grosser Zahlen, Computing 7, 1971,
-     *       Springer-Verlag, S. 281-292</a></li>
-     *   <li><a href="http://malte-leip.net/beschreibung_ssa.pdf">Eine verstaendliche Beschreibung des
-     *       Schoenhage-Strassen-Algorithmus</a></li>
-     *   <li><a href="http://www.loria.fr/~gaudry/publis/issac07.pdf">A GMP-based Implementation of
-     *       Schoenhage-Strassen's Large Integer Multiplication Algorithm</a></li>
-     * </ol>
-     * @param a
-     * @param b
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return a*b
-     */
-    private static int[] multiplySchoenhageStrassen(int[] a, int[] b, int numThreads) {
-        boolean square = a == b;
-
-        // set M to the number of binary digits in a or b, whichever is greater
-        int M = Math.max(a.length*32, b.length*32);
-
-        // find the lowest m such that m>=log2(2M)
-        int m = 32 - Integer.numberOfLeadingZeros(2*M-1-1);
-
-        int n = m/2 + 1;
-
-        // split a and b into pieces 1<<(n-1) bits long; assume n>=6 so pieces start and end at int boundaries
-        boolean even = m%2 == 0;
-        int numPieces = even ? 1<<n : 1<<(n+1);
-        int pieceSize = 1 << (n-1-5);   // in ints
-
-        // zi mod 2^(n+2): build u and v from a and b, allocating 3n+5 bits in u and v per n+2 bits from a and b, resp.
-        int numPiecesA = (a.length+pieceSize) / pieceSize;
-        int[] u = new int[(numPiecesA*(3*n+5)+31)/32];
-        int uBitLength = 0;
-        for (int i=0; i<numPiecesA && i*pieceSize<a.length; i++) {
-            appendBits(u, uBitLength, a, i*pieceSize, n+2);
-            uBitLength += 3*n+5;
-        }
-        int[] gamma;
-        if (square)
-            gamma = new BigInteger(1, u).square(numThreads).mag;   // gamma = u * u
-        else {
-            int numPiecesB = (b.length+pieceSize) / pieceSize;
-            int[] v = new int[(numPiecesB*(3*n+5)+31)/32];
-            int vBitLength = 0;
-            for (int i=0; i<numPiecesB && i*pieceSize<b.length; i++) {
-                appendBits(v, vBitLength, b, i*pieceSize, n+2);
-                vBitLength += 3*n+5;
-            }
-            gamma = new BigInteger(1, u).multiply(new BigInteger(1, v), numThreads).mag;   // gamma = u * v
-        }
-        int[][] gammai = splitBits(gamma, 3*n+5);
-        int halfNumPcs = numPieces / 2;
-
-        int[][] zi = new int[gammai.length][];
-        for (int i=0; i<gammai.length; i++)
-            zi[i] = gammai[i];
-        for (int i=0; i<gammai.length-halfNumPcs; i++)
-            subModPow2(zi[i], gammai[i+halfNumPcs], n+2);
-        for (int i=0; i<gammai.length-2*halfNumPcs; i++)
-            addModPow2(zi[i], gammai[i+2*halfNumPcs], n+2);
-        for (int i=0; i<gammai.length-3*halfNumPcs; i++)
-            subModPow2(zi[i], gammai[i+3*halfNumPcs], n+2);
-
-        // zr mod Fn
-        MutableModFn[] ai = split(a, halfNumPcs, pieceSize, (1<<(n-6))+1);   // assume n>=6
-        MutableModFn[] bi = null;
-        if (!square)
-            bi = split(b, halfNumPcs, pieceSize, (1<<(n-6))+1);
-        int omega = even ? 4 : 2;
-        if (square) {
-            dft(ai, omega, numThreads);
-            squareElements(ai, numThreads);
-        }
-        else {
-            dft(ai, omega, numThreads);
-            dft(bi, omega, numThreads);
-            multiplyElements(ai, bi, numThreads);
-        }
-        MutableModFn[] c = ai;
-        idft(c, omega, numThreads);
-        int[][] cInt = toIntArray(c);
-
-        int[] z = new int[(1<<(m-5))+1];
-        // calculate zr mod Fm from zr mod Fn and zr mod 2^(n+2), then add to z
-        // note: z is an int[] rather than a MutableBigInteger because MBI.addShifted() seems to be much slower than BI.addShifted()
-        for (int i=0; i<halfNumPcs; i++) {
-            int[] eta = i>=zi.length ? new int[(n+2+31)/32] : zi[i];
-
-            // zi = delta = (zi-c[i]) % 2^(n+2)
-            subModPow2(eta, cInt[i], n+2);
-
-            // z += zr<<shift = [ci + delta*(2^2^n+1)] << [i*2^(n-1)]
-            int shift = i*(1<<(n-1-5));   // assume n>=6
-            addShifted(z, cInt[i], shift);
-            addShifted(z, eta, shift);
-            addShifted(z, eta, shift+(1<<(n-5)));
-        }
-
-        MutableModFn.reduce(z);   // assume m>=5
-        return z;
-    }
-
-    /**
-     * Estimates whether SS will be more efficient than the other methods when multiplying two numbers
-     * of a given length in ints.
-     * @param length the number of ints in each of the two factors
-     * @return <code>true</code> if SS will be more efficient, <code>false</code> if Toom-Cook will be more efficient
-     */
-    private static boolean shouldUseSchoenhageStrassen(int length) {
-        if (IS64BIT) {
-            // The following values were determined experimentally on a 64-bit JVM.
-            // SS is slower than Toom-Cook below ~2,000 ints (~19,300 decimal digits)
-            // and faster above ~8,700 ints (~84,000 decimal digits).
-            // Between those values, it changes several times.
-            if (length <= 2000)
-                return false;
-            if (length <= 2048)   // 2^11
-                return true;
-            if (length <= 3120)
-                return false;
-            if (length <= 4096)   // 2^12
-                return true;
-            if (length <= 5232)
-                return false;
-            if (length <= 8192)   // 2^13
-                return true;
-            if (length <= 8720)
-                return false;
-            return true;
-        } else {
-            // The following values were determined experimentally on a 32-bit JVM.
-            // SS is slower than Toom-Cook below ~3,500 ints (~33,800 decimal digits)
-            // and faster above ~9,600 ints (~92,900 decimal digits).
-            // Between those values, it changes several times.
-            if (length <= 3504)
-                return false;
-            if (length <= 4096)   // 2^12
-                return true;
-            if (length <= 5968)
-                return false;
-            if (length <= 8192)   // 2^13
-                return true;
-            if (length <= 9648)
-                return false;
-            return true;
-        }
-    }
-
-    /**
-     * Performs a modified
-     * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
-     * Discrete Fourier Transform</a> (a Fermat Number Transform, to be more precise) on an array whose elements
-     * are <code>int</code> arrays.<br/>
-     * The modification is that the first step is omitted because only the upper half of the result is needed.<br/>
-     * <code>A</code> is assumed to be the lower half of the full array and the upper half is assumed to be all zeros.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void dft(MutableModFn[] A, int omega, int numThreads) {
-        if (numThreads > 1)
-            try {
-                dftParallel(A, omega, numThreads);
-            } catch (InterruptedException | ExecutionException e) {
-                throw new ArithmeticException(e.getLocalizedMessage());
-            }
-        else
-            dftSequential(A, omega);
-    }
-
-    /**
-     * Performs a single-threaded DFT on {@code A}.
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     */
-    private static void dftSequential(MutableModFn[] A, int omega) {
-        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
-        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
-        int cols = A.length / rows;   // number of columns
-
-        // step 1: perform an DFT on each column, that is, on the vector
-        // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
-        for (int i=0; i<cols; i++)
-            dftDirect(A, omega, rows, rows, cols, i, cols);
-
-        // step 2: multiply by powers of omega
-        applyDftWeights(A, omega, rows, cols);
-
-        // step 3 is built into step 1 by making the stride length a multiple of the row length
-
-        // step 4: perform an DFT on each row, that is, on the vector
-        // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
-        for (int i=0; i<rows; i++)
-            dftDirect(A, omega, cols, 0, rows, i*cols, 1);
-    }
-
-    /**
-     * Performs a multithreaded DFT on {@code A}.
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void dftParallel(final MutableModFn[] A, final int omega, int numThreads) throws InterruptedException, ExecutionException {
-        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
-        final int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
-        final int cols = A.length / rows;   // number of columns
-
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-
-        // step 1: perform an DFT on each column
-        Collection<Future<?>> pending = new ArrayList<>();
-        for (int i=0; i<cols; i++) {
-            final int colIdx = i;
-            Future<?> future = executor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    dftDirect(A, omega, rows, rows, cols, colIdx, cols);
-                }
-            });
-            pending.add(future);
-        }
-        for (Future<?> future: pending)
-            future.get();
-
-        // step 2: multiply by powers of omega
-        applyDftWeights(A, omega, rows, cols);
-
-        // step 3 is built into step 1 by making the stride length a multiple of the row length
-
-        // step 4: perform an DFT on each row
-        pending = new ArrayList<>();
-        for (int i=0; i<rows; i++) {
-            final int rowIdx = i;
-            Future<?> future = executor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    dftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
-                }
-            });
-            pending.add(future);
-        }
-        for (Future<?> future: pending)
-            future.get();
-
-        executor.shutdown();
-    }
-
-    /**
-     * Performs a DFT on {@code A}.
-     * This implementation uses the radix-4 technique which combines two levels of butterflies.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param expOffset value to add to the array index when computing the exponent
-     * @param expScale factor by which to multiply the exponent
-     * @param len number of elements to transform
-     * @param idxOffset value to add to the array index when accessing elements of {@code A}
-     * @param stride stride length
-     */
-    private static void dftDirect(MutableModFn[] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
-        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
-        int v = 1;   // v starts at 1 rather than 0 for the same reason
-        MutableModFn d = new MutableModFn(A[0].digits.length);
-
-        int slen = len / 2;
-        while (slen > 1) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
-            for (int j=0; j<len; j+=2*slen) {
-                int x1 = getDftExponent(n, v+1, j+expOffset, omega) * expScale;        // for level v+2
-                int x2 = getDftExponent(n, v, j+expOffset, omega) * expScale;          // for level v+1
-                int x3 = getDftExponent(n, v+1, j+slen+expOffset, omega) * expScale;   // for level v+2
-
-                // stride length = stride*slen elements
-                int idx0 = stride*j + idxOffset;
-                int idx1 = stride*j + stride*slen/2 + idxOffset;
-                int idx2 = idx0 + stride*slen;
-                int idx3 = idx1 + stride*slen;
-
-                for (int k=slen-1; k>=0; k-=2) {
-                    // do level v+1
-                    A[idx2].shiftLeft(x2, d);
-                    A[idx0].copyTo(A[idx2]);
-                    A[idx0].add(d);
-                    A[idx2].subtract(d);
-
-                    A[idx3].shiftLeft(x2, d);
-                    A[idx1].copyTo(A[idx3]);
-                    A[idx1].add(d);
-                    A[idx3].subtract(d);
-
-                    // do level v+2
-                    A[idx1].shiftLeft(x1, d);
-                    A[idx0].copyTo(A[idx1]);
-                    A[idx0].add(d);
-                    A[idx1].subtract(d);
-
-                    A[idx3].shiftLeft(x3, d);
-                    A[idx2].copyTo(A[idx3]);
-                    A[idx2].add(d);
-                    A[idx3].subtract(d);
-
-                    idx0 += stride;
-                    idx1 += stride;
-                    idx2 += stride;
-                    idx3 += stride;
-                }
-            }
-
-            v += 2;
-            slen /= 4;
-        }
-
-        // if there is an odd number of levels, do the remaining one now
-        if (slen > 0)
-            for (int j=0; j<len; j+=2*slen) {
-                int x = getDftExponent(n, v, j+expOffset, omega) * expScale;
-                int idx = stride*j + idxOffset;
-                int idx2 = idx + stride*slen;   // stride length = stride*slen elements
-
-                for (int k=slen-1; k>=0; k--) {
-                    A[idx2].shiftLeft(x, d);
-                    A[idx].copyTo(A[idx2]);
-                    A[idx].add(d);
-                    A[idx2].subtract(d);
-                    idx += stride;
-                    idx2 += stride;
-                }
-            }
-    }
-
-    /**
-     * Returns the power to which to raise omega in a DFT.<br/>
-     * When <code>omega</code>=4, this method doubles the exponent so
-     * <code>omega</code> can be assumed always to be 2 in the
-     * {@code dftDirect} and {@code idftDirect} methods.
-     * @param n the log of the DFT length
-     * @param v butterfly depth
-     * @param idx index of the array element to be computed
-     * @param omega root of unity, can be 2 or 4
-     * @return
-     */
-    private static int getDftExponent(int n, int v, int idx, int omega) {
-        // x = 2^(n-1-v) * s, where s is the v (out of n) high bits of idx in reverse order
-        int x = Integer.reverse(idx >>> (n-v)) >>> (32-v);
-        x <<= n - v - 1;
-
-        // if omega=4, double the shift amount
-        if (omega == 4)
-            x *= 2;
-
-        return x;
-    }
-
-    /**
-     * Multiplies vector elements by powers of omega (aka twiddle factors). Used by Bailey's algorithm.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param rows number of matrix rows
-     * @param cols number of matrix columns
-     */
-    private static void applyDftWeights(MutableModFn[] A, int omega, int rows, int cols) {
-        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
-
-        for (int i=0; i<rows; i++)
-            for (int j=0; j<cols; j++) {
-                int idx = i*cols + j;
-                MutableModFn temp = new MutableModFn(A[idx].digits.length);
-                int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
-                if (omega == 4)
-                    shiftAmt *= 2;
-                A[idx].shiftLeft(shiftAmt, temp);
-                System.arraycopy(temp.digits, 0, A[idx].digits, 0, temp.digits.length);
-            }
-    }
-
-    private static int getBaileyShiftAmount(int i, int j, int rows, int v) {
-        int iRev = Integer.reverse(i+rows) >>> (32-v);
-        return iRev * j;
-    }
-
-    /**
-     * Performs a modified
-     * <a href="http://en.wikipedia.org/wiki/Discrete_Fourier_transform_%28general%29#Number-theoretic_transform">
-     * Inverse Fermat Number Transform</a> on an array whose elements are <code>int</code> arrays.
-     * The modification is that the last step (the one where the upper half is subtracted from the lower half)
-     * is omitted.<br/>
-     * <code>A</code> is assumed to be the upper half of the full array and the lower half is assumed to be all zeros.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void idft(MutableModFn[] A, int omega, int numThreads) {
-        if (numThreads > 1)
-            try {
-                idftParallel(A, omega, numThreads);
-            } catch (InterruptedException | ExecutionException e) {
-                throw new ArithmeticException(e.getLocalizedMessage());
-            }
-        else
-            idftSequential(A, omega);
-    }
-
-    /**
-     * Performs a single-threaded IDFT on {@code A}.
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     */
-    private static void idftSequential(MutableModFn[] A, int omega) {
-        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
-        int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
-        int cols = A.length / rows;   // number of columns
-
-        // step 1: perform an IDFT on each row, that is, on the vector
-        // A[rowIdx*cols], A[rowIdx*cols+1], ..., A[rowIdx*cols+cols-1].
-        for (int i=0; i<rows; i++)
-            idftDirect(A, omega, cols, 0, rows, i*cols, 1);
-
-        // step 2: multiply by powers of omega
-        applyIdftWeights(A, omega, rows, cols);
-
-        // step 3 is built into step 4 by making the stride length a multiple of the row length
-
-        // step 4: perform an IDFT on each column, that is, on the vector
-        // A[colIdx], A[colIdx+cols], A[colIdx+2*cols], ..., A[colIdx+(rows-1)*cols].
-        for (int i=0; i<cols; i++)
-            idftDirect(A, omega, rows, rows, cols, i, cols);
-    }
-
-    /**
-     * Performs a multithreaded IDFT on {@code A}.
-     * This implementation uses <a href="http://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf">
-     * Bailey's 4-step algorithm</a>.
-     * @param A the vector to transform
-     * @param omega root of unity, can be 2 or 4
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void idftParallel(final MutableModFn[] A, final int omega, int numThreads) throws InterruptedException, ExecutionException {
-        // arrange the elements of A in a matrix roughly sqrt(A.length) by sqrt(A.length) in size
-        final int rows = 1 << ((31-Integer.numberOfLeadingZeros(A.length))/2);   // number of rows
-        final int cols = A.length / rows;   // number of columns
-
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-
-        // step 1: perform an IDFT on each row
-        Collection<Future<?>> pending = new ArrayList<>();
-        for (int i=0; i<rows; i++) {
-            final int rowIdx = i;
-            Future<?> future = executor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    idftDirect(A, omega, cols, 0, rows, rowIdx*cols, 1);
-                }
-            });
-            pending.add(future);
-        }
-        for (Future<?> future: pending)
-            future.get();
-
-        // step 2: multiply by powers of omega
-        applyIdftWeights(A, omega, rows, cols);
-
-        // step 3 is built into step 4 by making the stride length a multiple of the row length
-        // step 4: perform an IDFT on each column
-        pending = new ArrayList<>();
-        for (int i=0; i<cols; i++) {
-            final int colIdx = i;
-            Future<?> future = executor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    idftDirect(A, omega, rows, rows, cols, colIdx, cols);
-                }
-            });
-            pending.add(future);
-        }
-        for (Future<?> future: pending)
-            future.get();
-
-        executor.shutdown();
-    }
-
-    /** This implementation uses the radix-4 technique which combines two levels of butterflies. */
-    private static void idftDirect(MutableModFn[] A, int omega, int len, int expOffset, int expScale, int idxOffset, int stride) {
-        int n = 31 - Integer.numberOfLeadingZeros(2*len);   // multiply by 2 because we're doing a half DFT and we need the n that corresponds to the full DFT length
-        int v = 31 - Integer.numberOfLeadingZeros(len);
-        MutableModFn c = new MutableModFn(A[0].digits.length);
-
-        int slen = 1;
-        while (slen <= len/4) {   // slen = #consecutive coefficients for which the sign (add/sub) and x are constant
-            for (int j=0; j<len; j+=4*slen) {
-                int x1 = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;          // for level v
-                int x2 = getDftExponent(n, v-1, j+expOffset, omega)*expScale + 1;        // for level v-1
-                int x3 = getDftExponent(n, v, j+slen*2+expOffset, omega)*expScale + 1;   // for level v
-
-                // stride length = stride*slen elements
-                int idx0 = stride*j + idxOffset;
-                int idx1 = stride*j + stride*slen + idxOffset;
-                int idx2 = idx0 + stride*slen*2;
-                int idx3 = idx1 + stride*slen*2;
-
-                for (int k=slen-1; k>=0; k--) {
-                    // do level v
-                    A[idx0].copyTo(c);
-                    A[idx0].add(A[idx1]);
-                    A[idx0].shiftRight(1, A[idx0]);
-                    c.subtract(A[idx1]);
-                    c.shiftRight(x1, A[idx1]);
-
-                    A[idx2].copyTo(c);
-                    A[idx2].add(A[idx3]);
-                    A[idx2].shiftRight(1, A[idx2]);
-                    c.subtract(A[idx3]);
-                    c.shiftRight(x3, A[idx3]);
-
-                    // do level v-1
-                    A[idx0].copyTo(c);
-                    A[idx0].add(A[idx2]);
-                    A[idx0].shiftRight(1, A[idx0]);
-                    c.subtract(A[idx2]);
-                    c.shiftRight(x2, A[idx2]);
-
-                    A[idx1].copyTo(c);
-                    A[idx1].add(A[idx3]);
-                    A[idx1].shiftRight(1, A[idx1]);
-                    c.subtract(A[idx3]);
-                    c.shiftRight(x2, A[idx3]);
-
-                    idx0 += stride;
-                    idx1 += stride;
-                    idx2 += stride;
-                    idx3 += stride;
-                }
-            }
-
-            v -= 2;
-            slen *= 4;
-        }
-
-        // if there is an odd number of levels, do the remaining one now
-        if (slen <= len/2)
-            for (int j=0; j<len; j+=2*slen) {
-                int x = getDftExponent(n, v, j+expOffset, omega)*expScale + 1;
-                int idx = stride*j + idxOffset;
-                int idx2 = idx + stride*slen;   // stride length = stride*slen elements
-
-                for (int k=slen-1; k>=0; k--) {
-                    A[idx].copyTo(c);
-                    A[idx].add(A[idx2]);
-                    A[idx].shiftRight(1, A[idx]);
-
-                    c.subtract(A[idx2]);
-                    c.shiftRight(x, A[idx2]);
-                    idx += stride;
-                    idx2 += stride;
-                }
-            }
-    }
-
-    /** Divides vector elements by powers of omega (aka twiddle factors) */
-    private static void applyIdftWeights(MutableModFn[] A, int omega, int rows, int cols) {
-        int v = 31 - Integer.numberOfLeadingZeros(rows) + 1;
-
-        for (int i=0; i<rows; i++)
-            for (int j=0; j<cols; j++) {
-                int idx = i*cols + j;
-                MutableModFn temp = new MutableModFn(A[idx].digits.length);
-                int shiftAmt = getBaileyShiftAmount(i, j, rows, v);
-                if (omega == 4)
-                    shiftAmt *= 2;
-                A[idx].shiftRight(shiftAmt, temp);
-                temp.copyTo(A[idx]);
-            }
-    }
-
-    private static int[][] toIntArray(MutableModFn[] a) {
-        int[][] aInt = new int[a.length][];
-        for(int i=0;i<a.length;i++)
-            aInt[i] = MutableModFn.toIntArrayOdd(a[i].digits);
-        return aInt;
-    }
-
-    /**
-     * Calls {@code multiply()} for each element of <code>a</code> and <code>b</code> and
-     * places the result into <code>a</code>, i.e., <code>a[i]</code> becomes
-     * <code>a[i]*b[i]</code> for all <code>i</code>.
-     * @param a
-     * @param b an array of the same length as <code>a</code>
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void multiplyElements(final MutableModFn[] a, final MutableModFn[] b, int numThreads) {
-        if (numThreads > 1) {
-            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Collection<Future<?>> pending = new ArrayList<>();
-            for (int i=0; i<numThreads; i++) {
-                final int fromIdx = a.length * i / numThreads;
-                final int toIdx = a.length * (i+1) / numThreads;
-                Future<?> future = executor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        for (int idx=fromIdx; idx<toIdx; idx++)
-                            a[idx].multiply(b[idx]);
-                    }
-                });
-                pending.add(future);
-            }
-            executor.shutdown();
-            try {
-                for (Future<?> future: pending)
-                    future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new ArithmeticException(e.getLocalizedMessage());
-            }
-        }
-        else
-            for (int i=0; i<a.length; i++)
-                a[i].multiply(b[i]);
-    }
-
-    /**
-     * Calls {@code square()} for each element of <code>a</code> and places the result into
-     * <code>a</code>, i.e., <code>a[i]</code> becomes <code>a[i]<sup>2</sup></code> for all
-     * <code>i</code>.
-     * @param a
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     */
-    private static void squareElements(final MutableModFn[] a, int numThreads) {
-        if (numThreads > 1) {
-            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Collection<Future<?>> pending = new ArrayList<>();
-            for (int i=0; i<numThreads; i++) {
-                final int fromIdx = a.length * i / numThreads;
-                final int toIdx = a.length * (i+1) / numThreads;
-                Future<?> future = executor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        for (int idx=fromIdx; idx<toIdx; idx++)
-                            a[idx].square();
-                    }
-                });
-                pending.add(future);
-            }
-            executor.shutdown();
-            try {
-                for (Future<?> future: pending)
-                    future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new ArithmeticException(e.getLocalizedMessage());
-            }
-        }
-        else
-            for (int i=0; i<a.length; i++)
-                a[i].square();
-    }
-
-    /**
-     * Adds two numbers, <code>a</code> and <code>b</code>, after shifting <code>b</code> by
-     * <code>numElements</code> elements.<br/>
-     * Both numbers are given as <code>int</code> arrays and must be <b>positive</b> numbers
-     * (meaning they are interpreted as unsigned).<br/>
-     * The result is returned in the first argument.
-     * If any elements of b are shifted outside the valid range for <code>a</code>, they are dropped.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit
-     * @param numElements
-     */
-    private static void addShifted(int[] a, int[] b, int numElements) {
-        boolean carry = false;
-        int aIdx = a.length - 1 - numElements;
-        int bIdx = b.length - 1;
-        int i = Math.min(aIdx, bIdx);
-        while (i >= 0) {
-            int ai = a[aIdx];
-            int sum = ai + b[bIdx];
-            if (carry)
-                sum++;
-            carry = ((sum>>>31) < (ai>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
-            a[aIdx] = sum;
-            i--;
-            aIdx--;
-            bIdx--;
-        }
-        while (carry && aIdx>=0) {
-            a[aIdx]++;
-            carry = a[aIdx] == 0;
-            aIdx--;
-        }
-    }
-
-    /**
-     * Adds two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>numBits</sup>.
-     * Both input values are given as <code>int</code> arrays.
-     * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit
-     */
-    private static void addModPow2(int[] a, int[] b, int numBits) {
-        int numElements = (numBits+31) / 32;
-        boolean carry = false;
-        int i;
-        int aIdx = a.length - 1;
-        int bIdx = b.length - 1;
-        for (i=numElements-1; i>=0; i--) {
-            int sum = a[aIdx] + b[bIdx];
-            if (carry)
-                sum++;
-            carry = ((sum>>>31) < (a[aIdx]>>>31)+(b[bIdx]>>>31));   // carry if signBit(sum) < signBit(a)+signBit(b)
-            a[aIdx] = sum;
-            aIdx--;
-            bIdx--;
-        }
-        if (numElements > 0)
-            a[aIdx+1] &= -1 >>> (32-(numBits%32));
-        for (; aIdx>=0; aIdx--)
-            a[aIdx] = 0;
-    }
-
-    /**
-     * Subtracts two <b>positive</b> numbers (meaning they are interpreted as unsigned) modulo 2<sup>numBits</sup>.
-     * Both input values are given as <code>int</code> arrays.
-     * The result is returned in the first argument.
-     * @param a a number in base 2<sup>32</sup> starting with the highest digit
-     * @param b a number in base 2<sup>32</sup> starting with the highest digit
-     */
-    private static void subModPow2(int[] a, int[] b, int numBits) {
-        int numElements = (numBits+31) / 32;
-        boolean carry = false;
-        int i;
-        int aIdx = a.length - 1;
-        int bIdx = b.length - 1;
-        for (i=numElements-1; i>=0; i--) {
-            int diff = a[aIdx] - b[bIdx];
-            if (carry)
-                diff--;
-            carry = ((diff>>>31) > (a[aIdx]>>>31)-(b[bIdx]>>>31));   // carry if signBit(diff) > signBit(a)-signBit(b)
-            a[aIdx] = diff;
-            aIdx--;
-            bIdx--;
-        }
-        if (numElements > 0)
-            a[aIdx+1] &= -1 >>> (32-(numBits%32));
-        for (; aIdx>=0; aIdx--)
-            a[aIdx] = 0;
-    }
-
-    /**
-     * Reads <code>bBitLength</code> bits from <code>b</code>, starting at array index
-     * <code>bStart</code>, and copies them into <code>a</code>, starting at bit
-     * <code>aBitLength</code>. The result is returned in <code>a</code>.
-     * @param a
-     * @param aBitLength
-     * @param b
-     * @param bStart
-     * @param bBitLength
-     */
-    private static void appendBits(int[] a, int aBitLength, int[] b, int bStart, int bBitLength) {
-        int aIdx = a.length - 1 - aBitLength/32;
-        int bit32 = aBitLength % 32;
-
-        int bIdx = b.length - 1 - bStart;
-        int bIdxStop = bIdx - bBitLength/32;
-        while (bIdx > bIdxStop) {
-            if (bit32 > 0) {
-                a[aIdx] |= b[bIdx] << bit32;
-                aIdx--;
-                a[aIdx] = b[bIdx] >>> (32-bit32);
-            }
-            else {
-                a[aIdx] = b[bIdx];
-                aIdx--;
-            }
-            bIdx--;
-        }
-
-        if (bBitLength%32 > 0) {
-            int bi = b[bIdx];
-            bi &= -1 >>> (32-bBitLength%32);
-            a[aIdx] |= bi << bit32;
-            if (bit32+(bBitLength%32) > 32)
-                a[aIdx-1] = bi >>> (32-bit32);
-        }
-    }
-
-    /**
-     * Divides an <code>int</code> array into pieces <code>bitLength</code> bits long.
-     * @param a
-     * @param bitLength
-     * @return a new array containing <code>bitLength</code> bits from <code>a</code> in each subarray
-     */
-    private static int[][] splitBits(int[] a, int bitLength) {
-        int aIntIdx = a.length - 1;
-        int aBitIdx = 0;
-        int numPieces = (a.length*32+bitLength-1) / bitLength;
-        int pieceLength = (bitLength+31) / 32;   // in ints
-        int[][] b = new int[numPieces][pieceLength];
-        for (int i=0; i<b.length; i++) {
-            int bitsRemaining = Math.min(bitLength, a.length*32-i*bitLength);
-            int bIntIdx = bitLength / 32;
-            if (bitLength%32 == 0)
-                bIntIdx--;
-            int bBitIdx = 0;
-            while (bitsRemaining > 0) {
-                int bitsToCopy = Math.min(32-aBitIdx, 32-bBitIdx);
-                bitsToCopy = Math.min(bitsRemaining, bitsToCopy);
-                int mask = a[aIntIdx] >>> aBitIdx;
-                mask &= -1 >>> (32-bitsToCopy);
-                mask <<= bBitIdx;
-                b[i][bIntIdx] |= mask;
-                bitsRemaining -= bitsToCopy;
-                aBitIdx += bitsToCopy;
-                if (aBitIdx >= 32) {
-                    aBitIdx -= 32;
-                    aIntIdx--;
-                }
-                bBitIdx += bitsToCopy;
-                if (bBitIdx >= 32) {
-                    bBitIdx -= 32;
-                    bIntIdx--;
-                }
-            }
-        }
-        return b;
-    }
-
-    /**
-     * Splits an <code>int</code> array into pieces of <code>pieceSize longs</code> each,
-     * pads each piece to <code>targetPieceSize longs</code>, and wraps it in a {@link MutableModFn}
-     * (this implies <code>targetPieceSize</code>=2<sup>k</sup>+1 for some k).
-     * @param a the input array
-     * @param numPieces the number of pieces to split the array into
-     * @param sourcePieceSize the size of each piece in the input array in <code>ints</code>
-     * @param targetPieceSize the size of each <code>MutableModFn</code> in the output array in <code>longs</code>
-     * @return an array of length <code>numPieces</code> containing {@link MutableModFn}s of length <code>targetPieceSize longs</code> each
-     */
-    private static MutableModFn[] split(int[] a, int numPieces, int sourcePieceSize, int targetPieceSize) {
-        MutableModFn[] ai = new MutableModFn[numPieces];
-        int aIdx = a.length - sourcePieceSize;
-        int pieceIdx = 0;
-        while (aIdx >= 0) {
-            long[] digits = new long[targetPieceSize];
-            for (int i=0; i<sourcePieceSize; i+=2)
-                digits[targetPieceSize-sourcePieceSize/2+i/2] = (((long)a[aIdx+i])<<32) | (a[aIdx+i+1]&0xFFFFFFFFL);
-            ai[pieceIdx] = new MutableModFn(digits);
-            aIdx -= sourcePieceSize;
-            pieceIdx++;
-        }
-        long[] digits = new long[targetPieceSize];
-        if ((a.length%sourcePieceSize) % 2 == 0)
-            for (int i=0; i<a.length%sourcePieceSize; i+=2)
-                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2] = (((long)a[i])<<32) | (a[i+1]&0xFFFFFFFFL);
-        else {
-            for (int i=0; i<a.length%sourcePieceSize-2; i+=2) {
-                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2] = ((long)a[i+1]) << 32;
-                digits[targetPieceSize-(a.length%sourcePieceSize)/2+i/2-1] |= a[i] & 0xFFFFFFFFL;
-            }
-            // the remaining half-long
-            digits[targetPieceSize-1] |= a[a.length%sourcePieceSize-1] & 0xFFFFFFFFL;
-        }
-        ai[pieceIdx] = new MutableModFn(digits);
-        while (++pieceIdx < numPieces)
-            ai[pieceIdx] = new MutableModFn(targetPieceSize);
-        return ai;
     }
 
     public BigInteger multiplyFFT(BigInteger b) {
@@ -3117,7 +2305,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @return {@code this<sup>2</sup>}
      */
-    BigInteger square() {
+    private BigInteger square() {
+        return square(false);
+    }
+
+    /**
+     * Returns a BigInteger whose value is {@code (this<sup>2</sup>)}. If
+     * the invocation is recursive certain overflow checks are skipped.
+     *
+     * @param isRecursion whether this is a recursive invocation
+     * @return {@code this<sup>2</sup>}
+     */
+    private BigInteger square(boolean isRecursion) {
         if (signum == 0) {
             return ZERO;
         }
@@ -3130,27 +2329,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             if (len < TOOM_COOK_SQUARE_THRESHOLD) {
                 return squareKaratsuba();
             } else {
-                if (!shouldUseSchoenhageStrassen(len))
-                    return squareToomCook3();
-                else
-                    return multiplySchoenhageStrassen(this, this, 1);
+                //
+                // For a discussion of overflow detection see multiply()
+                //
+                if (!isRecursion) {
+                    if (bitLength(mag, mag.length) > 16L*MAX_MAG_LENGTH) {
+                        reportOverflow();
+                    }
+                }
+
+                return squareToomCook3();
             }
         }
-    }
-
-    /**
-     * Returns a BigInteger whose value is {@code (this<sup>2</sup>)},
-     * using multiple threads if the numbers are sufficiently large.
-     *
-     * @return {@code this<sup>2</sup>}
-     * @see #square()
-     */
-    private BigInteger square(int numThreads) {
-        int xlen = mag.length;
-        if (!shouldUseSchoenhageStrassen(xlen))
-            return square();
-        else
-            return multiplySchoenhageStrassen(this, this, numThreads);
     }
 
     /**
@@ -3158,6 +2348,44 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * int array z.  The contents of x are not changed.
      */
     private static final int[] squareToLen(int[] x, int len, int[] z) {
+         int zlen = len << 1;
+         if (z == null || z.length < zlen)
+             z = new int[zlen];
+
+         // Execute checks before calling intrinsified method.
+         implSquareToLenChecks(x, len, z, zlen);
+         return implSquareToLen(x, len, z, zlen);
+     }
+
+     /**
+      * Parameters validation.
+      */
+     private static void implSquareToLenChecks(int[] x, int len, int[] z, int zlen) throws RuntimeException {
+         if (len < 1) {
+             throw new IllegalArgumentException("invalid input length: " + len);
+         }
+         if (len > x.length) {
+             throw new IllegalArgumentException("input length out of bound: " +
+                                        len + " > " + x.length);
+         }
+         if (len * 2 > z.length) {
+             throw new IllegalArgumentException("input length out of bound: " +
+                                        (len * 2) + " > " + z.length);
+         }
+         if (zlen < 1) {
+             throw new IllegalArgumentException("invalid input length: " + zlen);
+         }
+         if (zlen > z.length) {
+             throw new IllegalArgumentException("input length out of bound: " +
+                                        len + " > " + z.length);
+         }
+     }
+
+     /**
+      * Java Runtime may use intrinsic for this method.
+      */
+     @HotSpotIntrinsicCandidate
+     private static final int[] implSquareToLen(int[] x, int len, int[] z, int zlen) {
         /*
          * The algorithm used here is adapted from Colin Plumb's C library.
          * Technique: Consider the partial products in the multiplication
@@ -3192,9 +2420,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
          * again.  The low bit is simply a copy of the low bit of the
          * input, so it doesn't need special care.
          */
-        int zlen = len << 1;
-        if (z == null || z.length < zlen)
-            z = new int[zlen];
 
         // Store the squares, right shifted one bit (i.e., divided by 2)
         int lastProductLowWord = 0;
@@ -3264,13 +2489,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         a0 = getToomSlice(k, r, 2, len);
         BigInteger v0, v1, v2, vm1, vinf, t1, t2, tm1, da1;
 
-        v0 = a0.square();
+        v0 = a0.square(true);
         da1 = a2.add(a0);
-        vm1 = da1.subtract(a1).square();
+        vm1 = da1.subtract(a1).square(true);
         da1 = da1.add(a1);
-        v1 = da1.square();
-        vinf = a2.square();
-        v2 = da1.add(a2).shiftLeft(1).subtract(a0).square();
+        v1 = da1.square(true);
+        vinf = a2.square(true);
+        v2 = da1.add(a2).shiftLeft(1).subtract(a0).square(true);
 
         // The algorithm requires two divisions by 2 and one by 3.
         // All divisions are known to be exact, that is, they do not produce
@@ -3306,44 +2531,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 mag.length - val.mag.length < BURNIKEL_ZIEGLER_OFFSET) {
             return divideKnuth(val);
         } else {
-            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-                return divideBurnikelZiegler(val);
-            } else {
-                return divideBarrett(val);
-            }
+            return divideBurnikelZiegler(val);
         }
-    }
-
-    /**
-     * Returns a BigInteger whose value is {@code (this / val)},
-     * using multiple threads if the numbers are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided.
-     * @return {@code this / val}
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #divide(BigInteger)
-     */
-    public BigInteger divideParallel(BigInteger val) {
-        return divide(val, Runtime.getRuntime().availableProcessors()-1);
-    }
-
-    /**
-     * Returns a BigInteger whose value is {@code (this / val)},
-     * using multiple threads if the numbers are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided.
-     * @param  numThreads number of threads to use; 1 means run on the current thread
-     * @return {@code this / val}
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #divideParallel(BigInteger)
-     */
-    public BigInteger divide(BigInteger val, int numThreads) {
-        int xlen = mag.length;
-        int ylen = val.mag.length;
-        if (!shouldDivideBarrett(xlen) || !shouldDivideBarrett(ylen))
-            return divide(val);
-        else
-            return divideBarrett(val, numThreads);
     }
 
     /**
@@ -3375,103 +2564,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @throws ArithmeticException if {@code val} is zero.
      */
     public BigInteger[] divideAndRemainder(BigInteger val) {
-        return divideAndRemainder(val, 1);
-    }
-
-    /**
-     * Returns an array of two BigIntegers containing {@code (this / val)}
-     * followed by {@code (this % val)}.<br/>
-     * Uses multiple threads if the numbers are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided, and the
-     *         remainder computed.
-     * @return an array of two BigIntegers: the quotient {@code (this / val)}
-     *         is the initial element, and the remainder {@code (this % val)}
-     *         is the final element.
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #divideAndRemainder(BigInteger)
-     */
-    public BigInteger[] divideAndRemainderParallel(BigInteger val) {
-        return divideAndRemainder(val, Runtime.getRuntime().availableProcessors()-1);
-    }
-
-    /**
-     * Returns an array of two BigIntegers containing {@code (this / val)}
-     * followed by {@code (this % val)}.<br/>
-     * Uses a specified number of threads if the inputs are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided, and the
-     *         remainder computed.
-     * @param  numThreads number of threads to use; 1 means run on the current thread
-     * @return an array of two BigIntegers: the quotient {@code (this / val)}
-     *         is the initial element, and the remainder {@code (this % val)}
-     *         is the final element.
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #divideAndRemainderParallel(BigInteger)
-     */
-    public BigInteger[] divideAndRemainder(BigInteger val, int numThreads) {
         if (val.mag.length < BURNIKEL_ZIEGLER_THRESHOLD ||
                 mag.length - val.mag.length < BURNIKEL_ZIEGLER_OFFSET) {
             return divideAndRemainderKnuth(val);
         } else {
-            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-                return divideAndRemainderBurnikelZiegler(val);
-            } else {
-                return divideAndRemainderBarrett(val, numThreads);
-            }
-        }
-    }
-
-    /**
-     * Estimates whether Barrett Division will be more efficient than Burnikel-Ziegler when
-     * dividing two numbers of a given length in ints.
-     * @param length the number of ints in each of the two inputs
-     * @return <code>true</code> if Barrett will be more efficient, <code>false</code> if Burnikel-Ziegler will be more efficient
-     */
-    static boolean shouldDivideBarrett(int length) {
-        if (IS64BIT) {
-            // The following values were determined experimentally on a 64-bit JVM.
-            if (length <= 14863)
-                return false;
-            if (length <= 16383)   // 2^14-1
-                return true;
-            if (length <= 23759)
-                return false;
-            if (length <= 32767)   // 2^15-1
-                return true;
-            if (length <= 46063)
-                return false;
-            if (length <= 65535)   // 2^16-1
-                return true;
-            if (length <= 73871)
-                return false;
-            if (length <= 131071)   // 2^17-1
-                return true;
-            if (length <= 159887)
-                return false;
-            return true;
-        }
-        else {
-            // The following values were determined experimentally on a 32-bit JVM.
-            if (length <= 16175)
-                return false;
-            if (length <= 16383)    // 2^14-1
-                return true;
-            if (length <= 26991)
-                return false;
-            if (length <= 32767)    // 2^15-1
-                return true;
-            if (length <= 51215)
-                return false;
-            if (length <= 65535)    // 2^16-1
-                return true;
-            if (length <= 80367)
-                return false;
-            if (length <= 131071)   // 2^17-1
-                return true;
-            if (length <= 155663)
-                return false;
-            return true;
+            return divideAndRemainderBurnikelZiegler(val);
         }
     }
 
@@ -3500,44 +2597,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 mag.length - val.mag.length < BURNIKEL_ZIEGLER_OFFSET) {
             return remainderKnuth(val);
         } else {
-            if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-                return remainderBurnikelZiegler(val);
-            } else {
-                return remainderBarrett(val);
-            }
-        }
-    }
-
-    /**
-     * Returns a BigInteger whose value is {@code (this % val)},
-     * using multiple threads if the inputs are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided, and the
-     *         remainder computed.
-     * @return {@code this % val}
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #remainder(BigInteger)
-     */
-    public BigInteger remainderParallel(BigInteger val) {
-        return remainder(val, Runtime.getRuntime().availableProcessors()-1);
-    }
-
-    /**
-     * Returns a BigInteger whose value is {@code (this % val)} using a
-     * specified number of threads if the inputs are sufficiently large.
-     *
-     * @param  val value by which this BigInteger is to be divided, and the
-     *         remainder computed.
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return {@code this % val}
-     * @throws ArithmeticException if {@code val} is zero.
-     * @see #remainderParallel(BigInteger)
-     */
-    public BigInteger remainder(BigInteger val, int numThreads) {
-        if (!shouldDivideBarrett(mag.length) || !shouldDivideBarrett(val.mag.length)) {
-            return remainder(val);
-        } else {
-            return remainderBarrett(val, numThreads);
+            return remainderBurnikelZiegler(val);
         }
     }
 
@@ -3582,183 +2642,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger[] {qBigInt, rBigInt};
     }
 
-    /** Barrett division */
-    private BigInteger divideBarrett(BigInteger val) {
-        return divideAndRemainderBarrett(val, 1)[0];
-    }
-
-    private BigInteger divideBarrett(BigInteger val, int numThreads) {
-        return divideAndRemainderBarrett(val, numThreads)[0];
-    }
-
-    private BigInteger remainderBarrett(BigInteger val) {
-        return divideAndRemainderBarrett(val, 1)[1];
-    }
-
-    private BigInteger remainderBarrett(BigInteger val, int numThreads) {
-        return divideAndRemainderBarrett(val, numThreads)[1];
-    }
-
     /**
-     * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
-     * @param val the divisor
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return an array containing the quotient and remainder
-     */
-    private BigInteger[] divideAndRemainderBarrett(BigInteger val, int numThreads) {
-        BigInteger[] c = abs().divideAndRemainderBarrettPositive(val.abs(), numThreads);
-        if (signum*val.signum < 0)
-            c[0] = c[0].negate();
-        if (signum < 0)
-            c[1] = c[1].negate();
-        return c;
-    }
-
-    /**
-     * Computes <code>this/val</code> and <code>this%val</code> using Barrett division.
-     * <code>val</code> must be positive.
-     * @param val the divisor
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return an array containing the quotient and remainder
-     */
-    private BigInteger[] divideAndRemainderBarrettPositive(BigInteger val, int numThreads) {
-        int m = bitLength();
-        int n = val.bitLength();
-
-        if (m < n)
-            return new BigInteger[] {ZERO, this};
-        else {
-            int lowestSetBit = Math.min(getLowestSetBit(), val.getLowestSetBit());
-            // Cancel common powers of two if it will speed up division, which is
-            // the case iff it reduces bitLength() below the next lower power of two.
-            if (Integer.numberOfLeadingZeros(n) < Integer.numberOfLeadingZeros(n-lowestSetBit)) {
-                BigInteger[] result = shiftRight(lowestSetBit).divideAndRemainder(val.shiftRight(lowestSetBit), numThreads);
-                result[1] = result[1].shiftLeft(lowestSetBit);
-                return result;
-            }
-
-            if (m <= 2*n) {
-                // this case is handled by Barrett directly
-                BigInteger mu = val.inverse(m-n, numThreads);
-                return barrettBase(val, mu, numThreads);
-            }
-            else {
-                // treat each n-bit piece of a as a digit and do long division by val
-                // (which is also n bits), reusing the inverse
-                BigInteger mu2n = val.inverse(n, numThreads);
-                int startBit = m / n * n;   // the bit at which the current n-bit piece starts
-                BigInteger quotient = ZERO;
-                BigInteger remainder = shiftRight(startBit);
-                BigInteger mask = ONE.shiftLeft(n).subtract(ONE);   // n ones
-                while (startBit > 0) {
-                    startBit -= n;
-                    BigInteger ai = shiftRight(startBit).and(mask);
-                    remainder = remainder.shiftLeft(n).add(ai);
-                    BigInteger mu = mu2n.shiftRightRounded(2*n-remainder.bitLength());   // mu = 2^(remainder.length-n)/val
-                    BigInteger[] c = remainder.barrettBase(val, mu, numThreads);
-                    quotient = quotient.shiftLeft(n).add(c[0]);
-                    remainder = c[1];
-                }
-                return new BigInteger[] {quotient, remainder};
-            }
-        }
-    }
-
-    /**
-     * Computes <code>this/b</code> and <code>this%b</code>.
-     * The binary representation of <code>b</code> must be at least half as
-     * long, and no longer than, the binary representation of <code>a</code>.<br/>
-     * This method uses the Barrett algorithm as described in
-     * <a href="http://treskal.com/kalle/exjobb/original-report.pdf">
-     * Fast Division of Large Integers</a>, pg 17.
-     * @param b
-     * @param mu 2<sup>n</sup>/b where <code>n</code> is the number of binary digits of <code>this</code>
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return an array containing the quotient and remainder
-     */
-    private BigInteger[] barrettBase(BigInteger b, BigInteger mu, int numThreads) {
-        int m = bitLength();
-        int n = b.bitLength();
-
-        BigInteger a1 = shiftRight(n-1);
-        BigInteger q = a1.multiply(mu, numThreads).shiftRight(m-n+1);
-        BigInteger r = subtract(b.multiply(q, numThreads));
-        while (r.signum()<0 || r.compareTo(b)>=0)
-            if (r.signum() < 0) {
-                r = r.add(b);
-                q = q.subtract(ONE);
-            }
-            else {
-                r = r.subtract(b);
-                q = q.add(ONE);
-            }
-        return new BigInteger[] {q, r};
-    }
-
-    /**
-     * Computes 2<sup>bitLength()+n</sup>/this.<br/>
-     * Uses the
-     * <a href="http://en.wikipedia.org/wiki/Division_%28digital%29#Newton.E2.80.93Raphson_division">
-     * Newton algorithm</a> as described in
-     * <a href="http://treskal.com/kalle/exjobb/original-report.pdf">
-     * Fast Division of Large Integers</a>, pg 23.
-     * @param n precision in bits
-     * @param numThreads number of threads to use; 1 means run on the current thread
-     * @return <code>1/this</code>, shifted to the left by <code>bitLength()+n</code> bits
-     */
-    private BigInteger inverse(int n, int numThreads) {
-        int m = bitLength();
-        if (n <= NEWTON_THRESHOLD)
-            return ONE.shiftLeft(n*2).divide(shiftRightRounded(m-n));
-
-        // let numSteps = ceil(log2(n/NEWTON_THRESHOLD)) and initialize k
-        int numSteps = bitLengthForInt((n+NEWTON_THRESHOLD-1)/NEWTON_THRESHOLD);
-        int[] k = new int[numSteps];
-        int ki = n;
-        for (int i=numSteps-1; i>=0; i--) {
-            ki = (ki+1) / 2;
-            k[i] = ki<NEWTON_THRESHOLD ? NEWTON_THRESHOLD : ki;
-        }
-
-        // calculate 1/this truncated to k0 fraction digits
-        BigInteger z = ONE.shiftLeft(k[0]*2).divide(shiftRightRounded(m-k[0]));   // exp=k0 because exp(this)=m
-
-        for (int i=0; i<numSteps; i++) {
-            ki = k[i];
-            // the following BigIntegers represent numbers of the form a*2^(-exponent)
-            BigInteger s = z.square(numThreads);   // exponent = 2ki
-            BigInteger t = shiftRightRounded(m-2*ki-3);   // exponent = 2ki+3
-            BigInteger u = t.multiply(s, numThreads);   // exponent = 4ki+3 > 2ki+1
-            BigInteger w = z.add(z);   // exponent = ki
-            w = w.shiftLeft(3*ki+3);   // increase #fraction digits to 4ki+3 to match u
-            z = w.subtract(u);   // exponent = 4ki+3
-            if (i < numSteps-1)
-                z = z.shiftRightRounded(4*ki+3-k[i+1]);   // reduce #fraction digits to k[i+1]
-            else
-                z = z.shiftRightRounded(4*ki+3-n);   // final step: reduce #fraction digits to n
-        }
-        return z;
-    }
-
-    /**
-     * Same as {@link BigInteger#shiftRight(int)} but rounds to the
-     * nearest integer.
-     * @param n shift distance, in bits.
-     * @return round(this*2<sup>-n</sup>)
-     */
-    private BigInteger shiftRightRounded(int n) {
-        BigInteger b = shiftRight(n);
-        if (n>0 && testBit(n-1))
-            b = b.add(ONE);
-        return b;
-    }
-
-    /**
-     * Returns a BigInteger whose value is <tt>(this<sup>exponent</sup>)</tt>.
+     * Returns a BigInteger whose value is <code>(this<sup>exponent</sup>)</code>.
      * Note that {@code exponent} is an integer rather than a BigInteger.
      *
      * @param  exponent exponent to which this BigInteger is to be raised.
-     * @return <tt>this<sup>exponent</sup></tt>
+     * @return <code>this<sup>exponent</sup></code>
      * @throws ArithmeticException {@code exponent} is negative.  (This would
      *         cause the operation to yield a non-integer value.)
      */
@@ -3777,10 +2666,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // The remaining part can then be exponentiated faster.  The
         // powers of two will be multiplied back at the end.
         int powersOfTwo = partToSquare.getLowestSetBit();
-        long bitsToShift = (long)powersOfTwo * exponent;
-        if (bitsToShift > Integer.MAX_VALUE) {
+        long bitsToShiftLong = (long)powersOfTwo * exponent;
+        if (bitsToShiftLong > Integer.MAX_VALUE) {
             reportOverflow();
         }
+        int bitsToShift = (int)bitsToShiftLong;
 
         int remainingBits;
 
@@ -3790,9 +2680,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             remainingBits = partToSquare.bitLength();
             if (remainingBits == 1) {  // Nothing left but +/- 1?
                 if (signum < 0 && (exponent&1) == 1) {
-                    return NEGATIVE_ONE.shiftLeft(powersOfTwo*exponent);
+                    return NEGATIVE_ONE.shiftLeft(bitsToShift);
                 } else {
-                    return ONE.shiftLeft(powersOfTwo*exponent);
+                    return ONE.shiftLeft(bitsToShift);
                 }
             }
         } else {
@@ -3837,13 +2727,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 if (bitsToShift + scaleFactor <= 62) { // Fits in long?
                     return valueOf((result << bitsToShift) * newSign);
                 } else {
-                    return valueOf(result*newSign).shiftLeft((int) bitsToShift);
+                    return valueOf(result*newSign).shiftLeft(bitsToShift);
                 }
-            }
-            else {
+            } else {
                 return valueOf(result*newSign);
             }
         } else {
+            if ((long)bitLength() * exponent / Integer.SIZE > MAX_MAG_LENGTH) {
+                reportOverflow();
+            }
+
             // Large number algorithm.  This is basically identical to
             // the algorithm above, but calls multiply() and square()
             // which may use more efficient algorithms for large numbers.
@@ -3863,7 +2756,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // Multiply back the (exponentiated) powers of two (quickly,
             // by shifting left)
             if (powersOfTwo > 0) {
-                answer = answer.shiftLeft(powersOfTwo*exponent);
+                answer = answer.shiftLeft(bitsToShift);
             }
 
             if (signum < 0 && (exponent&1) == 1) {
@@ -3872,6 +2765,53 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 return answer;
             }
         }
+    }
+
+    /**
+     * Returns the integer square root of this BigInteger.  The integer square
+     * root of the corresponding mathematical integer {@code n} is the largest
+     * mathematical integer {@code s} such that {@code s*s <= n}.  It is equal
+     * to the value of {@code floor(sqrt(n))}, where {@code sqrt(n)} denotes the
+     * real square root of {@code n} treated as a real.  Note that the integer
+     * square root will be less than the real square root if the latter is not
+     * representable as an integral value.
+     *
+     * @return the integer square root of {@code this}
+     * @throws ArithmeticException if {@code this} is negative.  (The square
+     *         root of a negative integer {@code val} is
+     *         {@code (i * sqrt(-val))} where <i>i</i> is the
+     *         <i>imaginary unit</i> and is equal to
+     *         {@code sqrt(-1)}.)
+     * @since  9
+     */
+    public BigInteger sqrt() {
+        if (this.signum < 0) {
+            throw new ArithmeticException("Negative BigInteger");
+        }
+
+        return new MutableBigInteger(this.mag).sqrt().toBigInteger();
+    }
+
+    /**
+     * Returns an array of two BigIntegers containing the integer square root
+     * {@code s} of {@code this} and its remainder {@code this - s*s},
+     * respectively.
+     *
+     * @return an array of two BigIntegers with the integer square root at
+     *         offset 0 and the remainder at offset 1
+     * @throws ArithmeticException if {@code this} is negative.  (The square
+     *         root of a negative integer {@code val} is
+     *         {@code (i * sqrt(-val))} where <i>i</i> is the
+     *         <i>imaginary unit</i> and is equal to
+     *         {@code sqrt(-1)}.)
+     * @see #sqrt()
+     * @since  9
+     */
+    public BigInteger[] sqrtAndRemainder() {
+        BigInteger s = sqrt();
+        BigInteger r = this.subtract(s.square());
+        assert r.compareTo(BigInteger.ZERO) >= 0;
+        return new BigInteger[] {s, r};
     }
 
     /**
@@ -4017,12 +2957,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns a BigInteger whose value is
-     * <tt>(this<sup>exponent</sup> mod m)</tt>.  (Unlike {@code pow}, this
+     * <code>(this<sup>exponent</sup> mod m)</code>.  (Unlike {@code pow}, this
      * method permits negative exponents.)
      *
      * @param  exponent the exponent.
      * @param  m the modulus.
-     * @return <tt>this<sup>exponent</sup> mod m</tt>
+     * @return <code>this<sup>exponent</sup> mod m</code>
      * @throws ArithmeticException {@code m} &le; 0 or the exponent is
      *         negative and this BigInteger is not <i>relatively
      *         prime</i> to {@code m}.
@@ -4096,6 +3036,77 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
 
         return (invertResult ? result.modInverse(m) : result);
+    }
+
+    // Montgomery multiplication.  These are wrappers for
+    // implMontgomeryXX routines which are expected to be replaced by
+    // virtual machine intrinsics.  We don't use the intrinsics for
+    // very large operands: MONTGOMERY_INTRINSIC_THRESHOLD should be
+    // larger than any reasonable crypto key.
+    private static int[] montgomeryMultiply(int[] a, int[] b, int[] n, int len, long inv,
+                                            int[] product) {
+        implMontgomeryMultiplyChecks(a, b, n, len, product);
+        if (len > MONTGOMERY_INTRINSIC_THRESHOLD) {
+            // Very long argument: do not use an intrinsic
+            product = multiplyToLen(a, len, b, len, product);
+            return montReduce(product, n, len, (int)inv);
+        } else {
+            return implMontgomeryMultiply(a, b, n, len, inv, materialize(product, len));
+        }
+    }
+    private static int[] montgomerySquare(int[] a, int[] n, int len, long inv,
+                                          int[] product) {
+        implMontgomeryMultiplyChecks(a, a, n, len, product);
+        if (len > MONTGOMERY_INTRINSIC_THRESHOLD) {
+            // Very long argument: do not use an intrinsic
+            product = squareToLen(a, len, product);
+            return montReduce(product, n, len, (int)inv);
+        } else {
+            return implMontgomerySquare(a, n, len, inv, materialize(product, len));
+        }
+    }
+
+    // Range-check everything.
+    private static void implMontgomeryMultiplyChecks
+        (int[] a, int[] b, int[] n, int len, int[] product) throws RuntimeException {
+        if (len % 2 != 0) {
+            throw new IllegalArgumentException("input array length must be even: " + len);
+        }
+
+        if (len < 1) {
+            throw new IllegalArgumentException("invalid input length: " + len);
+        }
+
+        if (len > a.length ||
+            len > b.length ||
+            len > n.length ||
+            (product != null && len > product.length)) {
+            throw new IllegalArgumentException("input array length out of bound: " + len);
+        }
+    }
+
+    // Make sure that the int array z (which is expected to contain
+    // the result of a Montgomery multiplication) is present and
+    // sufficiently large.
+    private static int[] materialize(int[] z, int len) {
+         if (z == null || z.length < len)
+             z = new int[len];
+         return z;
+    }
+
+    // These methods are intended to be replaced by virtual machine
+    // intrinsics.
+    @HotSpotIntrinsicCandidate
+    private static int[] implMontgomeryMultiply(int[] a, int[] b, int[] n, int len,
+                                         long inv, int[] product) {
+        product = multiplyToLen(a, len, b, len, product);
+        return montReduce(product, n, len, (int)inv);
+    }
+    @HotSpotIntrinsicCandidate
+    private static int[] implMontgomerySquare(int[] a, int[] n, int len,
+                                       long inv, int[] product) {
+        product = squareToLen(a, len, product);
+        return montReduce(product, n, len, (int)inv);
     }
 
     static int[] bnExpModThreshTable = {7, 25, 81, 241, 673, 1793,
@@ -4176,6 +3187,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int[] mod = z.mag;
         int modLen = mod.length;
 
+        // Make modLen even. It is conventional to use a cryptographic
+        // modulus that is 512, 768, 1024, or 2048 bits, so this code
+        // will not normally be executed. However, it is necessary for
+        // the correct functioning of the HotSpot intrinsics.
+        if ((modLen & 1) != 0) {
+            int[] x = new int[modLen + 1];
+            System.arraycopy(mod, 0, x, 1, modLen);
+            mod = x;
+            modLen++;
+        }
+
         // Select an appropriate window size
         int wbits = 0;
         int ebits = bitLength(exp, exp.length);
@@ -4194,8 +3216,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i < tblmask; i++)
             table[i] = new int[modLen];
 
-        // Compute the modular inverse
-        int inv = -MutableBigInteger.inverseMod32(mod[modLen-1]);
+        // Compute the modular inverse of the least significant 64-bit
+        // digit of the modulus
+        long n0 = (mod[modLen-1] & LONG_MASK) + ((mod[modLen-2] & LONG_MASK) << 32);
+        long inv = -MutableBigInteger.inverseMod64(n0);
 
         // Convert base to Montgomery form
         int[] a = leftShift(base, base.length, modLen << 5);
@@ -4203,6 +3227,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableBigInteger q = new MutableBigInteger(),
                           a2 = new MutableBigInteger(a),
                           b2 = new MutableBigInteger(mod);
+        b2.normalize(); // MutableBigInteger.divide() assumes that its
+                        // divisor is in normal form.
 
         MutableBigInteger r= a2.divide(b2, q);
         table[0] = r.toIntArray();
@@ -4211,22 +3237,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (table[0].length < modLen) {
            int offset = modLen - table[0].length;
            int[] t2 = new int[modLen];
-           for (int i=0; i < table[0].length; i++)
-               t2[i+offset] = table[0][i];
+           System.arraycopy(table[0], 0, t2, offset, table[0].length);
            table[0] = t2;
         }
 
         // Set b to the square of the base
-        int[] b = squareToLen(table[0], modLen, null);
-        b = montReduce(b, mod, modLen, inv);
+        int[] b = montgomerySquare(table[0], mod, modLen, inv, null);
 
         // Set t to high half of b
         int[] t = Arrays.copyOf(b, modLen);
 
         // Fill in the table with odd powers of the base
         for (int i=1; i < tblmask; i++) {
-            int[] prod = multiplyToLen(t, modLen, table[i-1], modLen, null);
-            table[i] = montReduce(prod, mod, modLen, inv);
+            table[i] = montgomeryMultiply(t, table[i-1], mod, modLen, inv, null);
         }
 
         // Pre load the window that slides over the exponent
@@ -4297,8 +3320,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     isone = false;
                 } else {
                     t = b;
-                    a = multiplyToLen(t, modLen, mult, modLen, a);
-                    a = montReduce(a, mod, modLen, inv);
+                    a = montgomeryMultiply(t, mult, mod, modLen, inv, a);
                     t = a; a = b; b = t;
                 }
             }
@@ -4310,8 +3332,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             // Square the input
             if (!isone) {
                 t = b;
-                a = squareToLen(t, modLen, a);
-                a = montReduce(a, mod, modLen, inv);
+                a = montgomerySquare(t, mod, modLen, inv, a);
                 t = a; a = b; b = t;
             }
         }
@@ -4320,7 +3341,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int[] t2 = new int[2*modLen];
         System.arraycopy(b, 0, t2, modLen, modLen);
 
-        b = montReduce(t2, mod, modLen, inv);
+        b = montReduce(t2, mod, modLen, (int)inv);
 
         t2 = Arrays.copyOf(b, modLen);
 
@@ -4388,6 +3409,33 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Multiply an array by one word k and add to result, return the carry
      */
     static int mulAdd(int[] out, int[] in, int offset, int len, int k) {
+        implMulAddCheck(out, in, offset, len, k);
+        return implMulAdd(out, in, offset, len, k);
+    }
+
+    /**
+     * Parameters validation.
+     */
+    private static void implMulAddCheck(int[] out, int[] in, int offset, int len, int k) {
+        if (len > in.length) {
+            throw new IllegalArgumentException("input length is out of bound: " + len + " > " + in.length);
+        }
+        if (offset < 0) {
+            throw new IllegalArgumentException("input offset is invalid: " + offset);
+        }
+        if (offset > (out.length - 1)) {
+            throw new IllegalArgumentException("input offset is out of bound: " + offset + " > " + (out.length - 1));
+        }
+        if (len > (out.length - offset)) {
+            throw new IllegalArgumentException("input len is out of bound: " + len + " > " + (out.length - offset));
+        }
+    }
+
+    /**
+     * Java Runtime may use intrinsic for this method.
+     */
+    @HotSpotIntrinsicCandidate
+    private static int implMulAdd(int[] out, int[] in, int offset, int len, int k) {
         long kLong = k & LONG_MASK;
         long carry = 0;
 
@@ -4509,7 +3557,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Returns a BigInteger whose value is {@code (this << n)}.
      * The shift distance, {@code n}, may be negative, in which case
      * this method performs a right shift.
-     * (Computes <tt>floor(this * 2<sup>n</sup>)</tt>.)
+     * (Computes <code>floor(this * 2<sup>n</sup>)</code>.)
      *
      * @param  n shift distance, in bits.
      * @return {@code this << n}
@@ -4532,7 +3580,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns a magnitude array whose value is {@code (mag << n)}.
      * The shift distance, {@code n}, is considered unnsigned.
-     * (Computes <tt>this * 2<sup>n</sup></tt>.)
+     * (Computes <code>this * 2<sup>n</sup></code>.)
      *
      * @param mag magnitude, the most-significant int ({@code mag[0]}) must be non-zero.
      * @param  n unsigned shift distance, in bits.
@@ -4569,7 +3617,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Returns a BigInteger whose value is {@code (this >> n)}.  Sign
      * extension is performed.  The shift distance, {@code n}, may be
      * negative, in which case this method performs a left shift.
-     * (Computes <tt>floor(this / 2<sup>n</sup>)</tt>.)
+     * (Computes <code>floor(this / 2<sup>n</sup>)</code>.)
      *
      * @param  n shift distance, in bits.
      * @return {@code this >> n}
@@ -4592,7 +3640,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns a BigInteger whose value is {@code (this >> n)}. The shift
      * distance, {@code n}, is considered unsigned.
-     * (Computes <tt>floor(this * 2<sup>-n</sup>)</tt>.)
+     * (Computes <code>floor(this * 2<sup>-n</sup>)</code>.)
      *
      * @param  n unsigned shift distance, in bits.
      * @return {@code this >> n}
@@ -4837,7 +3885,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @return index of the rightmost one bit in this BigInteger.
      */
     public int getLowestSetBit() {
-        @SuppressWarnings("deprecation") int lsb = lowestSetBit - 2;
+        int lsb = lowestSetBitPlusTwo - 2;
         if (lsb == -2) {  // lowestSetBit not initialized yet
             lsb = 0;
             if (signum == 0) {
@@ -4849,7 +3897,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     ;
                 lsb += (i << 5) + Integer.numberOfTrailingZeros(b);
             }
-            lowestSetBit = lsb + 2;
+            lowestSetBitPlusTwo = lsb + 2;
         }
         return lsb;
     }
@@ -4859,16 +3907,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     /**
      * Returns the number of bits in the minimal two's-complement
-     * representation of this BigInteger, <i>excluding</i> a sign bit.
+     * representation of this BigInteger, <em>excluding</em> a sign bit.
      * For positive BigIntegers, this is equivalent to the number of bits in
-     * the ordinary binary representation.  (Computes
-     * {@code (ceil(log2(this < 0 ? -this : this+1)))}.)
+     * the ordinary binary representation.  For zero this method returns
+     * {@code 0}.  (Computes {@code (ceil(log2(this < 0 ? -this : this+1)))}.)
      *
      * @return number of bits in the minimal two's-complement
-     *         representation of this BigInteger, <i>excluding</i> a sign bit.
+     *         representation of this BigInteger, <em>excluding</em> a sign bit.
      */
     public int bitLength() {
-        @SuppressWarnings("deprecation") int n = bitLength - 1;
+        int n = bitLengthPlusOne - 1;
         if (n == -1) { // bitLength not initialized yet
             int[] m = mag;
             int len = m.length;
@@ -4883,12 +3931,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                      for (int i=1; i< len && pow2; i++)
                          pow2 = (mag[i] == 0);
 
-                     n = (pow2 ? magBitLength -1 : magBitLength);
+                     n = (pow2 ? magBitLength - 1 : magBitLength);
                  } else {
                      n = magBitLength;
                  }
             }
-            bitLength = n + 1;
+            bitLengthPlusOne = n + 1;
         }
         return n;
     }
@@ -4902,7 +3950,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *         of this BigInteger that differ from its sign bit.
      */
     public int bitCount() {
-        @SuppressWarnings("deprecation") int bc = bitCount - 1;
+        int bc = bitCountPlusOne - 1;
         if (bc == -1) {  // bitCount not initialized yet
             bc = 0;      // offset by one to initialize
             // Count the bits in the magnitude
@@ -4916,7 +3964,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 magTrailingZeroCount += Integer.numberOfTrailingZeros(mag[j]);
                 bc += magTrailingZeroCount - 1;
             }
-            bitCount = bc + 1;
+            bitCountPlusOne = bc + 1;
         }
         return bc;
     }
@@ -5208,7 +4256,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Converts the specified BigInteger to a string and appends to
      * {@code sb}.  This implements the recursive Schoenhage algorithm
      * for base conversions.
-     * <p/>
+     * <p>
      * See Knuth, Donald,  _The Art of Computer Programming_, Vol. 2,
      * Answers to Exercises (4.4) Question 14.
      *
@@ -5219,16 +4267,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      */
     private static void toString(BigInteger u, StringBuilder sb, int radix,
                                  int digits) {
-        /* If we're smaller than a certain threshold, use the smallToString
-           method, padding with leading zeroes when necessary. */
+        // If we're smaller than a certain threshold, use the smallToString
+        // method, padding with leading zeroes when necessary.
         if (u.mag.length <= SCHOENHAGE_BASE_CONVERSION_THRESHOLD) {
             String s = u.smallToString(radix);
 
             // Pad with internal zeros if necessary.
             // Don't pad if we're at the beginning of the string.
             if ((s.length() < digits) && (sb.length() > 0)) {
-                for (int i=s.length(); i < digits; i++) { // May be a faster way to
-                    sb.append('0');                    // do this?
+                for (int i=s.length(); i < digits; i++) {
+                    sb.append('0');
                 }
             }
 
@@ -5257,7 +4305,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns the value radix^(2^exponent) from the cache.
      * If this value doesn't already exist in the cache, it is added.
-     * <p/>
+     * <p>
      * This could be changed to a more complicated caching method using
      * {@code Future}.
      */
@@ -5342,7 +4390,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Converts this BigInteger to an {@code int}.  This
      * conversion is analogous to a
      * <i>narrowing primitive conversion</i> from {@code long} to
-     * {@code int} as defined in section 5.1.3 of
+     * {@code int} as defined in
      * <cite>The Java&trade; Language Specification</cite>:
      * if this BigInteger is too big to fit in an
      * {@code int}, only the low-order 32 bits are returned.
@@ -5352,6 +4400,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @return this BigInteger converted to an {@code int}.
      * @see #intValueExact()
+     * @jls 5.1.3 Narrowing Primitive Conversion
      */
     public int intValue() {
         int result = 0;
@@ -5363,7 +4412,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Converts this BigInteger to a {@code long}.  This
      * conversion is analogous to a
      * <i>narrowing primitive conversion</i> from {@code long} to
-     * {@code int} as defined in section 5.1.3 of
+     * {@code int} as defined in
      * <cite>The Java&trade; Language Specification</cite>:
      * if this BigInteger is too big to fit in a
      * {@code long}, only the low-order 64 bits are returned.
@@ -5373,6 +4422,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @return this BigInteger converted to a {@code long}.
      * @see #longValueExact()
+     * @jls 5.1.3 Narrowing Primitive Conversion
      */
     public long longValue() {
         long result = 0;
@@ -5386,7 +4436,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Converts this BigInteger to a {@code float}.  This
      * conversion is similar to the
      * <i>narrowing primitive conversion</i> from {@code double} to
-     * {@code float} as defined in section 5.1.3 of
+     * {@code float} as defined in
      * <cite>The Java&trade; Language Specification</cite>:
      * if this BigInteger has too great a magnitude
      * to represent as a {@code float}, it will be converted to
@@ -5396,6 +4446,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * information about the precision of the BigInteger value.
      *
      * @return this BigInteger converted to a {@code float}.
+     * @jls 5.1.3 Narrowing Primitive Conversion
      */
     public float floatValue() {
         if (signum == 0) {
@@ -5470,7 +4521,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Converts this BigInteger to a {@code double}.  This
      * conversion is similar to the
      * <i>narrowing primitive conversion</i> from {@code double} to
-     * {@code float} as defined in section 5.1.3 of
+     * {@code float} as defined in
      * <cite>The Java&trade; Language Specification</cite>:
      * if this BigInteger has too great a magnitude
      * to represent as a {@code double}, it will be converted to
@@ -5480,6 +4531,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * information about the precision of the BigInteger value.
      *
      * @return this BigInteger converted to a {@code double}.
+     * @jls 5.1.3 Narrowing Primitive Conversion
      */
     public double doubleValue() {
         if (signum == 0) {
@@ -5588,18 +4640,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns a copy of the input array stripped of any leading zero bytes.
      */
-    private static int[] stripLeadingZeroBytes(byte a[]) {
-        int byteLength = a.length;
+    private static int[] stripLeadingZeroBytes(byte a[], int off, int len) {
+        int indexBound = off + len;
         int keep;
 
         // Find first nonzero byte
-        for (keep = 0; keep < byteLength && a[keep] == 0; keep++)
+        for (keep = off; keep < indexBound && a[keep] == 0; keep++)
             ;
 
         // Allocate new array and copy relevant part of input array
-        int intLength = ((byteLength - keep) + 3) >>> 2;
+        int intLength = ((indexBound - keep) + 3) >>> 2;
         int[] result = new int[intLength];
-        int b = byteLength - 1;
+        int b = indexBound - 1;
         for (int i = intLength-1; i >= 0; i--) {
             result[i] = a[b--] & 0xff;
             int bytesRemaining = b - keep + 1;
@@ -5614,27 +4666,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Takes an array a representing a negative 2's-complement number and
      * returns the minimal (no leading zero bytes) unsigned whose value is -a.
      */
-    private static int[] makePositive(byte a[]) {
+    private static int[] makePositive(byte a[], int off, int len) {
         int keep, k;
-        int byteLength = a.length;
+        int indexBound = off + len;
 
         // Find first non-sign (0xff) byte of input
-        for (keep=0; keep < byteLength && a[keep] == -1; keep++)
+        for (keep=off; keep < indexBound && a[keep] == -1; keep++)
             ;
 
 
         /* Allocate output array.  If all non-sign bytes are 0x00, we must
          * allocate space for one extra output byte. */
-        for (k=keep; k < byteLength && a[k] == 0; k++)
+        for (k=keep; k < indexBound && a[k] == 0; k++)
             ;
 
-        int extraByte = (k == byteLength) ? 1 : 0;
-        int intLength = ((byteLength - keep + extraByte) + 3) >>> 2;
+        int extraByte = (k == indexBound) ? 1 : 0;
+        int intLength = ((indexBound - keep + extraByte) + 3) >>> 2;
         int result[] = new int[intLength];
 
         /* Copy one's complement of input into output, leaving extra
          * byte (if it exists) == 0x00 */
-        int b = byteLength - 1;
+        int b = indexBound - 1;
         for (int i = intLength-1; i >= 0; i--) {
             result[i] = a[b--] & 0xff;
             int numBytesToTransfer = Math.min(3, b-keep+1);
@@ -5782,22 +4834,23 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Returns the index of the int that contains the first nonzero int in the
-     * little-endian binary representation of the magnitude (int 0 is the
-     * least significant). If the magnitude is zero, return value is undefined.
-     */
+    * Returns the index of the int that contains the first nonzero int in the
+    * little-endian binary representation of the magnitude (int 0 is the
+    * least significant). If the magnitude is zero, return value is undefined.
+    *
+    * <p>Note: never used for a BigInteger with a magnitude of zero.
+    * @see #getInt.
+    */
     private int firstNonzeroIntNum() {
-        int fn = firstNonzeroIntNum - 2;
+        int fn = firstNonzeroIntNumPlusTwo - 2;
         if (fn == -2) { // firstNonzeroIntNum not initialized yet
-            fn = 0;
-
             // Search for the first nonzero int
             int i;
             int mlen = mag.length;
             for (i = mlen - 1; i >= 0 && mag[i] == 0; i--)
                 ;
             fn = mlen - i - 1;
-            firstNonzeroIntNum = fn + 2; // offset by two to initialize
+            firstNonzeroIntNumPlusTwo = fn + 2; // offset by two to initialize
         }
         return fn;
     }
@@ -5809,16 +4862,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Serializable fields for BigInteger.
      *
      * @serialField signum  int
-     *              signum of this BigInteger.
-     * @serialField magnitude int[]
-     *              magnitude array of this BigInteger.
+     *              signum of this BigInteger
+     * @serialField magnitude byte[]
+     *              magnitude array of this BigInteger
      * @serialField bitCount  int
-     *              number of bits in this BigInteger
+     *              appears in the serialized form for backward compatibility
      * @serialField bitLength int
-     *              the number of bits in the minimal two's-complement
-     *              representation of this BigInteger
+     *              appears in the serialized form for backward compatibility
+     * @serialField firstNonzeroByteNum int
+     *              appears in the serialized form for backward compatibility
      * @serialField lowestSetBit int
-     *              lowest set bit in the twos complement representation
+     *              appears in the serialized form for backward compatibility
      */
     private static final ObjectStreamField[] serialPersistentFields = {
         new ObjectStreamField("signum", Integer.TYPE),
@@ -5835,22 +4889,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * for historical reasons, but it is converted to an array of ints
      * and the byte array is discarded.
      * Note:
-     * The current convention is to initialize the cache fields, bitCount,
-     * bitLength and lowestSetBit, to 0 rather than some other marker value.
-     * Therefore, no explicit action to set these fields needs to be taken in
-     * readObject because those fields already have a 0 value be default since
-     * defaultReadObject is not being used.
+     * The current convention is to initialize the cache fields, bitCountPlusOne,
+     * bitLengthPlusOne and lowestSetBitPlusTwo, to 0 rather than some other
+     * marker value. Therefore, no explicit action to set these fields needs to
+     * be taken in readObject because those fields already have a 0 value by
+     * default since defaultReadObject is not being used.
      */
     private void readObject(java.io.ObjectInputStream s)
         throws java.io.IOException, ClassNotFoundException {
-        /*
-         * In order to maintain compatibility with previous serialized forms,
-         * the magnitude of a BigInteger is serialized as an array of bytes.
-         * The magnitude field is used as a temporary store for the byte array
-         * that is deserialized. The cached computation fields should be
-         * transient but are serialized for compatibility reasons.
-         */
-
         // prepare to read the alternate persistent fields
         ObjectInputStream.GetField fields = s.readFields();
 
@@ -5865,7 +4911,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 message = "BigInteger: Signum not present in stream";
             throw new java.io.StreamCorruptedException(message);
         }
-        int[] mag = stripLeadingZeroBytes(magnitude);
+        int[] mag = stripLeadingZeroBytes(magnitude, 0, magnitude.length);
         if ((mag.length == 0) != (sign == 0)) {
             String message = "BigInteger: signum-magnitude mismatch";
             if (fields.defaulted("magnitude"))
@@ -5889,37 +4935,31 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     // Support for resetting final fields while deserializing
     private static class UnsafeHolder {
-        private static final sun.misc.Unsafe unsafe;
-        private static final long signumOffset;
-        private static final long magOffset;
-        static {
-            try {
-                unsafe = sun.misc.Unsafe.getUnsafe();
-                signumOffset = unsafe.objectFieldOffset
-                    (BigInteger.class.getDeclaredField("signum"));
-                magOffset = unsafe.objectFieldOffset
-                    (BigInteger.class.getDeclaredField("mag"));
-            } catch (Exception ex) {
-                throw new ExceptionInInitializerError(ex);
-            }
-        }
+        private static final jdk.internal.misc.Unsafe unsafe
+                = jdk.internal.misc.Unsafe.getUnsafe();
+        private static final long signumOffset
+                = unsafe.objectFieldOffset(BigInteger.class, "signum");
+        private static final long magOffset
+                = unsafe.objectFieldOffset(BigInteger.class, "mag");
 
         static void putSign(BigInteger bi, int sign) {
-            unsafe.putIntVolatile(bi, signumOffset, sign);
+            unsafe.putInt(bi, signumOffset, sign);
         }
 
         static void putMag(BigInteger bi, int[] magnitude) {
-            unsafe.putObjectVolatile(bi, magOffset, magnitude);
+            unsafe.putObject(bi, magOffset, magnitude);
         }
     }
 
     /**
-     * Save the {@code BigInteger} instance to a stream.
-     * The magnitude of a BigInteger is serialized as a byte array for
-     * historical reasons.
-     *
-     * @serialData two necessary fields are written as well as obsolete
-     *             fields for compatibility with older versions.
+     * Save the {@code BigInteger} instance to a stream.  The magnitude of a
+     * {@code BigInteger} is serialized as a byte array for historical reasons.
+     * To maintain compatibility with older implementations, the integers
+     * -1, -1, -2, and -2 are written as the values of the obsolete fields
+     * {@code bitCount}, {@code bitLength}, {@code lowestSetBit}, and
+     * {@code firstNonzeroByteNum}, respectively.  These values are compatible
+     * with older implementations, but will be ignored by current
+     * implementations.
      */
     private void writeObject(ObjectOutputStream s) throws IOException {
         // set the values of the Serializable fields
@@ -5935,7 +4975,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // save them
         s.writeFields();
-}
+    }
 
     /**
      * Returns the mag array as an array of bytes.
@@ -5988,7 +5028,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *
      * @return this {@code BigInteger} converted to an {@code int}.
      * @throws ArithmeticException if the value of {@code this} will
-     * not exactly fit in a {@code int}.
+     * not exactly fit in an {@code int}.
      * @see BigInteger#intValue
      * @since  1.8
      */
