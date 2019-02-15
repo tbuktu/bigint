@@ -2197,7 +2197,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(signum, mag);
     }
 
-    // Radix-2 decimation-in-frequency right-angle transform
+    // Radix-4 decimation-in-frequency right-angle transform
     private void fft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
         // apply weights
@@ -2205,46 +2205,125 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             a[i].multiply(weights[i]);
 
         int logN = 31 - Integer.numberOfLeadingZeros(n);
-        MutableComplex u = new MutableComplex(0, 0);
-        MutableComplex v = new MutableComplex(0, 0);
-        for (int s=logN; s>=1; s--) {
+        MutableComplex temp1 = new MutableComplex(0, 0);
+        MutableComplex temp2 = new MutableComplex(0, 0);
+        MutableComplex temp3 = new MutableComplex(0, 0);
+        MutableComplex temp4 = new MutableComplex(0, 0);
+        MutableComplex temp5 = new MutableComplex(0, 0);
+        MutableComplex temp6 = new MutableComplex(0, 0);
+
+        int s = logN;
+        // do one radix-2 step if there is an odd number of stages
+        if (logN%2 != 0) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
-                for (int j=0; j<m/2; j++){
-                    MutableComplex omega = roots[j<<(logN-s)];
+                for (int j=0; j<m/2; j++) {
+                    MutableComplex omega = roots[j];
                     // u = a[i+j]; v = a[i+j+m/2]
-                    a[i + j].copyTo(u);
-                    a[i + j + m/2].copyTo(v);
+                    a[i + j].copyTo(temp1);
+                    a[i + j + m/2].copyTo(temp2);
                     // a[i+j] = u+v
-                    a[i + j].add(v);
+                    a[i + j].add(temp2);
                     // a[i+j+m/2] = (u-v)*omega
-                    u.subtract(v);
-                    u.multiply(omega);
-                    u.copyTo(a[i + j + m/2]);
+                    temp1.subtract(temp2);
+                    temp1.multiplyInto(omega, a[i + j + m/2]);
+                }
+            }
+            s--;
+        }
+
+        // do the remaining stages two at a time (radix-4)
+        for (; s>=2; s-=2) {
+            int m = 1 << s;
+            for (int i=0; i<n; i+=m) {
+                for (int j=0; j<m/4; j++) {
+                    MutableComplex omega = roots[j<<(logN-s)];
+                    a[i + j].copyTo(temp1);
+                    a[i + j + m/2].copyTo(temp2);
+                    temp1.addInto(temp2, temp3);
+                    temp1.subtract(temp2);
+                    temp1.multiplyInto(omega, temp4);
+
+                    omega = roots[(j+m/4)<<(logN-s)];
+                    a[i + j + m/4].copyTo(temp1);
+                    a[i + j + m/2 + m/4].copyTo(temp2);
+                    temp1.addInto(temp2, temp5);
+                    temp1.subtract(temp2);
+                    temp1.multiplyInto(omega, temp6);
+
+                    omega = roots[j<<(logN-s+1)];
+                    temp3.addInto(temp5, a[i + j]);
+                    temp3.subtract(temp5);
+                    temp3.multiplyInto(omega, a[i + j + m/4]);
+
+                    temp4.addInto(temp6, a[i + j + m/2]);
+                    temp4.subtract(temp6);
+                    temp4.multiplyInto(omega, a[i + j + m/2 + m/4]);
                 }
             }
         }
     }
 
-    // Radix-2 decimation-in-time inverse right-angle transform
+    // Radix-4 decimation-in-time inverse right-angle transform
     private void ifft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
-        MutableComplex u = new MutableComplex(0, 0);
-        MutableComplex v = new MutableComplex(0, 0);
-        for (int s=1; s<=logN; s++) {
+        MutableComplex temp1 = new MutableComplex(0, 0);
+        MutableComplex temp2 = new MutableComplex(0, 0);
+        MutableComplex temp3 = new MutableComplex(0, 0);
+        MutableComplex temp4 = new MutableComplex(0, 0);
+        MutableComplex temp5 = new MutableComplex(0, 0);
+        MutableComplex temp6 = new MutableComplex(0, 0);
+
+        int s = 1;
+        // do one radix-2 step if there is an odd number of stages
+        if (logN%2 != 0) {
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/2; j++) {
                     MutableComplex omega = roots[j<<(logN-s)];
                     // u = a[i+j+m/2]*omega; v = a[i+j]
-                    a[i + j + m/2].copyTo(u);
-                    u.multiply(omega);
-                    a[i + j].copyTo(v);
+                    a[i + j + m/2].copyTo(temp1);
+                    temp1.multiply(omega);
+                    a[i + j].copyTo(temp2);
                     // a[i+j] = v+u; a[i+j+m/2] = v-u
-                    a[i + j].add(u);
-                    v.subtract(u);
-                    v.copyTo(a[i + j + m/2]);
+                    a[i + j].add(temp1);
+                    temp2.subtractInto(temp1, a[i + j + m/2]);
+                }
+            }
+            s++;
+        }
+
+        // do the remaining stages two at a time (radix-4)
+        for (; s<=logN; s+=2) {
+            int m = 1 << (s+1);
+            for (int i=0; i<n; i+=m) {
+                for (int j=0; j<m/4; j++) {
+                    MutableComplex omega = roots[j<<(logN-s)];
+                    a[i + j + m/4].copyTo(temp1);
+                    temp1.multiply(omega);
+                    a[i + j].copyTo(temp2);
+                    temp2.copyTo(temp3);
+                    temp3.add(temp1);
+                    temp2.subtract(temp1);
+
+                    a[i + j + m/2 + m/4].copyTo(temp1);
+                    temp1.multiply(omega);
+                    a[i + j + m/2].copyTo(temp5);
+                    temp5.copyTo(temp4);
+                    temp4.add(temp1);
+                    temp5.subtractInto(temp1, temp6);
+
+                    omega = roots[j<<(logN-s-1)];
+                    temp4.copyTo(temp1);
+                    temp1.multiply(omega);
+                    temp3.addInto(temp1, a[i + j]);
+                    temp3.subtractInto(temp1, a[i + j + m/2]);
+
+                    omega = roots[(j+m/4)<<(logN-s-1)];
+                    temp6.multiply(omega);
+                    temp2.addInto(temp6, a[i + j + m/4]);
+                    temp2.subtractInto(temp6, a[i + j + m/2 + m/4]);
                 }
             }
         }
@@ -2281,15 +2360,30 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             imag += c.imag;
         }
 
+        void addInto(MutableComplex c, MutableComplex destination) {
+            destination.real = real + c.real;
+            destination.imag = imag + c.imag;
+        }
+
         void subtract(MutableComplex c) {
             real -= c.real;
             imag -= c.imag;
+        }
+
+        void subtractInto(MutableComplex c, MutableComplex destination) {
+            destination.real = real - c.real;
+            destination.imag = imag - c.imag;
         }
 
         void multiply(MutableComplex c) {
             double temp = real;
             real = real*c.real - imag*c.imag;
             imag = temp*c.imag + imag*c.real;
+        }
+
+        void multiplyInto(MutableComplex c, MutableComplex destination) {
+            destination.real = real*c.real - imag*c.imag;
+            destination.imag = real*c.imag + imag*c.real;
         }
 
         void divide(int n) {
