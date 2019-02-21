@@ -2105,34 +2105,44 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return c;
     }
 
+    /**
+     * Returns the maximum number of bits that one double precision number can fit without
+     * causing the multiplication to be incorrect.
+     * Uses the provably safe FFT error bounds from "Rapid Multiplication Modulo The Sum And
+     * Difference of Highly Composite Numbers" by Colin Percival, pg. 392
+     * (https://www.daemonology.net/papers/fft.pdf).
+     * @param magLen length of mag
+     * @return
+     */
     private int bitsPerFFTPoint(int magLen) {
-        int logBitLen = 32 - Integer.numberOfLeadingZeros(magLen*32 - 1);
-        if (logBitLen <= 10)
+        int magBits = magLen * 32;
+        if (magBits <= 19*(1<<9))
             return 19;
-        else if (logBitLen <= 11)
+        if (magBits <= 18*(1<<10))
             return 18;
-        else if (logBitLen <= 13)
+        if (magBits <= 17*(1<<12))
             return 17;
-        else if (logBitLen <= 15)
+        if (magBits <= 16*(1<<14))
             return 16;
-        else if (logBitLen <= 17)
+        if (magBits <= 15*(1<<16))
             return 15;
-        else if (logBitLen <= 19)
+        if (magBits <= 14*(1<<18))
             return 14;
-        else if (logBitLen <= 21)
+        if (magBits <= 13*(1<<20))
             return 13;
-        else if (logBitLen <= 22)
+        if (magBits <= 12*(1<<21))
             return 12;
-        else if (logBitLen <= 24)
+        if (magBits <= 11*(1<<23))
             return 11;
-        else if (logBitLen <= 26)
+        if (magBits <= 10*(1<<25))
             return 10;
-        else if (logBitLen <= 28)
+        if (magBits <= 9*(1<<27))
             return 9;
-        else if (logBitLen <= 30)
+        if (magBits <= 8*(1<<29))
             return 8;
-        else
+        if (magBits <= 7*(1<<31))
             return 7;
+        return 6;
     }
 
     // Converts this BigInteger into an array of complex numbers suitable for an FFT.
