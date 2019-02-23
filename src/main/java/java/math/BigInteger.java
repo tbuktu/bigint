@@ -2069,38 +2069,28 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // calculate twiddle factors
         MutableComplex[] roots = new MutableComplex[fftLen/2];
-        MutableComplex[] invRoots = new MutableComplex[fftLen/2];
         for (int i=0; i<fftLen/2; i++) {
             double angle = -2 * Math.PI * i / fftLen;
-            double cos = Math.cos(angle);
-            double sin = Math.sin(angle);
-            roots[i] = new MutableComplex(cos, sin);
-            invRoots[i] = new MutableComplex(cos, -sin);
+            roots[i] = new MutableComplex(Math.cos(angle), Math.sin(angle));
         }
-        // calculate weights for the right-angle transform: weights[i] = 0.5*pi*i/fftLen
+        // calculate weights for the right-angle transform: weights[i] = {cos,sin}(0.5*pi*i/fftLen)
         MutableComplex[] weights = new MutableComplex[fftLen];
-        MutableComplex[] invWeights = new MutableComplex[fftLen];
+        weights[0] = new MutableComplex(1, 0);
         double cos = Math.cos(0.25 * Math.PI);
         double sin = Math.sin(0.25 * Math.PI);
-        weights[0] = new MutableComplex(1, 0);
         weights[fftLen/2] = new MutableComplex(cos, sin);
-        invWeights[0] = new MutableComplex(1, 0);
-        invWeights[fftLen/2] = new MutableComplex(sin, -cos);
         for (int i=1; i<fftLen/2; i++) {
             double angle = 0.5 * Math.PI * i / fftLen;
             cos = Math.cos(angle);
             sin = Math.sin(angle);
             weights[i] = new MutableComplex(cos, sin);
             weights[fftLen-i] = new MutableComplex(sin, cos);
-            weights[i] = new MutableComplex(cos, sin);
-            invWeights[i] = new MutableComplex(cos, -sin);
-            invWeights[fftLen-i] = new MutableComplex(sin, -cos);
         }
 
         fft(aVec, roots, weights);
         fft(bVec, roots, weights);
         multiplyPointwise(aVec, bVec);
-        ifft(aVec, invRoots, invWeights);
+        ifft(aVec, roots, weights);
         BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
         return c;
     }
@@ -2294,7 +2284,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     MutableComplex omega = roots[j<<(logN-s)];
                     // u = a[i+j+m/2]*omega; v = a[i+j]
                     a[i + j + m/2].copyTo(temp1);
-                    temp1.multiply(omega);
+                    temp1.multiplyConjugate(omega);
                     a[i + j].copyTo(temp2);
                     // a[i+j] = v+u; a[i+j+m/2] = v-u
                     a[i + j].add(temp1);
@@ -2311,14 +2301,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 for (int j=0; j<m/4; j++) {
                     MutableComplex omega = roots[j<<(logN-s)];
                     a[i + j + m/4].copyTo(temp1);
-                    temp1.multiply(omega);
+                    temp1.multiplyConjugate(omega);
                     a[i + j].copyTo(temp2);
                     temp2.copyTo(temp3);
                     temp3.add(temp1);
                     temp2.subtract(temp1);
 
                     a[i + j + m/2 + m/4].copyTo(temp1);
-                    temp1.multiply(omega);
+                    temp1.multiplyConjugate(omega);
                     a[i + j + m/2].copyTo(temp5);
                     temp5.copyTo(temp4);
                     temp4.add(temp1);
@@ -2326,29 +2316,27 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
                     omega = roots[j<<(logN-s-1)];
                     temp4.copyTo(temp1);
-                    temp1.multiply(omega);
+                    temp1.multiplyConjugate(omega);
                     temp3.addInto(temp1, a[i + j]);
                     temp3.subtractInto(temp1, a[i + j + m/2]);
 
                     omega = roots[(j+m/4)<<(logN-s-1)];
-                    temp6.multiply(omega);
+                    temp6.multiplyConjugate(omega);
                     temp2.addInto(temp6, a[i + j + m/4]);
                     temp2.subtractInto(temp6, a[i + j + m/2 + m/4]);
                 }
             }
         }
-        for (int i=0; i<n; i++)
+        for (int i=0; i<n; i++) {
             a[i].divide(n);
-
-        // apply weights
-        for (int i=0; i<n; i++)
-            a[i].multiply(weights[i]);
+            // apply weights
+            a[i].multiplyConjugate(weights[i]);
+        }
     }
 
     // The result is placed in a
     private void multiplyPointwise(MutableComplex[] a, MutableComplex[] b) {
-        MutableComplex[] c = new MutableComplex[a.length];
-        for (int i=0; i<c.length; i++)
+        for (int i=0; i<a.length; i++)
             a[i].multiply(b[i]);
     }
 
@@ -2389,6 +2377,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             double temp = real;
             real = real*c.real - imag*c.imag;
             imag = temp*c.imag + imag*c.real;
+        }
+
+        void multiplyConjugate(MutableComplex c) {
+            double temp = real;
+            real = real*c.real + imag*c.imag;
+            imag = -temp*c.imag + imag*c.real;
         }
 
         void multiplyInto(MutableComplex c, MutableComplex destination) {
