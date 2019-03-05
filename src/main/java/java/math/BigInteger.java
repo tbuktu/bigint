@@ -245,6 +245,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final int TOOM_COOK_SQUARE_THRESHOLD = 216;
 
     /**
+     * The threshold value for using FFT squaring.  If the number
+     * of ints in the number are larger than this value,
+     * FFT squaring will be used.   This value is found
+     * experimentally to work well.
+     */
+    private static final int FFT_SQUARE_THRESHOLD = 1000;
+
+    /**
      * The threshold value for using Burnikel-Ziegler division.  If the number
      * of ints in the divisor are larger than this value, Burnikel-Ziegler
      * division may be used.  This value is found experimentally to work well.
@@ -1241,10 +1249,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     static {
         assert 0 < KARATSUBA_THRESHOLD
             && KARATSUBA_THRESHOLD < TOOM_COOK_THRESHOLD
-            && TOOM_COOK_THRESHOLD < Integer.MAX_VALUE
+            && TOOM_COOK_THRESHOLD < FFT_THRESHOLD
+            && FFT_THRESHOLD < Integer.MAX_VALUE
             && 0 < KARATSUBA_SQUARE_THRESHOLD
             && KARATSUBA_SQUARE_THRESHOLD < TOOM_COOK_SQUARE_THRESHOLD
-            && TOOM_COOK_SQUARE_THRESHOLD < Integer.MAX_VALUE :
+            && TOOM_COOK_SQUARE_THRESHOLD < FFT_SQUARE_THRESHOLD
+            && FFT_SQUARE_THRESHOLD < Integer.MAX_VALUE :
             "Algorithm thresholds are inconsistent";
 
         for (int i = 1; i <= MAX_CONSTANT; i++) {
@@ -2054,11 +2064,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(trustedStripLeadingZeroInts(upperInts), 1);
     }
 
-    public BigInteger multiplyFFT(BigInteger b) {
-        return multiplyFFT(this, b);
-    }
-
-    private BigInteger multiplyFFT(BigInteger a, BigInteger b) {
+    private static BigInteger multiplyFFT(BigInteger a, BigInteger b) {
         int signum = a.signum * b.signum;
         int magLen = Math.max(a.mag.length, b.mag.length);
         int bitsPerPoint = bitsPerFFTPoint(magLen);
@@ -2066,14 +2072,28 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
         MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
+        MutableComplex[] roots = calculateTwiddleFactors(fftLen);
+        MutableComplex[] weights = calculateFFTWeights(fftLen);
+        fft(aVec, roots, weights);
+        fft(bVec, roots, weights);
+        multiplyPointwise(aVec, bVec);
+        ifft(aVec, roots, weights);
+        BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
+        return c;
+    }
 
-        // calculate twiddle factors
+    // returns twiddle factors for an FFT of length fftLen
+    private static MutableComplex[] calculateTwiddleFactors(int fftLen) {
         MutableComplex[] roots = new MutableComplex[fftLen/2];
         for (int i=0; i<fftLen/2; i++) {
             double angle = -2 * Math.PI * i / fftLen;
             roots[i] = new MutableComplex(Math.cos(angle), Math.sin(angle));
         }
-        // calculate weights for the right-angle transform: weights[i] = {cos,sin}(0.5*pi*i/fftLen)
+        return roots;
+    }
+
+    // returns weights for the right-angle transform: weights[i] = {cos,sin}(0.5*pi*i/fftLen)
+    private static MutableComplex[] calculateFFTWeights(int fftLen) {
         MutableComplex[] weights = new MutableComplex[fftLen];
         weights[0] = new MutableComplex(1, 0);
         double cos = Math.cos(0.25 * Math.PI);
@@ -2086,13 +2106,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             weights[i] = new MutableComplex(cos, sin);
             weights[fftLen-i] = new MutableComplex(sin, cos);
         }
-
-        fft(aVec, roots, weights);
-        fft(bVec, roots, weights);
-        multiplyPointwise(aVec, bVec);
-        ifft(aVec, roots, weights);
-        BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
-        return c;
+        return weights;
     }
 
     /**
@@ -2104,7 +2118,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * @param magLen length of mag
      * @return
      */
-    private int bitsPerFFTPoint(int magLen) {
+    private static int bitsPerFFTPoint(int magLen) {
         int magBits = magLen * 32;
         if (magBits <= 19*(1<<9))
             return 19;
@@ -2167,7 +2181,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     // Converts an array of complex numbers back into a BigInteger.
     // The length of the array must be a power of 2.
-    private BigInteger fromFFTVector(MutableComplex[] fftVec, int signum, int bitsPerFFTPoint) {
+    private static BigInteger fromFFTVector(MutableComplex[] fftVec, int signum, int bitsPerFFTPoint) {
         int fftLen = fftVec.length;
         int magLen = 2 * (fftLen*bitsPerFFTPoint+31) / 32;
         int[] mag = new int[magLen];
@@ -2198,7 +2212,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-4 decimation-in-frequency right-angle transform
-    private void fft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
+    private static void fft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
         // apply weights
         for (int i=0; i<n; i++)
@@ -2265,7 +2279,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-4 decimation-in-time inverse right-angle transform
-    private void ifft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
+    private static void ifft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex temp1 = new MutableComplex(0, 0);
@@ -2335,12 +2349,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // The result is placed in a
-    private void multiplyPointwise(MutableComplex[] a, MutableComplex[] b) {
+    private static void multiplyPointwise(MutableComplex[] a, MutableComplex[] b) {
         for (int i=0; i<a.length; i++)
             a[i].multiply(b[i]);
     }
 
-    private class MutableComplex {
+    private static class MutableComplex {
         double real, imag;
 
         MutableComplex(double real, double imag) {
@@ -2394,6 +2408,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             real /= n;
             imag /= n;
         }
+
+        void square() {
+            double temp = real;
+            real = real*real - imag*imag;
+            imag = 2 * temp * imag;
+        }
     }
 
     // Squaring
@@ -2426,7 +2446,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         } else {
             if (len < TOOM_COOK_SQUARE_THRESHOLD) {
                 return squareKaratsuba();
-            } else {
+            } else if (len < FFT_SQUARE_THRESHOLD) {
                 //
                 // For a discussion of overflow detection see multiply()
                 //
@@ -2437,6 +2457,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 }
 
                 return squareToomCook3();
+            }
+            else {
+                return squareFFT();
             }
         }
     }
@@ -2613,6 +2636,26 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int ss = k*32;
 
         return vinf.shiftLeft(ss).add(t2).shiftLeft(ss).add(t1).shiftLeft(ss).add(tm1).shiftLeft(ss).add(v0);
+    }
+
+    private BigInteger squareFFT() {
+        int bitsPerPoint = bitsPerFFTPoint(mag.length);
+        int fftLen = (mag.length*32+bitsPerPoint-1) / bitsPerPoint;
+        fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
+        MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
+        MutableComplex[] roots = calculateTwiddleFactors(fftLen);
+        MutableComplex[] weights = calculateFFTWeights(fftLen);
+        fft(vec, roots, weights);
+        squarePointwise(vec);
+        ifft(vec, roots, weights);
+        BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
+        return c;
+    }
+
+    // The result is placed in the argument
+    private void squarePointwise(MutableComplex[] vec) {
+        for (int i=0; i<vec.length; i++)
+            vec[i].square();
     }
 
     // Division
