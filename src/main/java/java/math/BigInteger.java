@@ -2068,7 +2068,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int signum = a.signum * b.signum;
         int magLen = Math.max(a.mag.length, b.mag.length);
         int bitsPerPoint = bitsPerFFTPoint(magLen);
-        int fftLen = (magLen*32+bitsPerPoint-1) / bitsPerPoint;
+        int fftLen = (magLen*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
         MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
@@ -2156,6 +2156,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int fftIdx = 0;
         int magBitIdx = 0;   // next bit of the current mag element
         int magIdx = mag.length - 1;
+        int carry = 0;   // when we subtract base from a digit, we need to carry one
+        int base = 1 << bitsPerFFTPoint;
         while (magIdx >= 0) {
             int fftPoint = 0;
             int fftBitIdx = 0;
@@ -2171,7 +2173,22 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                         break;
                 }
             } while (fftBitIdx < bitsPerFFTPoint);
+
+            // "balance" the output digits so -base/2 < digit < base/2
+            fftPoint += carry;
+            if (fftPoint > base/2) {
+                fftPoint -= base;
+                carry = 1;
+            }
+            else
+                carry = 0;
+
             fftVec[fftIdx] = new MutableComplex(fftPoint, 0);
+            fftIdx++;
+        }
+        // final carry
+        if (carry > 0) {
+            fftVec[fftIdx] = new MutableComplex(carry, 0);
             fftIdx++;
         }
         while (fftIdx < fftLen)
@@ -2640,7 +2657,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     private BigInteger squareFFT() {
         int bitsPerPoint = bitsPerFFTPoint(mag.length);
-        int fftLen = (mag.length*32+bitsPerPoint-1) / bitsPerPoint;
+        int fftLen = (mag.length*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
         MutableComplex[] roots = calculateTwiddleFactors(fftLen);
