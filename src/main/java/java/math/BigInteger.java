@@ -2072,41 +2072,31 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
         MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] roots = calculateTwiddleFactors(fftLen);
-        MutableComplex[] weights = calculateFFTWeights(fftLen);
-        fft(aVec, roots, weights);
-        fft(bVec, roots, weights);
+        MutableComplex[] roots = calculateRootsOfUnity(fftLen);
+        fft(aVec, roots);
+        fft(bVec, roots);
         multiplyPointwise(aVec, bVec);
-        ifft(aVec, roots, weights);
+        ifft(aVec, roots);
         BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
         return c;
     }
 
-    // returns twiddle factors for an FFT of length fftLen
-    private static MutableComplex[] calculateTwiddleFactors(int fftLen) {
-        MutableComplex[] roots = new MutableComplex[fftLen/2];
-        for (int i=0; i<fftLen/2; i++) {
-            double angle = -2 * Math.PI * i / fftLen;
-            roots[i] = new MutableComplex(Math.cos(angle), Math.sin(angle));
-        }
-        return roots;
-    }
-
-    // returns weights for the right-angle transform: weights[i] = {cos,sin}(0.5*pi*i/fftLen)
-    private static MutableComplex[] calculateFFTWeights(int fftLen) {
-        MutableComplex[] weights = new MutableComplex[fftLen];
-        weights[0] = new MutableComplex(1, 0);
+    // Returns n-th complex roots of unity for the angles 0..pi/2.
+    // They are used as twiddle factors and as weights for the right-angle transform.
+    private static MutableComplex[] calculateRootsOfUnity(int n) {
+        MutableComplex[] roots = new MutableComplex[n];
+        roots[0] = new MutableComplex(1, 0);
         double cos = Math.cos(0.25 * Math.PI);
         double sin = Math.sin(0.25 * Math.PI);
-        weights[fftLen/2] = new MutableComplex(cos, sin);
-        for (int i=1; i<fftLen/2; i++) {
-            double angle = 0.5 * Math.PI * i / fftLen;
+        roots[n/2] = new MutableComplex(cos, sin);
+        for (int i=1; i<n/2; i++) {
+            double angle = 0.5 * Math.PI * i / n;
             cos = Math.cos(angle);
             sin = Math.sin(angle);
-            weights[i] = new MutableComplex(cos, sin);
-            weights[fftLen-i] = new MutableComplex(sin, cos);
+            roots[i] = new MutableComplex(cos, sin);
+            roots[n-i] = new MutableComplex(sin, cos);
         }
-        return weights;
+        return roots;
     }
 
     /**
@@ -2229,11 +2219,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Radix-4 decimation-in-frequency right-angle transform
-    private static void fft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
+    private static void fft(MutableComplex[] a, MutableComplex[] roots) {
         int n = a.length;
         // apply weights
         for (int i=0; i<n; i++)
-            a[i].multiply(weights[i]);
+            a[i].multiply(roots[i]);
 
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex a0 = new MutableComplex(0, 0);
@@ -2242,6 +2232,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableComplex a3 = new MutableComplex(0, 0);
 
         // do two FFT stages at a time (radix-4)
+        MutableComplex omega2 = new MutableComplex(0, 0);
         MutableComplex omega3 = new MutableComplex(0, 0);
         int s = logN;
         for (; s>=2; s-=2) {
@@ -2249,8 +2240,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/4; j++) {
                     int omegaIdx = j << (logN-s);
-                    MutableComplex omega1 = roots[omegaIdx];
-                    MutableComplex omega2 = roots[omegaIdx*2];
+                    MutableComplex omega1 = roots[4*omegaIdx];
+                    omega1.square(omega2);
                     omega1.multiply(omega2, omega3);
 
                     int idx0 = i + j;
@@ -2265,17 +2256,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     a[idx0].subtractTimesI(a[idx1], a1);
                     a1.subtract(a[idx2]);
                     a1.addTimesI(a[idx3]);
-                    a1.multiply(omega1);
+                    a1.multiplyConjugate(omega1);
 
                     a[idx0].subtract(a[idx1], a2);
                     a2.add(a[idx2]);
                     a2.subtract(a[idx3]);
-                    a2.multiply(omega2);
+                    a2.multiplyConjugate(omega2);
 
                     a[idx0].addTimesI(a[idx1], a3);
                     a3.subtract(a[idx2]);
                     a3.subtractTimesI(a[idx3]);
-                    a3.multiply(omega3);
+                    a3.multiplyConjugate(omega3);
 
                     a0.copyTo(a[idx0]);
                     a1.copyTo(a[idx1]);
@@ -2286,18 +2277,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
 
         // do one final radix-2 step if there is an odd number of stages
-        if (s > 0) {
+        if (s > 0)
             for (int i=0; i<n; i+=2) {
                 a[i].copyTo(a0);
                 a[i + 1].copyTo(a1);
                 a[i].add(a1);
                 a0.subtract(a1, a[i + 1]);
             }
-        }
     }
 
     // Radix-4 decimation-in-time inverse right-angle transform
-    private static void ifft(MutableComplex[] a, MutableComplex[] roots, MutableComplex[] weights) {
+    private static void ifft(MutableComplex[] a, MutableComplex[] roots) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex a0 = new MutableComplex(0, 0);
@@ -2312,29 +2302,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int s = 1;
         // do one radix-2 step if there is an odd number of stages
         if (logN%2 != 0) {
-            int m = 1 << s;
-            for (int i=0; i<n; i+=m) {
-                for (int j=0; j<m/2; j++) {
-                    MutableComplex omega = roots[j<<(logN-s)];
-                    a[i + j + m/2].copyTo(a2);
-                    a2.multiplyConjugate(omega);
-                    a[i + j].copyTo(a0);
-                    a[i + j].add(a2);
-                    a0.subtract(a2, a[i + j + m/2]);
-                }
+            for (int i=0; i<n; i+=2) {
+                a[i + 1].copyTo(a2);
+                a[i].copyTo(a0);
+                a[i].add(a2);
+                a0.subtract(a2, a[i + 1]);
             }
             s++;
         }
 
         // do the remaining stages two at a time (radix-4)
+        MutableComplex omega2 = new MutableComplex(0, 0);
         MutableComplex omega3 = new MutableComplex(0, 0);
         for (; s<=logN; s+=2) {
             int m = 1 << (s+1);
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/4; j++) {
                     int omegaIdx = j << (logN-s-1);
-                    MutableComplex omega1 = roots[omegaIdx];
-                    MutableComplex omega2 = roots[omegaIdx*2];
+                    MutableComplex omega1 = roots[4*omegaIdx];
+                    omega1.square(omega2);
                     omega1.multiply(omega2, omega3);
 
                     int idx0 = i + j;
@@ -2343,9 +2329,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     int idx3 = i + j + m*3/4;
 
                     a0 = a[idx0];
-                    a[idx1].multiplyConjugate(omega1, a1);
-                    a[idx2].multiplyConjugate(omega2, a2);
-                    a[idx3].multiplyConjugate(omega3, a3);
+                    a[idx1].multiply(omega1, a1);
+                    a[idx2].multiply(omega2, a2);
+                    a[idx3].multiply(omega3, a3);
 
                     a0.add(a1, b0);
                     b0.add(a2);
@@ -2374,7 +2360,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i<n; i++) {
             a[i].divide(n);
             // apply weights
-            a[i].multiplyConjugate(weights[i]);
+            a[i].multiplyConjugate(roots[i]);
         }
     }
 
@@ -2434,11 +2420,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             imag = -temp*c.imag + imag*c.real;
         }
 
-        void multiplyConjugate(MutableComplex c, MutableComplex destination) {
-            destination.real = real*c.real + imag*c.imag;
-            destination.imag = -real*c.imag + imag*c.real;
-        }
-
         void addTimesI(MutableComplex c) {
             real -= c.imag;
             imag += c.real;
@@ -2468,6 +2449,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             double temp = real;
             real = real*real - imag*imag;
             imag = 2 * temp * imag;
+        }
+
+        void square(MutableComplex destination) {
+            destination.real = real*real - imag*imag;
+            destination.imag = 2 * real * imag;
         }
     }
 
@@ -2698,11 +2684,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int fftLen = (mag.length*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
         fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
         MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] roots = calculateTwiddleFactors(fftLen);
-        MutableComplex[] weights = calculateFFTWeights(fftLen);
-        fft(vec, roots, weights);
+        MutableComplex[] roots = calculateRootsOfUnity(fftLen);
+        fft(vec, roots);
         squarePointwise(vec);
-        ifft(vec, roots, weights);
+        ifft(vec, roots);
         BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
         return c;
     }
