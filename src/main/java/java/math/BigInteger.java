@@ -2233,7 +2233,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // do two FFT stages at a time (radix-4)
         MutableComplex omega2 = new MutableComplex(0, 0);
-        MutableComplex omega3 = new MutableComplex(0, 0);
         int s = logN;
         for (; s>=2; s-=2) {
             int m = 1 << s;
@@ -2242,7 +2241,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     int omegaIdx = j << (logN-s);
                     MutableComplex omega1 = roots[4*omegaIdx];
                     omega1.square(omega2);
-                    omega1.multiply(omega2, omega3);
 
                     int idx0 = i + j;
                     int idx1 = i + j + m/4;
@@ -2266,7 +2264,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     a[idx0].addTimesI(a[idx1], a3);
                     a3.subtract(a[idx2]);
                     a3.subtractTimesI(a[idx3]);
-                    a3.multiplyConjugate(omega3);
+                    a3.multiply(omega1);   // Bernstein's trick: multiply by omega^(-1) instead of omega^3
 
                     a0.copyTo(a[idx0]);
                     a1.copyTo(a[idx1]);
@@ -2313,7 +2311,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // do the remaining stages two at a time (radix-4)
         MutableComplex omega2 = new MutableComplex(0, 0);
-        MutableComplex omega3 = new MutableComplex(0, 0);
         for (; s<=logN; s+=2) {
             int m = 1 << (s+1);
             for (int i=0; i<n; i+=m) {
@@ -2321,7 +2318,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     int omegaIdx = j << (logN-s-1);
                     MutableComplex omega1 = roots[4*omegaIdx];
                     omega1.square(omega2);
-                    omega1.multiply(omega2, omega3);
 
                     int idx0 = i + j;
                     int idx1 = i + j + m/4;
@@ -2331,7 +2327,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     a0 = a[idx0];
                     a[idx1].multiply(omega1, a1);
                     a[idx2].multiply(omega2, a2);
-                    a[idx3].multiply(omega3, a3);
+                    a[idx3].multiplyConjugate(omega1, a3);   // Bernstein's trick: multiply by omega^(-1) instead of omega^3
 
                     a0.add(a1, b0);
                     b0.add(a2);
@@ -2418,6 +2414,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             double temp = real;
             real = real*c.real + imag*c.imag;
             imag = -temp*c.imag + imag*c.real;
+        }
+
+        void multiplyConjugate(MutableComplex c, MutableComplex destination) {
+            destination.real = real*c.real + imag*c.imag;
+            destination.imag = -real*c.imag + imag*c.real;
         }
 
         void addTimesI(MutableComplex c) {
