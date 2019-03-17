@@ -2372,9 +2372,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         }
 
         for (int i=0; i<n; i++) {
-            a[i].divide(n);
-            // apply weights
-            a[i].multiplyConjugate(roots[i]);
+            a[i].timesTwoToThe(-logN);   // divide by n
+            a[i].multiplyConjugate(roots[i]);   // apply weights
         }
     }
 
@@ -2473,6 +2472,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         void square(MutableComplex destination) {
             destination.real = real*real - imag*imag;
             destination.imag = 2 * real * imag;
+        }
+
+        void timesTwoToThe(int n) {
+            real = Math.scalb(real, n);
+            imag = Math.scalb(imag, n);
         }
     }
 
