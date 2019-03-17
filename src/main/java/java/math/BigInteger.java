@@ -1246,6 +1246,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /** The natural log of 2.  This is used in computing cache indices. */
     private static final double LOG_TWO = Math.log(2.0);
 
+    /** for FFTs of length up to 2^17 */
+    private static final int ROOTS_CACHE_SIZE = 18;
+    /** Complex roots for FFT multiplication */
+    private volatile static MutableComplex[][] ROOTS_CACHE = new MutableComplex[ROOTS_CACHE_SIZE][];
+
     static {
         assert 0 < KARATSUBA_THRESHOLD
             && KARATSUBA_THRESHOLD < TOOM_COOK_THRESHOLD
@@ -2069,10 +2074,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int magLen = Math.max(a.mag.length, b.mag.length);
         int bitsPerPoint = bitsPerFFTPoint(magLen);
         int fftLen = (magLen*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
-        fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
+        int logFFTLen = 32 - Integer.numberOfLeadingZeros(fftLen - 1);
+        fftLen = 1 << (logFFTLen);   // round up to the nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
         MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] roots = calculateRootsOfUnity(fftLen);
+        MutableComplex[] roots = getRootsOfUnity(logFFTLen);
         fft(aVec, roots);
         fft(bVec, roots);
         multiplyPointwise(aVec, bVec);
@@ -2081,7 +2087,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return c;
     }
 
-    // Returns n-th complex roots of unity for the angles 0..pi/2.
+    // Returns n-th complex roots of unity for a transform of length 2^logN
+    private static MutableComplex[] getRootsOfUnity(int logN) {
+        if (logN < ROOTS_CACHE_SIZE) {
+            if (ROOTS_CACHE[logN] == null)
+                ROOTS_CACHE[logN] = calculateRootsOfUnity(1 << logN);
+            return ROOTS_CACHE[logN];
+        }
+        else
+            return calculateRootsOfUnity(1 << logN);
+    }
+
+    // Returns n-th complex roots of unity for the angles 0..pi/2, suitable
+    // for a transform of length n.
     // They are used as twiddle factors and as weights for the right-angle transform.
     private static MutableComplex[] calculateRootsOfUnity(int n) {
         MutableComplex[] roots = new MutableComplex[n];
