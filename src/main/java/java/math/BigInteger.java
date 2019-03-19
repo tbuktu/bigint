@@ -2071,9 +2071,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
     private static BigInteger multiplyFFT(BigInteger a, BigInteger b) {
         int signum = a.signum * b.signum;
-        int magLen = Math.max(a.mag.length, b.mag.length);
-        int bitsPerPoint = bitsPerFFTPoint(magLen);
-        int fftLen = (magLen*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
+        int bitLen = Math.max(a.mag.length, b.mag.length) * 32;
+        int bitsPerPoint = bitsPerFFTPoint(bitLen);
+        int fftLen = (bitLen+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
         int logFFTLen = 32 - Integer.numberOfLeadingZeros(fftLen - 1);
         fftLen = 1 << (logFFTLen);   // round up to the nearest power of two
         MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
@@ -2123,36 +2123,35 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Uses the provably safe FFT error bounds from "Rapid Multiplication Modulo The Sum And
      * Difference of Highly Composite Numbers" by Colin Percival, pg. 392
      * (https://www.daemonology.net/papers/fft.pdf).
-     * @param magLen length of mag
+     * @param bitLen length of this number in bits
      * @return
      */
-    private static int bitsPerFFTPoint(int magLen) {
-        int magBits = magLen * 32;
-        if (magBits <= 19*(1<<9))
+    private static int bitsPerFFTPoint(int bitLen) {
+        if (bitLen <= 19*(1<<9))
             return 19;
-        if (magBits <= 18*(1<<10))
+        if (bitLen <= 18*(1<<10))
             return 18;
-        if (magBits <= 17*(1<<12))
+        if (bitLen <= 17*(1<<12))
             return 17;
-        if (magBits <= 16*(1<<14))
+        if (bitLen <= 16*(1<<14))
             return 16;
-        if (magBits <= 15*(1<<16))
+        if (bitLen <= 15*(1<<16))
             return 15;
-        if (magBits <= 14*(1<<18))
+        if (bitLen <= 14*(1<<18))
             return 14;
-        if (magBits <= 13*(1<<20))
+        if (bitLen <= 13*(1<<20))
             return 13;
-        if (magBits <= 12*(1<<21))
+        if (bitLen <= 12*(1<<21))
             return 12;
-        if (magBits <= 11*(1<<23))
+        if (bitLen <= 11*(1<<23))
             return 11;
-        if (magBits <= 10*(1<<25))
+        if (bitLen <= 10*(1<<25))
             return 10;
-        if (magBits <= 9*(1<<27))
+        if (bitLen <= 9*(1<<27))
             return 9;
-        if (magBits <= 8*(1<<29))
+        if (bitLen <= 8*(1<<29))
             return 8;
-        if (magBits <= 7*(1<<31))
+        if (bitLen <= 7*(1<<31))
             return 7;
         return 6;
     }
