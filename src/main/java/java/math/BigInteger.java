@@ -1247,9 +1247,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final double LOG_TWO = Math.log(2.0);
 
     /** for FFTs of length up to 2^17 */
-    private static final int ROOTS_CACHE_SIZE = 18;
-    /** Complex roots for FFT multiplication */
-    private volatile static MutableComplex[][] ROOTS_CACHE = new MutableComplex[ROOTS_CACHE_SIZE][];
+    private static final int ROOTS_CACHE2_SIZE = 18;
+    /** for FFTs of length up to 3*2^15 */
+    private static final int ROOTS3_CACHE_SIZE = 15;
+    /** Complex roots for FFTs of size 2^n */
+    private volatile static MutableComplex[][] ROOTS2_CACHE = new MutableComplex[ROOTS_CACHE2_SIZE][];
+    /** Complex roots for FFTs of size 3*2^n */
+    private volatile static MutableComplex[][] ROOTS3_CACHE = new MutableComplex[ROOTS3_CACHE_SIZE][];
 
     static {
         assert 0 < KARATSUBA_THRESHOLD
@@ -2075,27 +2079,62 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int bitsPerPoint = bitsPerFFTPoint(bitLen);
         int fftLen = (bitLen+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
         int logFFTLen = 32 - Integer.numberOfLeadingZeros(fftLen - 1);
-        fftLen = 1 << (logFFTLen);   // round up to the nearest power of two
-        MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] roots = getRootsOfUnity(logFFTLen);
-        fft(aVec, roots);
-        fft(bVec, roots);
-        multiplyPointwise(aVec, bVec);
-        ifft(aVec, roots);
-        BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
-        return c;
+
+        // Use a 2^n or 3*2^n transform, whichever is shortest
+        int fftLen2 = 1 << (logFFTLen);   // rounded to 2^n
+        int fftLen3 = fftLen2 * 3 / 4;   // rounded to 3*2^n
+        if (fftLen < fftLen3) {
+            fftLen = fftLen3;
+            MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
+            MutableComplex[] roots3 = getRootsOfUnity3(logFFTLen-2);
+            applyWeights(aVec, roots3);
+            applyWeights(bVec, roots3);
+            fftMixedRadix(aVec, roots2, roots3);
+            fftMixedRadix(bVec, roots2, roots3);
+            multiplyPointwise(aVec, bVec);
+            ifftMixedRadix(aVec, roots2, roots3);
+            applyInverseWeights(aVec, roots3);
+            BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
+            return c;
+        } else {
+            fftLen = fftLen2;
+            MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] roots = getRootsOfUnity2(logFFTLen);
+            applyWeights(aVec, roots);
+            applyWeights(bVec, roots);
+            fft(aVec, roots);
+            fft(bVec, roots);
+            multiplyPointwise(aVec, bVec);
+            ifft(aVec, roots);
+            applyInverseWeights(aVec, roots);
+            BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
+            return c;
+        }
     }
 
     // Returns n-th complex roots of unity for a transform of length 2^logN
-    private static MutableComplex[] getRootsOfUnity(int logN) {
-        if (logN < ROOTS_CACHE_SIZE) {
-            if (ROOTS_CACHE[logN] == null)
-                ROOTS_CACHE[logN] = calculateRootsOfUnity(1 << logN);
-            return ROOTS_CACHE[logN];
+    private static MutableComplex[] getRootsOfUnity2(int logN) {
+        if (logN < ROOTS_CACHE2_SIZE) {
+            if (ROOTS2_CACHE[logN] == null)
+                ROOTS2_CACHE[logN] = calculateRootsOfUnity(1 << logN);
+            return ROOTS2_CACHE[logN];
         }
         else
             return calculateRootsOfUnity(1 << logN);
+    }
+
+    // Returns n-th complex roots of unity for a transform of length 3*2^logN
+    private static MutableComplex[] getRootsOfUnity3(int logN) {
+        if (logN < ROOTS3_CACHE_SIZE) {
+            if (ROOTS3_CACHE[logN] == null)
+                ROOTS3_CACHE[logN] = calculateRootsOfUnity(3 << logN);
+            return ROOTS3_CACHE[logN];
+        }
+        else
+            return calculateRootsOfUnity(3 << logN);
     }
 
     // Returns n-th complex roots of unity for the angles 0..pi/2, suitable
@@ -2235,13 +2274,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(signum, mag);
     }
 
+    private static void applyWeights(MutableComplex[] a, MutableComplex[] roots) {
+        for (int i=0; i<a.length; i++)
+            a[i].multiply(roots[i]);
+    }
+
+    private static void applyInverseWeights(MutableComplex[] a, MutableComplex[] roots) {
+        for (int i=0; i<a.length; i++)
+            a[i].multiplyConjugate(roots[i]);
+    }
+
     // Radix-4 decimation-in-frequency right-angle transform
     private static void fft(MutableComplex[] a, MutableComplex[] roots) {
         int n = a.length;
-        // apply weights
-        for (int i=0; i<n; i++)
-            a[i].multiply(roots[i]);
-
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex a0 = new MutableComplex(0, 0);
         MutableComplex a1 = new MutableComplex(0, 0);
@@ -2370,9 +2415,118 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
         }
 
-        for (int i=0; i<n; i++) {
+        for (int i=0; i<n; i++)
             a[i].timesTwoToThe(-logN);   // divide by n
-            a[i].multiplyConjugate(roots[i]);   // apply weights
+    }
+
+    // Uses the 4-step algorithm to decompose a 3*2^n FFT into 2^n FFTs of length 3
+    // and 3 FFTs of length 2^n.
+    // See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
+    // a.length must be 3*2^n for some n>=2
+    private static void fftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
+        MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
+        MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
+        MutableComplex[] a2 = Arrays.copyOfRange(a, a.length*2/3, a.length);
+
+        // step 1: perform a.length/3 transforms of length 3
+        fft3(a0, a1, a2, 1, 1);
+
+        // step 2
+        for (int i=0; i<a.length/4; i++) {
+            MutableComplex omega1 = roots3[4*i];
+            // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
+            a1[i].multiplyConjugate(omega1);
+            a2[i].multiplyConjugate(omega1);
+            a2[i].multiplyConjugate(omega1);
+        }
+        for (int i=a.length/4; i<a.length/3; i++) {
+            MutableComplex omega1 = roots3[4*i-a.length];
+            // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
+            a1[i].multiplyConjugateTimesI(omega1);
+            a2[i].multiplyConjugateTimesI(omega1);
+            a2[i].multiplyConjugateTimesI(omega1);
+        }
+
+        // step 3 is not needed
+
+        // step 4: perform 3 transforms of length a.length/3
+        fft(a0, roots2);
+        fft(a1, roots2);
+        fft(a2, roots2);
+    }
+
+    // Uses the 4-step algorithm to decompose a 3*2^n IFFT into 3 IFFTs of length 2^n
+    // and 2^n IFFTs of length 3.
+    // See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
+    // a.length must be 3*2^n for some n>=2
+    private static void ifftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
+        MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
+        MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
+        MutableComplex[] a2 = Arrays.copyOfRange(a, a.length*2/3, a.length);
+
+        // step 1: perform 3 transforms of length a.length/3
+        ifft(a0, roots2);
+        ifft(a1, roots2);
+        ifft(a2, roots2);
+
+        // step 2
+        for (int i=0; i<a.length/4; i++) {
+            double angle1 = 2 * Math.PI * 1 * i / a.length;
+            MutableComplex omega1 = roots3[4*i];
+            // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
+            a1[i].multiply(omega1);
+            a2[i].multiply(omega1);
+            a2[i].multiply(omega1);
+        }
+        for (int i=a.length/4; i<a.length/3; i++) {
+            double angle1 = 2 * Math.PI * 1 * i / a.length;
+            MutableComplex omega1 = roots3[4*i-a.length];
+            // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
+            a1[i].multiplyByIAnd(omega1);
+            a2[i].multiplyByIAnd(omega1);
+            a2[i].multiplyByIAnd(omega1);
+        }
+
+        // step 3 is not needed
+
+        // step 4: perform a.length/3 transforms of length 3
+        fft3(a0, a1, a2, -1, 1.0/3);
+    }
+
+    private static void fft3(MutableComplex[] a0, MutableComplex[] a1, MutableComplex[] a2, int sign, double scale) {
+        double angle1 = sign * (-2) * Math.PI * 1 / 3;
+        double angle2 = sign * (-2) * Math.PI * 2 / 3;
+        MutableComplex omega1 = new MutableComplex(Math.cos(angle1), Math.sin(angle1));
+        MutableComplex omega2 = new MutableComplex(Math.cos(angle2), Math.sin(angle2));
+        for (int i=0; i<a0.length; i++) {
+            MutableComplex b0 = new MutableComplex(0, 0);
+            MutableComplex b1 = new MutableComplex(0, 0);
+            MutableComplex b2 = new MutableComplex(0, 0);
+            MutableComplex temp1 = new MutableComplex(0, 0);
+            MutableComplex temp2 = new MutableComplex(0, 0);
+
+            a0[i].add(a1[i], b0);
+            b0.add(a2[i]);
+
+            a0[i].copyTo(b1);
+            a1[i].multiply(omega1, temp1);
+            a2[i].multiply(omega2, temp2);
+            b1.add(temp1);
+            b1.add(temp2);
+
+            a0[i].copyTo(b2);
+            a1[i].multiply(omega2, temp1);
+            a2[i].multiply(omega1, temp2);
+            b2.add(temp1);
+            b2.add(temp2);
+
+            b0.multiply(scale);
+            b1.multiply(scale);
+            b2.multiply(scale);
+
+            b0.copyTo(a0[i]);
+            b1.copyTo(a1[i]);
+            b2.copyTo(a2[i]);
         }
     }
 
@@ -2432,6 +2586,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             imag = -temp*c.imag + imag*c.real;
         }
 
+        void multiplyConjugateTimesI(MutableComplex c) {
+            double temp = real;
+            real = -real*c.imag + imag*c.real;
+            imag = -temp*c.real - imag*c.imag;
+        }
+
+        void multiplyByIAnd(MutableComplex c) {
+            double temp = real;
+            real = -real*c.imag - imag*c.real;
+            imag = temp*c.real - imag*c.imag;
+        }
+
         void multiplyConjugate(MutableComplex c, MutableComplex destination) {
             destination.real = real*c.real + imag*c.imag;
             destination.imag = -real*c.imag + imag*c.real;
@@ -2457,9 +2623,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             destination.imag = imag - c.real;
         }
 
-        void divide(int n) {
-            real /= n;
-            imag /= n;
+        void multiply(double f) {
+            real *= f;
+            imag *= f;
         }
 
         void square() {
@@ -2702,16 +2868,38 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     private BigInteger squareFFT() {
-        int bitsPerPoint = bitsPerFFTPoint(mag.length);
-        int fftLen = (mag.length*32+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
-        fftLen = 1 << (32 - Integer.numberOfLeadingZeros(fftLen-1));   // nearest power of two
-        MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
-        MutableComplex[] roots = calculateRootsOfUnity(fftLen);
-        fft(vec, roots);
-        squarePointwise(vec);
-        ifft(vec, roots);
-        BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
-        return c;
+        int bitLen = mag.length * 32;
+        int bitsPerPoint = bitsPerFFTPoint(bitLen);
+        int fftLen = (bitLen+bitsPerPoint-1) / bitsPerPoint + 1;   // +1 for a possible carry, see toFFTVector()
+        int logFFTLen = 32 - Integer.numberOfLeadingZeros(fftLen - 1);
+
+        // Use a 2^n or 3*2^n transform, whichever is shorter
+        int fftLen2 = 1 << (logFFTLen);   // rounded to 2^n
+        int fftLen3 = fftLen2 * 3 / 4;   // rounded to 3*2^n
+        if (fftLen < fftLen3) {
+            fftLen = fftLen3;
+            MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
+            MutableComplex[] roots3 = getRootsOfUnity3(logFFTLen-2);
+            applyWeights(vec, roots3);
+            fftMixedRadix(vec, roots2, roots3);
+            squarePointwise(vec);
+            ifftMixedRadix(vec, roots2, roots3);
+            applyInverseWeights(vec, roots3);
+            BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
+            return c;
+        } else {
+            fftLen = fftLen2;
+            MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
+            MutableComplex[] roots = getRootsOfUnity2(logFFTLen);
+            applyWeights(vec, roots);
+            fft(vec, roots);
+            squarePointwise(vec);
+            ifft(vec, roots);
+            applyInverseWeights(vec, roots);
+            BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
+            return c;
+        }
     }
 
     // The result is placed in the argument
