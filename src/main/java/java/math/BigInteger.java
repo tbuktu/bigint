@@ -2494,39 +2494,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     private static void fft3(MutableComplex[] a0, MutableComplex[] a1, MutableComplex[] a2, int sign, double scale) {
-        double angle1 = sign * (-2) * Math.PI * 1 / 3;
-        double angle2 = sign * (-2) * Math.PI * 2 / 3;
-        MutableComplex omega1 = new MutableComplex(Math.cos(angle1), Math.sin(angle1));
-        MutableComplex omega2 = new MutableComplex(Math.cos(angle2), Math.sin(angle2));
+        double omegaImag = sign * -0.5 * Math.sqrt(3);   // imaginary part of omega for n=3: sin(sign*(-2)*pi*1/3)
         for (int i=0; i<a0.length; i++) {
-            MutableComplex b0 = new MutableComplex(0, 0);
-            MutableComplex b1 = new MutableComplex(0, 0);
-            MutableComplex b2 = new MutableComplex(0, 0);
-            MutableComplex temp1 = new MutableComplex(0, 0);
-            MutableComplex temp2 = new MutableComplex(0, 0);
-
-            a0[i].add(a1[i], b0);
-            b0.add(a2[i]);
-
-            a0[i].copyTo(b1);
-            a1[i].multiply(omega1, temp1);
-            a2[i].multiply(omega2, temp2);
-            b1.add(temp1);
-            b1.add(temp2);
-
-            a0[i].copyTo(b2);
-            a1[i].multiply(omega2, temp1);
-            a2[i].multiply(omega1, temp2);
-            b2.add(temp1);
-            b2.add(temp2);
-
-            b0.multiply(scale);
-            b1.multiply(scale);
-            b2.multiply(scale);
-
-            b0.copyTo(a0[i]);
-            b1.copyTo(a1[i]);
-            b2.copyTo(a2[i]);
+            double a0Real = a0[i].real + a1[i].real + a2[i].real;
+            double a0Imag = a0[i].imag + a1[i].imag + a2[i].imag;
+            double b1Real = a0[i].real - 0.5*(a1[i].real+a2[i].real) + omegaImag*(a2[i].imag-a1[i].imag);
+            double b1Imag = a0[i].imag + omegaImag*(a1[i].real-a2[i].real) - 0.5*(a1[i].imag+a2[i].imag);
+            double b2Real = a0[i].real - 0.5*a1[i].real + omegaImag*a1[i].imag - 0.5*a2[i].real - omegaImag*a2[i].imag;
+            double b2Imag = a0[i].imag - omegaImag*a1[i].real - 0.5*a1[i].imag + omegaImag*a2[i].real - 0.5*a2[i].imag;
+            a0[i].real = a0Real * scale;
+            a0[i].imag = a0Imag * scale;
+            a1[i].real = b1Real * scale;
+            a1[i].imag = b1Imag * scale;
+            a2[i].real = b2Real * scale;
+            a2[i].imag = b2Imag * scale;
         }
     }
 
@@ -2621,11 +2602,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         void subtractTimesI(MutableComplex c, MutableComplex destination) {
             destination.real = real + c.imag;
             destination.imag = imag - c.real;
-        }
-
-        void multiply(double f) {
-            real *= f;
-            imag *= f;
         }
 
         void square() {
