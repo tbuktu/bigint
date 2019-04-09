@@ -2188,11 +2188,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             return 10;
         if (bitLen <= 9*(1<<27))
             return 9;
-        if (bitLen <= 8*(1<<29))
-            return 8;
-        if (bitLen <= 7*(1<<31))
-            return 7;
-        return 6;
+        return 8;
     }
 
     // Converts this BigInteger into an array of complex numbers suitable for an FFT.
@@ -2433,18 +2429,18 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // step 2
         for (int i=0; i<a.length/4; i++) {
-            MutableComplex omega1 = roots3[4*i];
+            MutableComplex omega = roots3[4*i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
-            a1[i].multiplyConjugate(omega1);
-            a2[i].multiplyConjugate(omega1);
-            a2[i].multiplyConjugate(omega1);
+            a1[i].multiplyConjugate(omega);
+            a2[i].multiplyConjugate(omega);
+            a2[i].multiplyConjugate(omega);
         }
         for (int i=a.length/4; i<a.length/3; i++) {
-            MutableComplex omega1 = roots3[4*i-a.length];
+            MutableComplex omega = roots3[4*i-a.length];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
-            a1[i].multiplyConjugateTimesI(omega1);
-            a2[i].multiplyConjugateTimesI(omega1);
-            a2[i].multiplyConjugateTimesI(omega1);
+            a1[i].multiplyConjugateTimesI(omega);
+            a2[i].multiplyConjugateTimesI(omega);
+            a2[i].multiplyConjugateTimesI(omega);
         }
 
         // step 3 is not needed
@@ -2472,19 +2468,19 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // step 2
         for (int i=0; i<a.length/4; i++) {
             double angle1 = 2 * Math.PI * 1 * i / a.length;
-            MutableComplex omega1 = roots3[4*i];
+            MutableComplex omega = roots3[4*i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
-            a1[i].multiply(omega1);
-            a2[i].multiply(omega1);
-            a2[i].multiply(omega1);
+            a1[i].multiply(omega);
+            a2[i].multiply(omega);
+            a2[i].multiply(omega);
         }
         for (int i=a.length/4; i<a.length/3; i++) {
             double angle1 = 2 * Math.PI * 1 * i / a.length;
-            MutableComplex omega1 = roots3[4*i-a.length];
+            MutableComplex omega = roots3[4*i-a.length];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
-            a1[i].multiplyByIAnd(omega1);
-            a2[i].multiplyByIAnd(omega1);
-            a2[i].multiplyByIAnd(omega1);
+            a1[i].multiplyByIAnd(omega);
+            a2[i].multiplyByIAnd(omega);
+            a2[i].multiplyByIAnd(omega);
         }
 
         // step 3 is not needed
