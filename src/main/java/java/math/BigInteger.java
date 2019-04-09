@@ -2498,16 +2498,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         for (int i=0; i<a0.length; i++) {
             double a0Real = a0[i].real + a1[i].real + a2[i].real;
             double a0Imag = a0[i].imag + a1[i].imag + a2[i].imag;
-            double b1Real = a0[i].real - 0.5*(a1[i].real+a2[i].real) + omegaImag*(a2[i].imag-a1[i].imag);
-            double b1Imag = a0[i].imag + omegaImag*(a1[i].real-a2[i].real) - 0.5*(a1[i].imag+a2[i].imag);
-            double b2Real = a0[i].real - 0.5*a1[i].real + omegaImag*a1[i].imag - 0.5*a2[i].real - omegaImag*a2[i].imag;
-            double b2Imag = a0[i].imag - omegaImag*a1[i].real - 0.5*a1[i].imag + omegaImag*a2[i].real - 0.5*a2[i].imag;
+            double c = omegaImag * (a2[i].imag-a1[i].imag);
+            double d = omegaImag * (a1[i].real-a2[i].real);
+            double e = 0.5 * (a1[i].real+a2[i].real);
+            double f = 0.5 * (a1[i].imag+a2[i].imag);
+            double a1Real = a0[i].real - e + c;
+            double a1Imag = a0[i].imag + d - f;
+            double a2Real = a0[i].real - e - c;
+            double a2Imag = a0[i].imag - d - f;
             a0[i].real = a0Real * scale;
             a0[i].imag = a0Imag * scale;
-            a1[i].real = b1Real * scale;
-            a1[i].imag = b1Imag * scale;
-            a2[i].real = b2Real * scale;
-            a2[i].imag = b2Imag * scale;
+            a1[i].real = a1Real * scale;
+            a1[i].imag = a1Imag * scale;
+            a2[i].real = a2Real * scale;
+            a2[i].imag = a2Imag * scale;
         }
     }
 
