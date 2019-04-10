@@ -2073,6 +2073,41 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(trustedStripLeadingZeroInts(upperInts), 1);
     }
 
+    /**
+     * Multiplies two BigIntegers using a floating-point FFT.
+     * <p>
+     * Floating-point math is inaccurate; to ensure the output of the FFT and
+     * IFFT rounds to the correct result for every input, the provably safe
+     * FFT error bounds from "Rapid Multiplication Modulo The Sum And
+     * Difference of Highly Composite Numbers" by Colin Percival, pg. 392
+     * (https://www.daemonology.net/papers/fft.pdf) are used, the vector is
+     * "balanced" before the FFT, and accurate twiddle factors are used.
+     * <p>
+     * This implementation incorporates several features compared to the
+     * standard FFT algorithm
+     * (https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm):
+     * <ul>
+     * <li>It uses a variant called right-angle convolution which weights the
+     *     vector before the transform. The benefit of the right-angle
+     *     convolution is that when multiplying two numbers of length n, an
+     *     FFT of length n suffices whereas a regular FFT needs length 2n.
+     *     This is because the right-angle convolution places half of the
+     *     result in the real part and the other half in the imaginary part.
+     *     See: Discrete Weighted Transforms And Large-Integer Arithmetic by
+     *     Richard Crandall and Barry Fagin.
+     * <li>FFTs of length 3*2^n are supported in addition to 2^n.
+     * <li>Radix-4 butterflies; see
+     *     https://www.nxp.com/docs/en/application-note/AN3666.pdf
+     * <li>Bernstein's conjugate twiddle trick for a small speed gain at the
+     *     expense of (further) reordering the output of the FFT which is not
+     *     a problem because it is reordered back in the IFFT.
+     * <li>Roots of unity are cached
+     * </ul>
+     * 
+     * @param a
+     * @param b
+     * @return a*b
+     */
     private static BigInteger multiplyFFT(BigInteger a, BigInteger b) {
         int signum = a.signum * b.signum;
         int bitLen = Math.max(a.mag.length, b.mag.length) * 32;
@@ -2159,9 +2194,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     /**
      * Returns the maximum number of bits that one double precision number can fit without
      * causing the multiplication to be incorrect.
-     * Uses the provably safe FFT error bounds from "Rapid Multiplication Modulo The Sum And
-     * Difference of Highly Composite Numbers" by Colin Percival, pg. 392
-     * (https://www.daemonology.net/papers/fft.pdf).
      * @param bitLen length of this number in bits
      * @return
      */
@@ -2192,7 +2224,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Converts this BigInteger into an array of complex numbers suitable for an FFT.
-    // fftLen must be a power of 2.
+    // Populates the real parts and sets the imaginary parts to zero.
     private MutableComplex[] toFFTVector(int fftLen, int bitsPerFFTPoint) {
         MutableComplex[] fftVec = new MutableComplex[fftLen];
         int fftIdx = 0;
@@ -2239,7 +2271,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     // Converts an array of complex numbers back into a BigInteger.
-    // The length of the array must be a power of 2.
+    // Expects the real parts to contain the lower half and the imaginary
+    // parts to contain the upper half of the result.
     private static BigInteger fromFFTVector(MutableComplex[] fftVec, int signum, int bitsPerFFTPoint) {
         int fftLen = fftVec.length;
         int magLen = 2 * (fftLen*bitsPerFFTPoint+31) / 32;
@@ -2247,7 +2280,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         int magIdx = magLen - 1;
         int magBitIdx = 0;
         long carry = 0;
-        for (int part=0; part<=1; part++) {   // real parts=lower half of the result, imag parts=upper half
+        for (int part=0; part<=1; part++) {   // 0=real, 1=imaginary
             int fftIdx = 0;
             while (fftIdx < fftLen) {
                 int fftBitIdx = 0;
@@ -2270,17 +2303,28 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(signum, mag);
     }
 
-    private static void applyWeights(MutableComplex[] a, MutableComplex[] roots) {
+    // Multiplies the elements of an FFT vector by weights.
+    // Doing this makes a regular FFT convolution a right-angle convolution.
+    private static void applyWeights(MutableComplex[] a, MutableComplex[] weights) {
         for (int i=0; i<a.length; i++)
-            a[i].multiply(roots[i]);
+            a[i].multiply(weights[i]);   // possible optimization: use the fact that a[i].imag == 0
     }
 
-    private static void applyInverseWeights(MutableComplex[] a, MutableComplex[] roots) {
+    // Multiplies the elements of an FFT vector by 1/weight.
+    // Used for the right-angle convolution.
+    private static void applyInverseWeights(MutableComplex[] a, MutableComplex[] weights) {
         for (int i=0; i<a.length; i++)
-            a[i].multiplyConjugate(roots[i]);
+            a[i].multiplyConjugate(weights[i]);
     }
 
-    // Radix-4 decimation-in-frequency right-angle transform
+    /**
+     * Performs a FFT of length 2^n on the vector {@code a}.
+     * This is a decimation-in-frequency implementation.
+     * @param a input and output, must be a power of two in size
+     * @param roots must be the same length as {@code a} and contain roots of
+     *              unity such that {@code roots[k] = e^(pi*k*i/(2*roots.length))},
+     *              i.e., they need to cover the first quadrant.
+     */
     private static void fft(MutableComplex[] a, MutableComplex[] roots) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
@@ -2298,6 +2342,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 for (int j=0; j<m/4; j++) {
                     int omegaIdx = j << (logN-s);
                     MutableComplex omega1 = roots[4*omegaIdx];
+                    // computing omega2 from omega1 is less accurate than Math.cos() and Math.sin(),
+                    // but it is the same error we'd incur with radix-2, so we're not breaking the
+                    // assumptions of the Percival paper.
                     omega1.square(omega2);
 
                     int idx0 = i + j;
@@ -2342,7 +2389,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
     }
 
-    // Radix-4 decimation-in-time inverse right-angle transform
+    /**
+     * Performs an inverse FFT of length 2^n on the vector {@code a}.
+     * This is a decimation-in-time implementation.
+     * @param a input and output, must be a power of two in size
+     * @param roots must be the same length as {@code a} and contain roots of
+     *              unity such that {@code roots[k] = e^(pi*k*i/(2*roots.length))},
+     *              i.e., they need to cover the first quadrant.
+     */
     private static void ifft(MutableComplex[] a, MutableComplex[] roots) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
@@ -2375,6 +2429,9 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                 for (int j=0; j<m/4; j++) {
                     int omegaIdx = j << (logN-s-1);
                     MutableComplex omega1 = roots[4*omegaIdx];
+                    // computing omega2 from omega1 is less accurate than Math.cos() and Math.sin(),
+                    // but it is the same error we'd incur with radix-2, so we're not breaking the
+                    // assumptions of the Percival paper.
                     omega1.square(omega2);
 
                     int idx0 = i + j;
@@ -2411,14 +2468,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             }
         }
 
+        // divide all vector elements by n
         for (int i=0; i<n; i++)
-            a[i].timesTwoToThe(-logN);   // divide by n
+            a[i].timesTwoToThe(-logN);
     }
 
-    // Uses the 4-step algorithm to decompose a 3*2^n FFT into 2^n FFTs of length 3
-    // and 3 FFTs of length 2^n.
-    // See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
-    // a.length must be 3*2^n for some n>=2
+    /**
+     * Performs an FFT of length 3*2^n on the vector {@code a}.
+     * Uses the 4-step algorithm to decompose the 3*2^n FFT into 2^n FFTs of
+     * length 3 and 3 FFTs of length 2^n.
+     * See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
+     * @param a input and output, must be 3*2^n in size for some n>=2
+     * @param roots2 must be of size 2^n, i.e., a third of {@code a.length},
+     *               and contain roots of unity such that
+     *               {@code roots[k] = e^(pi*k*i/(2*roots2.length))},
+     *               i.e., they need to cover the first quadrant.
+     * @param roots3 must be the same length as {@code a} and contain roots of
+     *               unity such that {@code roots[k] = e^(pi*k*i/(2*roots3.length))},
+     *               i.e., they need to cover the first quadrant.
+     */
     private static void fftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
         MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
         MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
@@ -2427,7 +2495,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // step 1: perform a.length/3 transforms of length 3
         fft3(a0, a1, a2, 1, 1);
 
-        // step 2
+        // step 2: multiply by roots of unity
         for (int i=0; i<a.length/4; i++) {
             MutableComplex omega = roots3[4*i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
@@ -2451,10 +2519,20 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         fft(a2, roots2);
     }
 
-    // Uses the 4-step algorithm to decompose a 3*2^n IFFT into 3 IFFTs of length 2^n
-    // and 2^n IFFTs of length 3.
-    // See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
-    // a.length must be 3*2^n for some n>=2
+    /**
+     * Performs an inverse FFT of length 3*2^n on the vector {@code a}.
+     * Uses the 4-step algorithm to decompose the 3*2^n FFT into 2^n FFTs of
+     * length 3 and 3 FFTs of length 2^n.
+     * See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
+     * @param a input and output, must be 3*2^n in size for some n>=2
+     * @param roots2 must be of size 2^n, i.e., a third of {@code a.length},
+     *               and contain roots of unity such that
+     *               {@code roots[k] = e^(pi*k*i/(2*roots2.length))},
+     *               i.e., they need to cover the first quadrant.
+     * @param roots3 must be the same length as {@code a} and contain roots of
+     *               unity such that {@code roots[k] = e^(pi*k*i/(2*roots3.length))},
+     *               i.e., they need to cover the first quadrant.
+     */
     private static void ifftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
         MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
         MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
@@ -2465,9 +2543,8 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         ifft(a1, roots2);
         ifft(a2, roots2);
 
-        // step 2
+        // step 2: multiply by roots of unity
         for (int i=0; i<a.length/4; i++) {
-            double angle1 = 2 * Math.PI * 1 * i / a.length;
             MutableComplex omega = roots3[4*i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiply(omega);
@@ -2475,7 +2552,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             a2[i].multiply(omega);
         }
         for (int i=a.length/4; i<a.length/3; i++) {
-            double angle1 = 2 * Math.PI * 1 * i / a.length;
             MutableComplex omega = roots3[4*i-a.length];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiplyByIAnd(omega);
@@ -2489,6 +2565,15 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         fft3(a0, a1, a2, -1, 1.0/3);
     }
 
+    /**
+     * Performs FFTs or IFFTs of size 3 on the vector {@code (a0[i], a1[i], a2[i])}
+     * for each {@code i}. The output is placed back into {@code a0, a1, and a2}.
+     * @param a0 inputs / outputs for the first FFT coefficient
+     * @param a1 inputs / outputs for the second FFT coefficient
+     * @param a2 inputs / outputs for the third FFT coefficient
+     * @param sign 1 for a forward FFT, -1 for an inverse FFT
+     * @param scale 1 for a forward FFT, 1/3 for an inverse FFT
+     */
     private static void fft3(MutableComplex[] a0, MutableComplex[] a1, MutableComplex[] a2, int sign, double scale) {
         double omegaImag = sign * -0.5 * Math.sqrt(3);   // imaginary part of omega for n=3: sin(sign*(-2)*pi*1/3)
         for (int i=0; i<a0.length; i++) {
@@ -2561,34 +2646,41 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             destination.imag = real*c.imag + imag*c.real;
         }
 
+        // multiplies this number by the conjugate of c.
         void multiplyConjugate(MutableComplex c) {
             double temp = real;
             real = real*c.real + imag*c.imag;
             imag = -temp*c.imag + imag*c.real;
         }
 
+        // Multiplies this number by the conjugate of c and puts the result into destination.
+        // Leaves this number unmodified.
+        void multiplyConjugate(MutableComplex c, MutableComplex destination) {
+            destination.real = real*c.real + imag*c.imag;
+            destination.imag = -real*c.imag + imag*c.real;
+        }
+
+        // Multiplies this number by the conjugate of c and by i.
         void multiplyConjugateTimesI(MutableComplex c) {
             double temp = real;
             real = -real*c.imag + imag*c.real;
             imag = -temp*c.real - imag*c.imag;
         }
 
+        // Multiplies this number by c and by i.
         void multiplyByIAnd(MutableComplex c) {
             double temp = real;
             real = -real*c.imag - imag*c.real;
             imag = temp*c.real - imag*c.imag;
         }
 
-        void multiplyConjugate(MutableComplex c, MutableComplex destination) {
-            destination.real = real*c.real + imag*c.imag;
-            destination.imag = -real*c.imag + imag*c.real;
-        }
-
+        // Adds c*i to this number.
         void addTimesI(MutableComplex c) {
             real -= c.imag;
             imag += c.real;
         }
 
+        // Adds c*i to this number. Leaves this number unmodified.
         void addTimesI(MutableComplex c, MutableComplex destination) {
             destination.real = real - c.imag;
             destination.imag = imag + c.real;
