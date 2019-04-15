@@ -1250,9 +1250,17 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     private static final int ROOTS_CACHE2_SIZE = 18;
     /** for FFTs of length up to 3*2^15 */
     private static final int ROOTS3_CACHE_SIZE = 15;
-    /** Complex roots for FFTs of size 2^n */
+    /**
+     * Sets of complex roots of unity. The set at index k contains 2^k
+     * elements representing all (2^(k+2))-th roots between 0 and pi/2.
+     * Used for FFT multiplication.
+     */
     private volatile static MutableComplex[][] ROOTS2_CACHE = new MutableComplex[ROOTS_CACHE2_SIZE][];
-    /** Complex roots for FFTs of size 3*2^n */
+    /**
+     * Sets of complex roots of unity. The set at index k contains 3*2^k
+     * elements representing all (3*2^(k+2))-th roots between 0 and pi/2.
+     * Used for FFT multiplication.
+     */
     private volatile static MutableComplex[][] ROOTS3_CACHE = new MutableComplex[ROOTS3_CACHE_SIZE][];
 
     static {
@@ -2122,46 +2130,61 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             fftLen = fftLen3;
             MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
             MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
-            MutableComplex[] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
-            MutableComplex[] roots3 = getRootsOfUnity3(logFFTLen-2);
-            applyWeights(aVec, roots3);
-            applyWeights(bVec, roots3);
-            fftMixedRadix(aVec, roots2, roots3);
-            fftMixedRadix(bVec, roots2, roots3);
+            MutableComplex[][] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
+            MutableComplex[] weights = getRootsOfUnity3(logFFTLen-2);
+            MutableComplex[] twiddles = getRootsOfUnity3(logFFTLen-4);
+            applyWeights(aVec, weights);
+            applyWeights(bVec, weights);
+            fftMixedRadix(aVec, roots2, twiddles);
+            fftMixedRadix(bVec, roots2, twiddles);
             multiplyPointwise(aVec, bVec);
-            ifftMixedRadix(aVec, roots2, roots3);
-            applyInverseWeights(aVec, roots3);
+            ifftMixedRadix(aVec, roots2, twiddles);
+            applyInverseWeights(aVec, weights);
             BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
             return c;
         } else {
             fftLen = fftLen2;
             MutableComplex[] aVec = a.toFFTVector(fftLen, bitsPerPoint);
             MutableComplex[] bVec = b.toFFTVector(fftLen, bitsPerPoint);
-            MutableComplex[] roots = getRootsOfUnity2(logFFTLen);
-            applyWeights(aVec, roots);
-            applyWeights(bVec, roots);
+            MutableComplex[][] roots = getRootsOfUnity2(logFFTLen);
+            applyWeights(aVec, roots[logFFTLen]);
+            applyWeights(bVec, roots[logFFTLen]);
             fft(aVec, roots);
             fft(bVec, roots);
             multiplyPointwise(aVec, bVec);
             ifft(aVec, roots);
-            applyInverseWeights(aVec, roots);
+            applyInverseWeights(aVec, roots[logFFTLen]);
             BigInteger c = fromFFTVector(aVec, signum, bitsPerPoint);
             return c;
         }
     }
 
-    // Returns n-th complex roots of unity for a transform of length 2^logN
-    private static MutableComplex[] getRootsOfUnity2(int logN) {
-        if (logN < ROOTS_CACHE2_SIZE) {
-            if (ROOTS2_CACHE[logN] == null)
-                ROOTS2_CACHE[logN] = calculateRootsOfUnity(1 << logN);
-            return ROOTS2_CACHE[logN];
+    /**
+     * Returns sets of complex roots of unity. For k=logN, logN-2, logN-4, ...,
+     * the return value contains all k-th roots between 0 and pi/2.
+     * @param logN for a transform of length 2^logN
+     * @return
+     */
+    private static MutableComplex[][] getRootsOfUnity2(int logN) {
+        MutableComplex[][] roots = new MutableComplex[logN+1][];
+        for (int i=logN; i>=0; i-=2) {
+            if (i < ROOTS_CACHE2_SIZE) {
+                if (ROOTS2_CACHE[i] == null)
+                    ROOTS2_CACHE[i] = calculateRootsOfUnity(1 << i);
+                roots[i] = ROOTS2_CACHE[i];
+            }
+            else
+                roots[i] = calculateRootsOfUnity(1 << i);
         }
-        else
-            return calculateRootsOfUnity(1 << logN);
+        return roots;
     }
 
-    // Returns n-th complex roots of unity for a transform of length 3*2^logN
+    /**
+     * Returns sets of complex roots of unity. For k=logN, logN-2, logN-4, ...,
+     * the return value contains all k-th roots between 0 and pi/2.
+     * @param logN for a transform of length 3*2^logN
+     * @return
+     */
     private static MutableComplex[] getRootsOfUnity3(int logN) {
         if (logN < ROOTS3_CACHE_SIZE) {
             if (ROOTS3_CACHE[logN] == null)
@@ -2175,7 +2198,10 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     // Returns n-th complex roots of unity for the angles 0..pi/2, suitable
     // for a transform of length n.
     // They are used as twiddle factors and as weights for the right-angle transform.
+    // n must be 1 or an even number.
     private static MutableComplex[] calculateRootsOfUnity(int n) {
+        if (n == 1)
+            return new MutableComplex[] {new MutableComplex(1, 0)};
         MutableComplex[] roots = new MutableComplex[n];
         roots[0] = new MutableComplex(1, 0);
         double cos = Math.cos(0.25 * Math.PI);
@@ -2318,14 +2344,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
     }
 
     /**
-     * Performs a FFT of length 2^n on the vector {@code a}.
+     * Performs an FFT of length 2^n on the vector {@code a}.
      * This is a decimation-in-frequency implementation.
      * @param a input and output, must be a power of two in size
-     * @param roots must be the same length as {@code a} and contain roots of
-     *              unity such that {@code roots[k] = e^(pi*k*i/(2*roots.length))},
-     *              i.e., they need to cover the first quadrant.
+     * @param roots an array that contains one set of roots at indices
+     *        log2(a.length), log2(a.length)-2, log2(a.length)-4, ...
+     *        Each roots[s] must contain 2^s roots of unity such that
+     *        {@code roots[s][k] = e^(pi*k*i/(2*roots.length))},
+     *        i.e., they must cover the first quadrant.
      */
-    private static void fft(MutableComplex[] a, MutableComplex[] roots) {
+    private static void fft(MutableComplex[] a, MutableComplex[][] roots) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex a0 = new MutableComplex(0, 0);
@@ -2337,11 +2365,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         MutableComplex omega2 = new MutableComplex(0, 0);
         int s = logN;
         for (; s>=2; s-=2) {
+            MutableComplex[] rootsS = roots[s-2];
             int m = 1 << s;
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/4; j++) {
-                    int omegaIdx = j << (logN-s);
-                    MutableComplex omega1 = roots[4*omegaIdx];
+                    MutableComplex omega1 = rootsS[j];
                     // computing omega2 from omega1 is less accurate than Math.cos() and Math.sin(),
                     // but it is the same error we'd incur with radix-2, so we're not breaking the
                     // assumptions of the Percival paper.
@@ -2393,11 +2421,13 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * Performs an inverse FFT of length 2^n on the vector {@code a}.
      * This is a decimation-in-time implementation.
      * @param a input and output, must be a power of two in size
-     * @param roots must be the same length as {@code a} and contain roots of
-     *              unity such that {@code roots[k] = e^(pi*k*i/(2*roots.length))},
-     *              i.e., they need to cover the first quadrant.
+     * @param roots an array that contains one set of roots at indices
+     *        log2(a.length), log2(a.length)-2, log2(a.length)-4, ...
+     *        Each roots[s] must contain 2^s roots of unity such that
+     *        {@code roots[s][k] = e^(pi*k*i/(2*roots.length))},
+     *        i.e., they must cover the first quadrant.
      */
-    private static void ifft(MutableComplex[] a, MutableComplex[] roots) {
+    private static void ifft(MutableComplex[] a, MutableComplex[][] roots) {
         int n = a.length;
         int logN = 31 - Integer.numberOfLeadingZeros(n);
         MutableComplex a0 = new MutableComplex(0, 0);
@@ -2424,11 +2454,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // do the remaining stages two at a time (radix-4)
         MutableComplex omega2 = new MutableComplex(0, 0);
         for (; s<=logN; s+=2) {
+            MutableComplex[] rootsS = roots[s-1];
             int m = 1 << (s+1);
             for (int i=0; i<n; i+=m) {
                 for (int j=0; j<m/4; j++) {
-                    int omegaIdx = j << (logN-s-1);
-                    MutableComplex omega1 = roots[4*omegaIdx];
+                    MutableComplex omega1 = rootsS[j];
                     // computing omega2 from omega1 is less accurate than Math.cos() and Math.sin(),
                     // but it is the same error we'd incur with radix-2, so we're not breaking the
                     // assumptions of the Percival paper.
@@ -2479,15 +2509,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * length 3 and 3 FFTs of length 2^n.
      * See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
      * @param a input and output, must be 3*2^n in size for some n>=2
-     * @param roots2 must be of size 2^n, i.e., a third of {@code a.length},
-     *               and contain roots of unity such that
-     *               {@code roots[k] = e^(pi*k*i/(2*roots2.length))},
-     *               i.e., they need to cover the first quadrant.
+     * @param roots2 an array that contains one set of roots at indices
+     *               log2(a.length/3), log2(a.length/3)-2, log2(a.length/3)-4, ...
+     *               Each roots[s] must contain 2^s roots of unity such that
+     *               {@code roots[s][k] = e^(pi*k*i/(2*roots.length))},
+     *               i.e., they must cover the first quadrant.
      * @param roots3 must be the same length as {@code a} and contain roots of
      *               unity such that {@code roots[k] = e^(pi*k*i/(2*roots3.length))},
      *               i.e., they need to cover the first quadrant.
      */
-    private static void fftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
+    private static void fftMixedRadix(MutableComplex[] a, MutableComplex[][] roots2, MutableComplex[] roots3) {
         MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
         MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
         MutableComplex[] a2 = Arrays.copyOfRange(a, a.length*2/3, a.length);
@@ -2497,14 +2528,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // step 2: multiply by roots of unity
         for (int i=0; i<a.length/4; i++) {
-            MutableComplex omega = roots3[4*i];
+            MutableComplex omega = roots3[i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiplyConjugate(omega);
             a2[i].multiplyConjugate(omega);
             a2[i].multiplyConjugate(omega);
         }
         for (int i=a.length/4; i<a.length/3; i++) {
-            MutableComplex omega = roots3[4*i-a.length];
+            MutableComplex omega = roots3[i-a.length/4];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiplyConjugateTimesI(omega);
             a2[i].multiplyConjugateTimesI(omega);
@@ -2525,15 +2556,16 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * length 3 and 3 FFTs of length 2^n.
      * See https://www.nas.nasa.gov/assets/pdf/techreports/1989/rnr-89-004.pdf
      * @param a input and output, must be 3*2^n in size for some n>=2
-     * @param roots2 must be of size 2^n, i.e., a third of {@code a.length},
-     *               and contain roots of unity such that
-     *               {@code roots[k] = e^(pi*k*i/(2*roots2.length))},
-     *               i.e., they need to cover the first quadrant.
+     * @param roots2 an array that contains one set of roots at indices
+     *               log2(a.length/3), log2(a.length/3)-2, log2(a.length/3)-4, ...
+     *               Each roots[s] must contain 2^s roots of unity such that
+     *               {@code roots[s][k] = e^(pi*k*i/(2*roots.length))},
+     *               i.e., they must cover the first quadrant.
      * @param roots3 must be the same length as {@code a} and contain roots of
      *               unity such that {@code roots[k] = e^(pi*k*i/(2*roots3.length))},
      *               i.e., they need to cover the first quadrant.
      */
-    private static void ifftMixedRadix(MutableComplex[] a, MutableComplex[] roots2, MutableComplex[] roots3) {
+    private static void ifftMixedRadix(MutableComplex[] a, MutableComplex[][] roots2, MutableComplex[] roots3) {
         MutableComplex[] a0 = Arrays.copyOfRange(a, 0, a.length/3);
         MutableComplex[] a1 = Arrays.copyOfRange(a, a.length/3, a.length*2/3);
         MutableComplex[] a2 = Arrays.copyOfRange(a, a.length*2/3, a.length);
@@ -2545,14 +2577,14 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
 
         // step 2: multiply by roots of unity
         for (int i=0; i<a.length/4; i++) {
-            MutableComplex omega = roots3[4*i];
+            MutableComplex omega = roots3[i];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiply(omega);
             a2[i].multiply(omega);
             a2[i].multiply(omega);
         }
         for (int i=a.length/4; i<a.length/3; i++) {
-            MutableComplex omega = roots3[4*i-a.length];
+            MutableComplex omega = roots3[i-a.length/4];
             // a0[i] *= omega^0; a1[i] *= omega^1; a2[i] *= omega^2
             a1[i].multiplyByIAnd(omega);
             a2[i].multiplyByIAnd(omega);
@@ -2947,24 +2979,25 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         if (fftLen < fftLen3) {
             fftLen = fftLen3;
             MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
-            MutableComplex[] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
-            MutableComplex[] roots3 = getRootsOfUnity3(logFFTLen-2);
-            applyWeights(vec, roots3);
-            fftMixedRadix(vec, roots2, roots3);
+            MutableComplex[][] roots2 = getRootsOfUnity2(logFFTLen-2);   // roots for length fftLen/3 which is a power of two
+            MutableComplex[] weights = getRootsOfUnity3(logFFTLen-2);
+            MutableComplex[] twiddles = getRootsOfUnity3(logFFTLen-4);
+            applyWeights(vec, weights);
+            fftMixedRadix(vec, roots2, twiddles);
             squarePointwise(vec);
-            ifftMixedRadix(vec, roots2, roots3);
-            applyInverseWeights(vec, roots3);
+            ifftMixedRadix(vec, roots2, twiddles);
+            applyInverseWeights(vec, weights);
             BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
             return c;
         } else {
             fftLen = fftLen2;
             MutableComplex[] vec = toFFTVector(fftLen, bitsPerPoint);
-            MutableComplex[] roots = getRootsOfUnity2(logFFTLen);
-            applyWeights(vec, roots);
+            MutableComplex[][] roots = getRootsOfUnity2(logFFTLen);
+            applyWeights(vec, roots[logFFTLen]);
             fft(vec, roots);
             squarePointwise(vec);
             ifft(vec, roots);
-            applyInverseWeights(vec, roots);
+            applyInverseWeights(vec, roots[logFFTLen]);
             BigInteger c = fromFFTVector(vec, 1, bitsPerPoint);
             return c;
         }
