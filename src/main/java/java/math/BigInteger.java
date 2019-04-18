@@ -226,7 +226,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * the mag arrays is greater than this threshold, then FFT
      * multiplication will be used.
      */
-    private static final int FFT_THRESHOLD = 1000;
+    private static final int FFT_THRESHOLD = 1400;
 
     /**
      * The threshold value for using Karatsuba squaring.  If the number
@@ -243,14 +243,6 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      * experimentally to work well.
      */
     private static final int TOOM_COOK_SQUARE_THRESHOLD = 216;
-
-    /**
-     * The threshold value for using FFT squaring.  If the number
-     * of ints in the number are larger than this value,
-     * FFT squaring will be used.   This value is found
-     * experimentally to work well.
-     */
-    private static final int FFT_SQUARE_THRESHOLD = 1000;
 
     /**
      * The threshold value for using Burnikel-Ziegler division.  If the number
@@ -1270,8 +1262,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
             && FFT_THRESHOLD < Integer.MAX_VALUE
             && 0 < KARATSUBA_SQUARE_THRESHOLD
             && KARATSUBA_SQUARE_THRESHOLD < TOOM_COOK_SQUARE_THRESHOLD
-            && TOOM_COOK_SQUARE_THRESHOLD < FFT_SQUARE_THRESHOLD
-            && FFT_SQUARE_THRESHOLD < Integer.MAX_VALUE :
+            && TOOM_COOK_SQUARE_THRESHOLD < Integer.MAX_VALUE :
             "Algorithm thresholds are inconsistent";
 
         for (int i = 1; i <= MAX_CONSTANT; i++) {
@@ -2775,7 +2766,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         } else {
             if (len < TOOM_COOK_SQUARE_THRESHOLD) {
                 return squareKaratsuba();
-            } else if (len < FFT_SQUARE_THRESHOLD) {
+            } else if (len < FFT_THRESHOLD) {
                 //
                 // For a discussion of overflow detection see multiply()
                 //
