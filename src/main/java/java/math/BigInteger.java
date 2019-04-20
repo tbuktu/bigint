@@ -2102,6 +2102,11 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
      *     a problem because it is reordered back in the IFFT.
      * <li>Roots of unity are cached
      * </ul>
+     * FFT vectors are stored as arrays of MutableComplex objects. Storing them
+     * as arrays of primitive doubles would obviously be more memory efficient,
+     * but in some cases below ~10^6 decimal digits, it hurts speed because
+     * it requires additional copying. Ideally this would be implemented using
+     * value types when they become available.
      * 
      * @param a
      * @param b
@@ -2371,6 +2376,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     int idx2 = i + j + m/2;
                     int idx3 = i + j + m*3/4;
 
+                    // radix-4 butterfly:
+                    //   a[idx0] = (a[idx0] + a[idx1]      + a[idx2]      + a[idx3])      * w^0
+                    //   a[idx1] = (a[idx0] + a[idx1]*(-i) + a[idx2]*(-1) + a[idx3]*i)    * w^1
+                    //   a[idx2] = (a[idx0] + a[idx1]*(-1) + a[idx2]      + a[idx3]*(-1)) * w^2
+                    //   a[idx3] = (a[idx0] + a[idx1]*i    + a[idx2]*(-1) + a[idx3]*(-i)) * w^3
+                    // where w = omega1^(-1) = conjugate(omega1)
                     a[idx0].add(a[idx1], a0);
                     a0.add(a[idx2]);
                     a0.add(a[idx3]);
@@ -2401,6 +2412,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // do one final radix-2 step if there is an odd number of stages
         if (s > 0)
             for (int i=0; i<n; i+=2) {
+                // omega = 1
                 a[i].copyTo(a0);
                 a[i + 1].copyTo(a1);
                 a[i].add(a1);
@@ -2434,6 +2446,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         // do one radix-2 step if there is an odd number of stages
         if (logN%2 != 0) {
             for (int i=0; i<n; i+=2) {
+                // omega = 1
                 a[i + 1].copyTo(a2);
                 a[i].copyTo(a0);
                 a[i].add(a2);
@@ -2460,6 +2473,12 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
                     int idx2 = i + j + m/2;
                     int idx3 = i + j + m*3/4;
 
+                    // radix-4 butterfly:
+                    //   a[idx0] = a[idx0]*w^0 + a[idx1]*w^1      + a[idx2]*w^2      + a[idx3]*w^3
+                    //   a[idx1] = a[idx0]*w^0 + a[idx1]*i*w^1    + a[idx2]*(-1)*w^2 + a[idx3]*(-i)*w^3
+                    //   a[idx2] = a[idx0]*w^0 + a[idx1]*(-1)*w^1 + a[idx2]*w^2      + a[idx3]*(-1)*w^3
+                    //   a[idx3] = a[idx0]*w^0 + a[idx1]*(-i)*w^1 + a[idx2]*(-1)*w^2 + a[idx3]*i*w^3
+                    // where w = omega1
                     a0 = a[idx0];
                     a[idx1].multiply(omega1, a1);
                     a[idx2].multiply(omega2, a2);
